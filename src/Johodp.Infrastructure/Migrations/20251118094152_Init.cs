@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Johodp.Infrastructure.Persistence.Migrations
+namespace Johodp.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class Init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -88,6 +88,7 @@ namespace Johodp.Infrastructure.Persistence.Migrations
                     EmailConfirmed = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     MFAEnabled = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    PasswordHash = table.Column<string>(type: "text", nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     ScopeId = table.Column<Guid>(type: "uuid", nullable: true)

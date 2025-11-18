@@ -3,20 +3,17 @@ using System;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Johodp.Infrastructure.Persistence.Migrations
+namespace Johodp.Infrastructure.Migrations
 {
     [DbContext(typeof(JohodpDbContext))]
-    [Migration("20251117121131_InitialCreate")]
-    partial class InitialCreate
+    partial class JohodpDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -202,6 +199,9 @@ namespace Johodp.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("ScopeId")
                         .HasColumnType("uuid");
