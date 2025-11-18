@@ -58,7 +58,13 @@ dotnet restore
 
 ### 3. Appliquer les migrations
 
+**Bash/Shell:**
 ```bash
+dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
+```
+
+**PowerShell:**
+```powershell
 dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
 ```
 

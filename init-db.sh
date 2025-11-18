@@ -2,12 +2,6 @@
 
 # Script pour initialiser les migrations Entity Framework
 
-
-echo "Application de la migration Init..."
-dotnet ef database update \
-  --project src/Johodp.Infrastructure \
-  --startup-project src/Johodp.Api
-
 echo "Application des migrations..."
 dotnet ef database update \
   --project src/Johodp.Infrastructure \
