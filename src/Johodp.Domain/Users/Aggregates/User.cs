@@ -13,6 +13,7 @@ public class User : AggregateRoot
     public bool EmailConfirmed { get; private set; }
     public bool IsActive { get; private set; }
     public bool MFAEnabled { get; private set; }
+    public string? PasswordHash { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
@@ -137,6 +138,12 @@ public class User : AggregateRoot
     public void DisableMFA()
     {
         MFAEnabled = false;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetPasswordHash(string? hash)
+    {
+        PasswordHash = hash;
         UpdatedAt = DateTime.UtcNow;
     }
 

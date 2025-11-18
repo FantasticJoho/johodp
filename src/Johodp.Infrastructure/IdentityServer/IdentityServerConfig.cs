@@ -14,10 +14,9 @@ public static class IdentityServerConfig
     {
         return new List<ApiScope>
         {
-            new ApiScope("johodp.api", "Johodp API"),
-            new ApiScope("openid", "OpenID Connect"),
-            new ApiScope("profile", "User Profile"),
-            new ApiScope("email", "User Email")
+            // Application API scopes only. Identity scopes (openid/profile/email) must
+            // be declared as IdentityResources (GetIdentityResources) and not duplicated here.
+            new ApiScope("johodp.api", "Johodp API")
         };
     }
 
@@ -63,9 +62,19 @@ public static class IdentityServerConfig
                 ClientName = "Swagger UI",
                 AllowedGrantTypes = GrantTypes.Code,
                 RequirePkce = true,
-                RequireClientSecret = false,
-                RedirectUris = new List<string> { "https://localhost:5001/swagger/oauth2-redirect.html" },
-                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.api" }
+                RequireClientSecret = false, // public client (swagger UI)
+                AllowAccessTokensViaBrowser = true,
+                RedirectUris = new List<string>
+                {
+                    "https://localhost:5001/swagger/oauth2-redirect.html"
+                },
+                AllowedCorsOrigins = new List<string>
+                {
+                    "https://localhost:5001"
+                },
+                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.api" },
+                // enable refresh tokens if needed by clients using offline access
+                AllowOfflineAccess = false
             },
 
             // Machine to Machine client (pour les services backend)
@@ -79,6 +88,33 @@ public static class IdentityServerConfig
                     new Secret("super-secret-key".Sha256())
                 },
                 AllowedScopes = { "johodp.api" }
+            }
+            ,
+
+            // Example SPA client using PKCE
+            new Client
+            {
+                ClientId = "johodp-spa",
+                ClientName = "Johodp SPA (PKCE)",
+                AllowedGrantTypes = GrantTypes.Code,
+                RequirePkce = true,
+                RequireClientSecret = false,
+                AllowAccessTokensViaBrowser = true,
+                RedirectUris = new List<string>
+                {
+                    "http://localhost:4200/callback",
+                    "http://localhost:4200/"
+                },
+                PostLogoutRedirectUris = new List<string>
+                {
+                    "http://localhost:4200/"
+                },
+                AllowedCorsOrigins = new List<string>
+                {
+                    "http://localhost:4200"
+                },
+                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.api" },
+                AllowOfflineAccess = true
             }
         };
     }

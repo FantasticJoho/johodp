@@ -85,6 +85,44 @@ Content-Type: application/json
 }
 ```
 
+## ASP.NET Identity integration (local)
+
+The project now includes a light integration with ASP.NET Core Identity using the domain `User` aggregate. This enables password hashing, sign-in flows and integration with the UI login page.
+
+Key points:
+- `UserStore` (in `src/Johodp.Infrastructure/Identity/UserStore.cs`) implements the minimal Identity stores required (user lookup, password hash, email).
+- `CustomSignInManager` (in `src/Johodp.Infrastructure/Identity/CustomSignInManager.cs`) overrides `PasswordSignInAsync` to verify credentials via `UserManager` and enforces MFA when the user's roles require it.
+- The `User` aggregate now contains a `PasswordHash` property and a `SetPasswordHash` method to persist password hashes via the store.
+- Cookie-based authentication is configured with a 7-day sliding expiration window.
+
+### Account Management Pages
+
+- **Login** — `/account/login` - Sign in with email and password.
+- **Register** — `/account/register` - Create a new account with email, password, first name, and last name.
+- **Forgot Password** — `/account/forgot-password` - Request a password reset link (token printed to console in dev mode).
+- **Reset Password** — `/account/reset-password?token={token}` - Set a new password with a valid reset token.
+- **Logout** — `/account/logout` - Sign out and clear session.
+
+### Example Usage
+
+Quick examples (C# interactive or controller) — create a user with password and sign-in:
+
+```csharp
+// register
+var user = Johodp.Domain.Users.Aggregates.User.Create("user@example.com", "First", "Last");
+var result = await userManager.CreateAsync(user, "P@ssw0rd!");
+
+// sign-in
+var signIn = await signInManager.PasswordSignInAsync("user@example.com", "P@ssw0rd!", isPersistent: false, lockoutOnFailure: false);
+if (signIn.Succeeded) { /* proceed */ }
+else if (signIn.RequiresTwoFactor) { /* start 2FA flow */ }
+```
+
+Notes:
+- Password hashing is provided by the `IPasswordHasher<TUser>` registered by Identity.
+- The login UI is available at `/account/login` and posts to the local sign-in flow.
+- Password reset tokens are generated and logged to console in development (ready for integration with email services in production).
+
 ### Récupérer un utilisateur
 
 ```bash

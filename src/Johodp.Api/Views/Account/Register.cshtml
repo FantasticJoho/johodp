@@ -1,7 +1,7 @@
-@model Johodp.Api.Controllers.Account.LoginViewModel
+@model Johodp.Api.Controllers.Account.RegisterViewModel
 
 @{
-    ViewData["Title"] = "Login";
+    ViewData["Title"] = "Register";
 }
 
 <!DOCTYPE html>
@@ -26,33 +26,39 @@
             align-items: center;
         }
 
-        .login-container {
+        .register-container {
             background: white;
             border-radius: 8px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
             padding: 40px;
         }
 
-        .login-header {
+        .register-header {
             text-align: center;
             margin-bottom: 30px;
         }
 
-        .login-header h1 {
+        .register-header h1 {
             font-size: 28px;
             color: #333;
             margin-bottom: 10px;
         }
 
-        .login-header p {
+        .register-header p {
             color: #666;
             font-size: 14px;
         }
 
         .form-group {
             margin-bottom: 20px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
         }
 
         .form-group label {
@@ -78,11 +84,7 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .form-group input[type="password"] {
-            font-family: 'Courier New', monospace;
-        }
-
-        .login-button {
+        .register-button {
             width: 100%;
             padding: 12px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -96,12 +98,12 @@
             margin-top: 10px;
         }
 
-        .login-button:hover {
+        .register-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
         }
 
-        .login-button:active {
+        .register-button:active {
             transform: translateY(0);
         }
 
@@ -115,20 +117,20 @@
             font-size: 14px;
         }
 
-        .login-footer {
+        .register-footer {
             text-align: center;
             margin-top: 20px;
             font-size: 13px;
             color: #666;
         }
 
-        .login-footer a {
+        .register-footer a {
             color: #667eea;
             text-decoration: none;
             font-weight: 500;
         }
 
-        .login-footer a:hover {
+        .register-footer a:hover {
             text-decoration: underline;
         }
 
@@ -140,10 +142,10 @@
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>Johodp</h1>
-            <p>Identity Provider</p>
+    <div class="register-container">
+        <div class="register-header">
+            <h1>Create Account</h1>
+            <p>Join Johodp Identity Provider</p>
         </div>
 
         @if (ViewData.ModelState.ErrorCount > 0)
@@ -159,7 +161,7 @@
             </div>
         }
 
-        <form method="post" asp-action="Login">
+        <form method="post" asp-action="Register">
             <div class="form-group">
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email" placeholder="your@email.com" required asp-for="Email">
@@ -172,6 +174,38 @@
                             <div>@error.ErrorMessage</div>
                         }
                     }
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="firstName">First Name</label>
+                    <input type="text" id="firstName" name="firstName" placeholder="Jean" required asp-for="FirstName">
+                    <div class="validation-error">
+                        @{ var firstNameErrors = ViewData.ModelState.FirstOrDefault(x => x.Key == "FirstName").Value?.Errors; }
+                        @if (firstNameErrors?.Count > 0)
+                        {
+                            @foreach (var error in firstNameErrors)
+                            {
+                                <div>@error.ErrorMessage</div>
+                            }
+                        }
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="lastName">Last Name</label>
+                    <input type="text" id="lastName" name="lastName" placeholder="Dupont" required asp-for="LastName">
+                    <div class="validation-error">
+                        @{ var lastNameErrors = ViewData.ModelState.FirstOrDefault(x => x.Key == "LastName").Value?.Errors; }
+                        @if (lastNameErrors?.Count > 0)
+                        {
+                            @foreach (var error in lastNameErrors)
+                            {
+                                <div>@error.ErrorMessage</div>
+                            }
+                        }
+                    </div>
                 </div>
             </div>
 
@@ -190,19 +224,26 @@
                 </div>
             </div>
 
-            <button type="submit" class="login-button">Sign In</button>
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword" placeholder="••••••••" required asp-for="ConfirmPassword">
+                <div class="validation-error">
+                    @{ var confirmPasswordErrors = ViewData.ModelState.FirstOrDefault(x => x.Key == "ConfirmPassword").Value?.Errors; }
+                    @if (confirmPasswordErrors?.Count > 0)
+                    {
+                        @foreach (var error in confirmPasswordErrors)
+                        {
+                            <div>@error.ErrorMessage</div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <button type="submit" class="register-button">Create Account</button>
         </form>
 
-        <div class="login-footer">
-            <p style="margin-bottom: 10px;">
-                Don't have an account? <a href="/account/register">Register</a>
-            </p>
-            <p style="margin-bottom: 10px;">
-                <a href="/account/forgot-password">Forgot your password?</a>
-            </p>
-            <p style="font-size: 12px; margin-top: 15px; color: #999;">
-                Test account: any email address and password
-            </p>
+        <div class="register-footer">
+            <p>Already have an account? <a href="/account/login">Sign in</a></p>
         </div>
     </div>
 </body>

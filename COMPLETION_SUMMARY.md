@@ -333,3 +333,66 @@ Prochaines étapes:
 5. Déployer en production
 
 **Bon courage! 🚀**
+
+---
+
+## 🔐 Identity integration (summary)
+
+The project now includes a complete integration with ASP.NET Core Identity that ties into the Domain `User` aggregate, featuring full account management (registration, login, password reset).
+
+### Components
+
+- `UserStore` (`src/Johodp.Infrastructure/Identity/UserStore.cs`): implements Identity stores required for basic scenarios (user lookup, password hash, email) and delegates persistence to `IUserRepository` / `UnitOfWork`.
+- `CustomSignInManager` (`src/Johodp.Infrastructure/Identity/CustomSignInManager.cs`): extends `SignInManager<TUser>` and overrides `PasswordSignInAsync` to verify credentials via `UserManager` and to return `TwoFactorRequired` when the user's roles require MFA.
+- `User.PasswordHash`: domain `User` aggregate now stores the password hash via `SetPasswordHash` so Identity can persist credentials through the `UserStore`.
+- **Cookie Authentication** (7-day sliding expiration): secure session management with HttpOnly, Secure, SameSite flags.
+
+### Account Endpoints
+
+- `GET /account/login` — Display login form
+- `POST /account/login` — Sign in (creates user if not exists in demo)
+- `GET /account/register` — Display registration form
+- `POST /account/register` — Create new account with email, password, first name, last name
+- `GET /account/forgot-password` — Request password reset (token printed to console in dev)
+- `POST /account/forgot-password` — Initiate password reset flow
+- `GET /account/reset-password?token={token}` — Display password reset form
+- `POST /account/reset-password` — Apply new password with reset token
+- `GET /account/logout` — Sign out and clear session
+- Confirmation pages: `ForgotPasswordConfirmation`, `ResetPasswordConfirmation`
+
+### Quick Test Steps
+
+1. Create a user with a password (C#):
+
+```csharp
+var user = Johodp.Domain.Users.Aggregates.User.Create("user@example.com", "First", "Last");
+var res = await userManager.CreateAsync(user, "P@ssw0rd!");
+```
+
+2. Sign in:
+
+```csharp
+var signIn = await signInManager.PasswordSignInAsync("user@example.com", "P@ssw0rd!", false, false);
+if (signIn.Succeeded) { /* success */ }
+else if (signIn.RequiresTwoFactor) { /* handle 2FA */ }
+```
+
+3. Web UI: Navigate to `http://localhost:5000/account/login`
+   - Register a new account
+   - Log in with credentials
+   - Request password reset (token appears in console)
+   - Reset password with token
+
+4. Verify session:
+   - Check browser DevTools → Application → Cookies for "CookieName" session cookie
+   - Session persists for 7 days with sliding expiration
+
+### Security Notes
+
+- **Password Hashing**: handled by registered `IPasswordHasher<TUser>` (default `PasswordHasher<TUser>` using PBKDF2)
+- **MFA Enforcement**: delegated to domain (`Role.RequiresMFA`) and surfaced by `CustomSignInManager` as `TwoFactorRequired`
+- **Token Expiration**: password reset tokens expire after configured duration (default: 24 hours)
+- **CSRF Protection**: SameSite=Lax cookie; anti-forgery on forms (implement if forms added)
+- **Email Enumeration Prevention**: forgot password intentionally doesn't reveal if email exists
+- **HTTPS Only**: Secure flag set for production
+

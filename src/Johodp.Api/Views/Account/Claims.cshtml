@@ -1,0 +1,32 @@
+@model IEnumerable<System.Security.Claims.Claim>
+
+@{
+    ViewData["Title"] = "Your Claims";
+}
+
+<h2>Your Claims</h2>
+
+@if (Model == null || !Model.Any())
+{
+    <p>No claims available for the current user.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var c in Model)
+        {
+            <tr>
+                <td>@c.Type</td>
+                <td>@c.Value</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
