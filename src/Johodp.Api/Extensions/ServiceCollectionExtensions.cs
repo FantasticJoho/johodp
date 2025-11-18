@@ -77,6 +77,18 @@ public static class ServiceCollectionExtensions
             opts.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
         });
 
+        // CORS policy for local SPA development (allow credentials)
+        services.AddCors(options =>
+        {
+            options.AddPolicy("AllowSpa", policy =>
+            {
+                policy.WithOrigins("http://localhost:4200")
+                      .AllowCredentials()
+                      .AllowAnyHeader()
+                      .AllowAnyMethod();
+            });
+        });
+
         return services;
     }
 }

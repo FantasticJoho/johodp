@@ -59,6 +59,9 @@ app.UseHttpsRedirection();
 // Enable routing so authentication runs and populates HttpContext.User
 app.UseRouting();
 
+// Allow SPA origin to send credentials (cookies) during local development
+app.UseCors("AllowSpa");
+
 // Authentication must run before IdentityServer so its endpoints can see the
 // authenticated user (cookie) and avoid redirecting to login unnecessarily.
 app.UseAuthentication();

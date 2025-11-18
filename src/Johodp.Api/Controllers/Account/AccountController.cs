@@ -96,17 +96,22 @@ public class AccountController : Controller
                 var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
                 return BadRequest(new { error = "Registration failed", details = errors });
             }
-        }
 
-        // Attempt sign-in
-        var signInResult = await _signInManager.PasswordSignInAsync(request.Email, request.Password, isPersistent: false, lockoutOnFailure: false);
-
-        if (signInResult.Succeeded)
-        {
+            // If user was just created, sign them in so the auth cookie is issued
+            await _signInManager.SignInAsync(user, isPersistent: false);
             return Ok(new { message = "Login successful", email = request.Email });
         }
 
-        if (signInResult.RequiresTwoFactor)
+        // Attempt sign-in for existing user: verify password and explicitly sign in
+        var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (passwordValid)
+        {
+            await _signInManager.SignInAsync(user, isPersistent: false);
+            return Ok(new { message = "Login successful", email = request.Email });
+        }
+
+        // If MFA would be required, surface that result (the CustomSignInManager checks user.RequiresMFA())
+        if (user.RequiresMFA())
         {
             return Unauthorized(new { error = "Two-factor authentication required" });
         }
