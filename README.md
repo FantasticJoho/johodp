@@ -108,6 +108,138 @@ Le projet suit une architecture en couches basée sur les principes DDD :
 
 ## ✨ Fonctionnalités
 
+### API Endpoints disponibles
+
+#### 🔐 AccountController (`/account/*`)
+
+Contrôleur de gestion des comptes utilisateurs avec interface web (Razor Pages) et API REST.
+
+**Pages Web (Razor):**
+
+| Endpoint | Méthode | Description | Authentification |
+|----------|---------|-------------|------------------|
+| `/account/login` | GET | Affiche le formulaire de connexion avec support multi-tenant via `acr_values` | Non requise |
+| `/account/login` | POST | Authentifie l'utilisateur, crée automatiquement le compte si inexistant, applique l'isolation tenant | Non requise |
+| `/account/register` | GET | Affiche le formulaire d'inscription | Non requise |
+| `/account/register` | POST | Crée un nouveau compte utilisateur avec tenant wildcard par défaut | Non requise |
+| `/account/logout` | GET | Déconnecte l'utilisateur et redirige vers OIDC logout | Requise |
+| `/account/claims` | GET | Affiche tous les claims de l'utilisateur courant (debug) | Requise |
+| `/account/forgot-password` | GET | Affiche le formulaire de demande de réinitialisation | Non requise |
+| `/account/forgot-password` | POST | Génère un token de réinitialisation (affiché en console en dev) | Non requise |
+| `/account/reset-password` | GET | Affiche le formulaire de réinitialisation avec token | Non requise |
+| `/account/reset-password` | POST | Réinitialise le mot de passe avec le token fourni | Non requise |
+| `/account/access-denied` | GET | Page d'accès refusé | Non requise |
+
+**API REST:**
+
+| Endpoint | Méthode | Description | Authentification |
+|----------|---------|-------------|------------------|
+| `POST /api/auth/login` | POST | Connexion via API JSON avec support tenant (`acr_values` en query param). Crée automatiquement l'utilisateur si inexistant. Retourne un cookie d'authentification. | Non requise |
+
+**Paramètres de tenant:**
+- `acr_values=tenant:TENANT_ID` dans l'URL de retour (login web) ou en query param (login API)
+- Absence de `acr_values` → Tenant wildcard (`*`) avec accès à tous les tenants
+- Validation tenant stricte : utilisateur avec tenant spécifique ne peut accéder qu'à son tenant
+
+#### 👥 UsersController (`/api/users/*`)
+
+Gestion des utilisateurs via pattern CQRS (Commands/Queries avec MediatR).
+
+| Endpoint | Méthode | Description | Authentification |
+|----------|---------|-------------|------------------|
+| `POST /api/users/register` | POST | Enregistre un nouvel utilisateur via command CQRS | Non requise |
+| `GET /api/users/{userId}` | GET | Récupère les informations d'un utilisateur par ID via query CQRS | Non requise |
+
+**Body exemple (Register):**
+```json
+{
+  "email": "user@example.com",
+  "firstName": "Jean",
+  "lastName": "Dupont",
+  "password": "P@ssw0rd!"
+}
+```
+
+#### 🔑 ClientsController (`/api/clients/*`)
+
+Gestion des clients OAuth2/OIDC (applications clientes).
+
+| Endpoint | Méthode | Description | Authentification |
+|----------|---------|-------------|------------------|
+| `GET /api/clients/{clientId}` | GET | Récupère les détails d'un client OAuth2 (scopes, URIs, paramètres) | Non requise |
+| `POST /api/clients/{clientId}/redirect-uris` | POST | Ajoute une URI de redirection autorisée pour le client | Non requise |
+| `DELETE /api/clients/{clientId}/redirect-uris` | DELETE | Supprime une URI de redirection du client | Non requise |
+
+**Body exemple (Add Redirect URI):**
+```json
+{
+  "redirectUri": "http://localhost:4200/callback"
+}
+```
+
+**Réponse Client:**
+```json
+{
+  "id": "guid",
+  "clientName": "Mon Application",
+  "allowedScopes": ["openid", "profile", "email", "johodp.api"],
+  "allowedRedirectUris": ["http://localhost:4200/callback"],
+  "allowedCorsOrigins": ["http://localhost:4200"],
+  "requireClientSecret": false,
+  "requireConsent": true,
+  "isActive": true,
+  "createdAt": "2025-11-18T00:00:00Z"
+}
+```
+
+#### 🏢 TenantController (`/api/tenant/*`)
+
+Configuration et personnalisation par tenant (branding, langue, format).
+
+| Endpoint | Méthode | Description | Authentification |
+|----------|---------|-------------|------------------|
+| `GET /api/tenant/{tenantId}/branding.css` | GET | Génère un fichier CSS personnalisé avec couleurs, logo et images du tenant (variables CSS) | Non requise |
+| `GET /api/tenant/{tenantId}/language` | GET | Retourne les préférences linguistiques du tenant (langue, format date/heure, timezone, devise) | Non requise |
+
+**Réponse Branding CSS:**
+```css
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --font-primary-color: #333333;
+    --font-secondary-color: #666666;
+    --logo-base64: url('data:image/png;base64,...');
+    --image-base64: url('data:image/png;base64,...');
+}
+```
+
+**Réponse Language:**
+```json
+{
+  "tenantId": "acme-corp",
+  "defaultLanguage": "fr-FR",
+  "supportedLanguages": ["fr-FR", "en-US", "es-ES"],
+  "dateFormat": "dd/MM/yyyy",
+  "timeFormat": "HH:mm",
+  "timezone": "Europe/Paris",
+  "currency": "EUR"
+}
+```
+
+**Note:** Les endpoints tenant retournent actuellement des données mockées. TODO: Implémenter la persistance en base de données.
+
+### Endpoints Duende IdentityServer (OIDC/OAuth2)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /.well-known/openid-configuration` | Document de découverte OIDC avec tous les endpoints |
+| `GET /connect/authorize` | Endpoint d'autorisation OAuth2 (flux Authorization Code + PKCE) |
+| `POST /connect/token` | Exchange authorization code → access token + id token + refresh token |
+| `GET /connect/userinfo` | Récupère les informations utilisateur avec access token |
+| `POST /connect/revocation` | Révoque un access token ou refresh token |
+| `POST /connect/introspect` | Inspecte et valide un token |
+| `GET /connect/endsession` | Déconnexion OIDC (logout) |
+
 ### Authentification et autorisation
 
 #### Pages de gestion de compte
