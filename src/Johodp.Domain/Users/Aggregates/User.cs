@@ -17,6 +17,9 @@ public class User : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
+    // Multi-tenancy
+    public string? TenantId { get; private set; }
+
     // Relations
     public ScopeId? ScopeId { get; private set; }
     public Scope? Scope { get; private set; }
@@ -27,9 +30,10 @@ public class User : AggregateRoot
     private readonly List<Permission> _permissions = new();
     public IReadOnlyList<Permission> Permissions => _permissions.AsReadOnly();
 
+
     private User() { }
 
-    public static User Create(string email, string firstName, string lastName)
+    public static User Create(string email, string firstName, string lastName, string? tenantId = null)
     {
         var user = new User
         {
@@ -39,7 +43,8 @@ public class User : AggregateRoot
             LastName = lastName,
             EmailConfirmed = false,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            TenantId = tenantId
         };
 
         user.AddDomainEvent(new UserRegisteredEvent(
@@ -50,6 +55,12 @@ public class User : AggregateRoot
         ));
 
         return user;
+    }
+
+    public void SetTenantId(string? tenantId)
+    {
+        TenantId = tenantId;
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void ConfirmEmail()

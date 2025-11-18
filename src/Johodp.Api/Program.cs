@@ -1,5 +1,7 @@
 using Johodp.Api.Extensions;
 using Serilog;
+using Scalar.AspNetCore;
+using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,20 +45,27 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddControllers();
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
+// Ensure HTTPS redirection
 app.UseHttpsRedirection();
 
-// Enable routing so authentication runs and populates HttpContext.User
+if (app.Environment.IsDevelopment())
+{
+ app.UseSwagger(opt => opt.RouteTemplate = "openapi/{documentName}.json");
+   app.MapScalarApiReference(
+    opt => {
+        opt.Title = "WebApi with Scalar Example";
+        opt.Theme = ScalarTheme.BluePlanet;
+        opt.DefaultHttpClient = new(ScalarTarget.Http, ScalarClient.Http11);
+    }
+);
+}
+
 app.UseRouting();
 
 // Allow SPA origin to send credentials (cookies) during local development
@@ -71,11 +80,12 @@ app.UseIdentityServer();
 
 app.UseAuthorization();
 
-app.UseEndpoints(endpoints =>
-{
-    endpoints.MapControllers();
-    endpoints.MapDefaultControllerRoute();
-});
+
+// Top-level route registrations (recommended)
+app.MapControllers();
+app.MapDefaultControllerRoute();
+
+
 
 try
 {

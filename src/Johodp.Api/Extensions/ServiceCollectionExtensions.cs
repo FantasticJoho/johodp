@@ -29,6 +29,9 @@ public static class ServiceCollectionExtensions
         // User Repository (for profile service)
         services.AddScoped<IUserRepository, Johodp.Infrastructure.Persistence.Repositories.UserRepository>();
 
+        // Client Repository
+        services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
+
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 

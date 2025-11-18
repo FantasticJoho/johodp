@@ -23,19 +23,27 @@ public class DomainUserClaimsPrincipalFactory : IUserClaimsPrincipalFactory<User
         identity.AddClaim(new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"));
         identity.AddClaim(new Claim(ClaimTypes.Email, user.Email.Value));
 
-        // Roles
+
+        // Roles as string claims
         foreach (var role in user.Roles)
         {
-            if (!string.IsNullOrWhiteSpace(role.Name))
-                identity.AddClaim(new Claim(ClaimTypes.Role, role.Name));
+            var roleName = role?.Name?.ToString() ?? role?.Name;
+            if (!string.IsNullOrWhiteSpace(roleName))
+                identity.AddClaim(new Claim(ClaimTypes.Role, roleName));
         }
 
-        // Permissions as custom claims
+        // Permissions as string claims
         foreach (var perm in user.Permissions)
         {
-            var permissionName = perm.Name?.Value ?? perm.Name?.ToString();
+            var permissionName = perm?.Name?.ToString() ?? perm?.Name.ToString();
             if (!string.IsNullOrWhiteSpace(permissionName))
                 identity.AddClaim(new Claim("permission", permissionName));
+        }
+
+        // TenantId claim (if present)
+        if (!string.IsNullOrWhiteSpace(user.TenantId))
+        {
+            identity.AddClaim(new Claim("tenantid", user.TenantId));
         }
 
         var principal = new ClaimsPrincipal(identity);

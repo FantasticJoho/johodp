@@ -38,8 +38,8 @@ public class AccountController : Controller
 
         if (user == null)
         {
-            // Create domain user and persist with password
-            user = Johodp.Domain.Users.Aggregates.User.Create(model.Email, "User", "Login");
+            // Create domain user and persist with password, set tenantId
+            user = Johodp.Domain.Users.Aggregates.User.Create(model.Email, "User", "Login", model.TenantId);
             var createResult = await _userManager.CreateAsync(user, model.Password);
             if (!createResult.Succeeded)
             {
@@ -49,6 +49,14 @@ public class AccountController : Controller
                 ViewData["ReturnUrl"] = returnUrl;
                 return View(model);
             }
+        }
+
+        // Refuse authentication if user does not have rights on the requested tenant
+        if (string.IsNullOrWhiteSpace(model.TenantId) || user.TenantId != model.TenantId)
+        {
+            ModelState.AddModelError(string.Empty, "User does not have access to this tenant.");
+            ViewData["ReturnUrl"] = returnUrl;
+            return View(model);
         }
 
         // Attempt sign-in
@@ -88,8 +96,8 @@ public class AccountController : Controller
 
         if (user == null)
         {
-            // Create domain user and persist with password
-            user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, "User", "Login");
+            // Create domain user and persist with password, set tenantId
+            user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, "User", "Login", request.TenantId);
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
             {
@@ -100,6 +108,12 @@ public class AccountController : Controller
             // If user was just created, sign them in so the auth cookie is issued
             await _signInManager.SignInAsync(user, isPersistent: false);
             return Ok(new { message = "Login successful", email = request.Email });
+        }
+
+        // Refuse authentication if user does not have rights on the requested tenant
+        if (string.IsNullOrWhiteSpace(request.TenantId) || user.TenantId != request.TenantId)
+        {
+            return Unauthorized(new { error = "User does not have access to this tenant" });
         }
 
         // Attempt sign-in for existing user: verify password and explicitly sign in
@@ -281,12 +295,14 @@ public class LoginViewModel
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
 }
 
 public class LoginApiRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
 }
 
 public class RegisterViewModel

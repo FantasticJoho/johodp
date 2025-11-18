@@ -58,6 +58,30 @@ public class Client : AggregateRoot
         IsActive = false;
     }
 
+    public void Activate()
+    {
+        IsActive = true;
+    }
+
+    public void AddRedirectUri(string redirectUri)
+    {
+        if (string.IsNullOrWhiteSpace(redirectUri))
+            throw new ArgumentException("Redirect URI cannot be empty", nameof(redirectUri));
+
+        if (AllowedRedirectUris.Contains(redirectUri))
+            return;
+
+        AllowedRedirectUris = AllowedRedirectUris.Append(redirectUri).ToArray();
+    }
+
+    public void RemoveRedirectUri(string redirectUri)
+    {
+        if (string.IsNullOrWhiteSpace(redirectUri))
+            throw new ArgumentException("Redirect URI cannot be empty", nameof(redirectUri));
+
+        AllowedRedirectUris = AllowedRedirectUris.Where(uri => uri != redirectUri).ToArray();
+    }
+
     public void UpdateAllowedScopes(string[] scopes)
     {
         AllowedScopes = scopes ?? Array.Empty<string>();
