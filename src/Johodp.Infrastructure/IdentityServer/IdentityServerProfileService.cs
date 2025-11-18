@@ -53,24 +53,45 @@ public class IdentityServerProfileService : IProfileService
             new Claim("email_verified", user.EmailConfirmed.ToString().ToLowerInvariant())
         };
 
+        if (!string.IsNullOrWhiteSpace(user.TenantId))
+        {
+            claims.Add(new Claim("tenant_id", user.TenantId));
+        }
+
         if (user.Scope != null)
         {
             claims.Add(new Claim("scope", user.Scope.Code));
         }
 
-        foreach (var role in user.Roles)
+        // Add roles - default to "reader" if no roles assigned
+        if (user.Roles != null && user.Roles.Any())
         {
-            claims.Add(new Claim("role", role.Name));
-            if (role.RequiresMFA)
+            foreach (var role in user.Roles)
             {
-                // add an auth method reference if MFA is required for roles
-                claims.Add(new Claim("amr", "mfa"));
+                claims.Add(new Claim("role", role.Name));
+                if (role.RequiresMFA)
+                {
+                    // add an auth method reference if MFA is required for roles
+                    claims.Add(new Claim("amr", "mfa"));
+                }
             }
         }
-
-        foreach (var perm in user.Permissions)
+        else
         {
-            claims.Add(new Claim("permission", perm.Name.Value));
+            claims.Add(new Claim("role", "reader"));
+        }
+
+        // Add permissions - default to "reader" if no permissions assigned
+        if (user.Permissions != null && user.Permissions.Any())
+        {
+            foreach (var perm in user.Permissions)
+            {
+                claims.Add(new Claim("permission", perm.Name.Value));
+            }
+        }
+        else
+        {
+            claims.Add(new Claim("permission", "reader"));
         }
 
         // Filter by requested claim types if provided

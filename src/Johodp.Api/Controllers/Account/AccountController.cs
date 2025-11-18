@@ -21,6 +21,29 @@ public class AccountController : Controller
     public IActionResult Login(string? returnUrl = null)
     {
         ViewData["ReturnUrl"] = returnUrl;
+        
+        // Extract tenantId from acr_values if present in the authorize request
+        string? tenantId = null;
+        if (!string.IsNullOrEmpty(returnUrl))
+        {
+            var uri = new Uri(returnUrl, UriKind.RelativeOrAbsolute);
+            if (!uri.IsAbsoluteUri)
+            {
+                uri = new Uri("http://localhost" + returnUrl);
+            }
+            
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var acrValues = query["acr_values"];
+            
+            if (!string.IsNullOrEmpty(acrValues))
+            {
+                tenantId = acrValues.Split(' ')
+                    .FirstOrDefault(x => x.StartsWith("tenant:"))
+                    ?.Replace("tenant:", "");
+            }
+        }
+        
+        ViewData["TenantId"] = tenantId;
         return View();
     }
 
@@ -33,13 +56,39 @@ public class AccountController : Controller
             return View(model);
         }
 
+        // Extract tenantId from acr_values in returnUrl
+        string tenantId = "*"; // Default to wildcard tenant
+        if (!string.IsNullOrEmpty(returnUrl))
+        {
+            var uri = new Uri(returnUrl, UriKind.RelativeOrAbsolute);
+            if (!uri.IsAbsoluteUri)
+            {
+                uri = new Uri("http://localhost" + returnUrl);
+            }
+            
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var acrValues = query["acr_values"];
+            
+            if (!string.IsNullOrEmpty(acrValues))
+            {
+                var extractedTenant = acrValues.Split(' ')
+                    .FirstOrDefault(x => x.StartsWith("tenant:"))
+                    ?.Replace("tenant:", "");
+                
+                if (!string.IsNullOrEmpty(extractedTenant))
+                {
+                    tenantId = extractedTenant;
+                }
+            }
+        }
+
         // Try to find existing user
         var user = await _userManager.FindByEmailAsync(model.Email);
 
         if (user == null)
         {
             // Create domain user and persist with password, set tenantId
-            user = Johodp.Domain.Users.Aggregates.User.Create(model.Email, "User", "Login", model.TenantId);
+            user = Johodp.Domain.Users.Aggregates.User.Create(model.Email, "User", "Login", tenantId);
             var createResult = await _userManager.CreateAsync(user, model.Password);
             if (!createResult.Succeeded)
             {
@@ -47,15 +96,21 @@ public class AccountController : Controller
                     ModelState.AddModelError(string.Empty, err.Description);
 
                 ViewData["ReturnUrl"] = returnUrl;
+                ViewData["TenantId"] = tenantId;
                 return View(model);
             }
         }
 
         // Refuse authentication if user does not have rights on the requested tenant
-        if (string.IsNullOrWhiteSpace(model.TenantId) || user.TenantId != model.TenantId)
+        // Allow if:
+        //  - No specific tenant requested (tenantId == "*")
+        //  - User has wildcard tenant access (user.TenantId == "*")
+        //  - User's tenant matches the requested tenant
+        if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
         {
             ModelState.AddModelError(string.Empty, "User does not have access to this tenant.");
             ViewData["ReturnUrl"] = returnUrl;
+            ViewData["TenantId"] = tenantId;
             return View(model);
         }
 
@@ -84,11 +139,25 @@ public class AccountController : Controller
 
     [HttpPost("api/auth/login")]
     [Produces("application/json")]
-    public async Task<IActionResult> LoginApi([FromBody] LoginApiRequest request)
+    public async Task<IActionResult> LoginApi([FromBody] LoginApiRequest request, [FromQuery] string? acr_values = null)
     {
         if (!ModelState.IsValid)
         {
             return BadRequest(new { error = "Invalid request" });
+        }
+
+        // Extract tenantId from acr_values parameter
+        string tenantId = "*"; // Default to wildcard tenant
+        if (!string.IsNullOrEmpty(acr_values))
+        {
+            var extractedTenant = acr_values.Split(' ')
+                .FirstOrDefault(x => x.StartsWith("tenant:"))
+                ?.Replace("tenant:", "");
+            
+            if (!string.IsNullOrEmpty(extractedTenant))
+            {
+                tenantId = extractedTenant;
+            }
         }
 
         // Try to find existing user
@@ -97,7 +166,7 @@ public class AccountController : Controller
         if (user == null)
         {
             // Create domain user and persist with password, set tenantId
-            user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, "User", "Login", request.TenantId);
+            user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, "User", "Login", tenantId);
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
             {
@@ -111,7 +180,11 @@ public class AccountController : Controller
         }
 
         // Refuse authentication if user does not have rights on the requested tenant
-        if (string.IsNullOrWhiteSpace(request.TenantId) || user.TenantId != request.TenantId)
+        // Allow if:
+        //  - No specific tenant requested (tenantId == "*")
+        //  - User has wildcard tenant access (user.TenantId == "*")
+        //  - User's tenant matches the requested tenant
+        if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
         {
             return Unauthorized(new { error = "User does not have access to this tenant" });
         }
@@ -295,14 +368,12 @@ public class LoginViewModel
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    public string TenantId { get; set; } = string.Empty;
 }
 
 public class LoginApiRequest
 {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    public string TenantId { get; set; } = string.Empty;
 }
 
 public class RegisterViewModel

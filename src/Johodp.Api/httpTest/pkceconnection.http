@@ -1,0 +1,184 @@
+### PKCE Flow - Complete OAuth2 Authorization Code + PKCE Workflow
+### This file demonstrates the full PKCE flow for obtaining tokens
+
+### Variables
+@baseUrl = http://localhost:5000
+@clientId = johodp-spa
+@redirectUri = http://localhost:4200/callback
+@scope = openid profile email johodp.identity johodp.api
+@state = 5a223df34572489a89678a698307af5e
+@nonce = a1f6d229e9ee4aada5652fa77a853f46
+
+# PKCE Parameters (generate these for each flow)
+# code_verifier: random string 43-128 chars (base64url encoded)
+# code_challenge: base64url(SHA256(code_verifier))
+@codeVerifier = dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+@codeChallenge = E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+
+# Tenant (optional - use tenant:your-tenant-id or omit for wildcard access)
+@acrValues = tenant:acme-corp
+
+# Authorization code (will be obtained from Step 2)
+@authorizationCode = 8D4B4E49FCB7181397E05CE85124D48162FFEACF4E5604A897B27963FCE09571-1
+
+# Access token (will be obtained from Step 3)
+@accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAiLCJuYmYiOjE3NjM0NzM3MDYsImlhdCI6MTc2MzQ3MzcwNiwiZXhwIjoxNzYzNDc3MzA2LCJhdWQiOiJqb2hvZHAiLCJzY29wZSI6WyJvcGVuaWQiLCJwcm9maWxlIiwiZW1haWwiLCJqb2hvZHAuaWRlbnRpdHkiLCJqb2hvZHAuYXBpIl0sImFtciI6WyJwd2QiXSwiY2xpZW50X2lkIjoiam9ob2RwLXNwYSIsInN1YiI6IjFiYjcxYWZjLWU2MjItNDJmNC1iM2ZkLWRmNDk1NmViYjNlYiIsImF1dGhfdGltZSI6MTc2MzQ3MzY3MCwiaWRwIjoibG9jYWwiLCJlbWFpbCI6ImpvbmF0aGFuLmhvbm9yZUBnbWFpbC5jb20iLCJzaWQiOiI2NDU2MTgyQjNFNjNBQTFCQzQ0NkEyNzlDQkFCREE5MCIsImp0aSI6IjE3QjA3MjE1MTY0MTZGNjAxN0QzMDBFRTM3RDFDREM1In0.qCjZiPl6eD3udR51dkDExjMSOfEjqtZDChTZKylV7JUjOdcCChHPtCWN1fc2fi5-qVhdimFT-CvgKX4gIZs6alYLsmbCSDSBzq-N8rbdgGGOnyPNI9DDhj0V5ZDTVd1nixurB4kLCwDdr96e2pNxuFe59_OtmEf31FJtXu7WVLAkdSv3SuTBmBarLaRc_dVN-XhK3YqQYyW3h-yOugVSXwL8zW8djW-Aw9pocbSFIYgL4m7JTBzb4gTE8VKdEF58xHoeSi07uBlTUgaj8ZqGxHV4zlsdwimUutzH0yBkK5znfIRoabIF1aqgt9jQRT9qr8YpTQeJRQI0bV1bFtymuQ
+
+###############################################################################
+### STEP 1: Discover OpenID Connect Configuration
+###############################################################################
+
+### Get OIDC Discovery Document
+GET {{baseUrl}}/.well-known/openid-configuration
+Accept: application/json
+
+###############################################################################
+### STEP 2: Authorization Request (Browser-based - manual step)
+###############################################################################
+
+### Authorization Endpoint - WITHOUT TENANT (wildcard access)
+# Paste this URL in your browser to initiate the authorization flow
+ GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}
+
+### Authorization Endpoint - WITH SPECIFIC TENANT
+# Paste this URL in your browser to initiate the authorization flow with tenant
+# GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
+
+# After successful login, you'll be redirected to:
+# {{redirectUri}}?code=AUTHORIZATION_CODE&state={{state}}
+# Copy the 'code' parameter value and update @authorizationCode variable above
+
+
+###############################################################################
+### STEP 3: Token Request (Exchange authorization code for tokens)
+###############################################################################
+
+### Exchange authorization code for access token
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&client_id={{clientId}}
+&code={{authorizationCode}}
+&redirect_uri={{redirectUri}}
+&code_verifier={{codeVerifier}}
+
+# Response will include:
+# - access_token: JWT token for API access
+# - id_token: JWT with user identity claims
+# - refresh_token: Token to get new access tokens
+# - expires_in: Access token lifetime in seconds
+
+
+###############################################################################
+### STEP 4: Use Access Token to Call Protected API
+###############################################################################
+
+### Get User Claims (using access token)
+GET {{baseUrl}}/account/claims
+Authorization: Bearer {{accessToken}}
+Cookie: .AspNetCore.Identity.Application=COOKIE_VALUE_IF_NEEDED
+
+
+###############################################################################
+### STEP 5: Get UserInfo (OIDC UserInfo Endpoint)
+###############################################################################
+
+### Get UserInfo
+GET {{baseUrl}}/connect/userinfo
+Authorization: Bearer {{accessToken}}
+
+
+###############################################################################
+### STEP 6: Refresh Token (Get new access token without re-authentication)
+###############################################################################
+
+### Refresh Access Token
+# @refreshToken = REPLACE_WITH_REFRESH_TOKEN_FROM_STEP_3
+
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&client_id={{clientId}}
+&refresh_token={{refreshToken}}
+
+
+###############################################################################
+### STEP 7: Revoke Token (Logout / Token Cleanup)
+###############################################################################
+
+### Revoke Access Token
+POST {{baseUrl}}/connect/revocation
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}
+&client_id={{clientId}}
+&token_type_hint=access_token
+
+
+###############################################################################
+### ALTERNATIVE: Direct Login API (for testing without browser)
+###############################################################################
+
+### Login via API - WITHOUT TENANT (creates user with wildcard access)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "test.user@example.com",
+  "password": "P@ssw0rd!"
+}
+
+### Login via API - WITH SPECIFIC TENANT
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:acme-corp
+Content-Type: application/json
+
+{
+  "email": "test.user.tenant@example.com",
+  "password": "P@ssw0rd!"
+}
+
+
+###############################################################################
+### UTILITY: Introspect Token (validate and inspect token)
+###############################################################################
+
+### Introspect Access Token
+POST {{baseUrl}}/connect/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}
+&client_id={{clientId}}
+
+
+###############################################################################
+### NOTES:
+###############################################################################
+# 
+# PKCE Flow Steps:
+# 1. Generate code_verifier (random 43-128 char string)
+# 2. Generate code_challenge = base64url(SHA256(code_verifier))
+# 3. Start authorization with code_challenge
+# 4. User authenticates and approves
+# 5. Receive authorization code
+# 6. Exchange code + code_verifier for tokens
+#
+# Tenant Support:
+# - No acr_values: User gets wildcard access (TenantId = "*")
+# - acr_values=tenant:xyz: User restricted to tenant "xyz"
+# - Users with TenantId="*" can access any tenant
+#
+# JWT Token Claims:
+# - Access tokens and ID tokens include custom claims when 'johodp.identity' scope is requested:
+#   - tenant_id: User's assigned tenant (or "*" for wildcard)
+#   - role: User's roles (multiple claims if user has multiple roles)
+#   - permission: User's permissions (multiple claims if user has multiple permissions)
+#
+# Generate PKCE values in PowerShell:
+# $verifier = -join ((65..90) + (97..122) + (48..57) + 45 + 95 | Get-Random -Count 128 | % {[char]$_})
+# $sha256 = [System.Security.Cryptography.SHA256]::Create()
+# $hash = $sha256.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($verifier))
+# $challenge = [Convert]::ToBase64String($hash).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+#
+###############################################################################

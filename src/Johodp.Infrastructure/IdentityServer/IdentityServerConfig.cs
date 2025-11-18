@@ -30,7 +30,13 @@ public static class IdentityServerConfig
             new ApiResource("johodp", "Johodp API")
             {
                 Scopes = { "johodp.api" },
-                UserClaims = { "sub", "email" }
+                UserClaims = { 
+                    "sub", 
+                    "email", 
+                    "tenant_id", 
+                    "role", 
+                    "permission" 
+                }
             }
         };
     }
@@ -44,7 +50,13 @@ public static class IdentityServerConfig
         {
             new IdentityResources.OpenId(),
             new IdentityResources.Profile(),
-            new IdentityResources.Email()
+            new IdentityResources.Email(),
+            // Custom identity resource for tenant, roles, and permissions
+            new IdentityResource(
+                name: "johodp.identity",
+                userClaims: new[] { "tenant_id", "role", "permission" },
+                displayName: "Johodp Identity Information"
+            )
         };
     }
 
@@ -72,7 +84,7 @@ public static class IdentityServerConfig
                 {
                     "https://localhost:5001"
                 },
-                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.api" },
+                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.identity", "johodp.api" },
                 // enable refresh tokens if needed by clients using offline access
                 AllowOfflineAccess = false
             },
@@ -113,7 +125,7 @@ public static class IdentityServerConfig
                 {
                     "http://localhost:4200"
                 },
-                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.api" },
+                AllowedScopes = new List<string> { "openid", "profile", "email", "johodp.identity", "johodp.api" },
                 AllowOfflineAccess = true
             }
         };

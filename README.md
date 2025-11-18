@@ -103,6 +103,8 @@ Key points:
 
 ### Recent changes (2025-11-18)
 
+- **Multi-tenant support via `acr_values`**: Tenant isolation is now enforced using the standard OIDC `acr_values` parameter. Pass `acr_values=tenant:your-tenant-id` in the authorize request to specify the tenant. Users created without a tenant are assigned wildcard access (`TenantId = "*"`) and can authenticate to any tenant. Users with a specific tenant can only access that tenant.
+- **Duende IdentityServer migration**: Migrated from IdentityServer4 to Duende IdentityServer 7.3.2 for continued security support and active maintenance.
 - IdentityServer PKCE support: added PKCE-ready clients (`johodp-spa`, `swagger-ui`) using Authorization Code + PKCE. Use `RequirePkce = true` for public clients and `RequireClientSecret = false` where appropriate.
 - Fixed duplicate scope configuration: identity scopes (`openid`, `profile`, `email`) are declared as IdentityResources only (not duplicated in API scopes) to avoid IdentityServer configuration errors.
 - Middleware ordering: authentication is now enabled before IdentityServer (`app.UseAuthentication()` executed prior to `app.UseIdentityServer()`), and routing is enabled so IdentityServer endpoints see the authenticated principal.
@@ -110,15 +112,24 @@ Key points:
 - Cookie configuration: the application cookie name and attributes are set explicitly for development (`.AspNetCore.Identity.Application`, `SameSite=Lax`, `SecurePolicy=SameAsRequest`) to make cookies visible on `http://localhost` during local testing. For cross-origin PKCE/SPAs prefer HTTPS and `SameSite=None` + `Secure`.
 - Claims debug page: a new authenticated Razor page is available at `/account/claims` to display the current user's claims (useful to verify which claims are present in the cookie and what IdentityServer will emit).
 
-#### Quick PKCE authorize URL (example)
+#### Quick PKCE authorize URL (examples)
 
-You can test the PKCE authorize flow by pasting this authorize URL into the browser (on the IdentityServer host `http://localhost:5000`) after starting the application:
-
+**Without tenant (wildcard access - user gets `TenantId = "*"`):**
 ```
 http://localhost:5000/connect/authorize?response_type=code&client_id=johodp-spa&redirect_uri=http%3A%2F%2Flocalhost%3A4200%2Fcallback&scope=openid%20profile%20email%20johodp.api&code_challenge=hKlNQr0lnnlMW5Yf3GdlpGJfl9SnY3CW_ktowi3c7zA&code_challenge_method=S256&state=5a223df34572489a89678a698307af5e&nonce=a1f6d229e9ee4aada5652fa77a853f46
 ```
 
-- Notes: replace `code_challenge`, `state` and `nonce` with values generated for your test (or use the sample generator in `COMPLETION_SUMMARY.md`). If you start the flow from a different origin (e.g. `http://localhost:4200`), ensure your SPA sends login requests with credentials and that the server CORS policy allows credentials.
+**With specific tenant (user restricted to `acme-corp` tenant):**
+```
+http://localhost:5000/connect/authorize?response_type=code&client_id=johodp-spa&redirect_uri=http%3A%2F%2Flocalhost%3A4200%2Fcallback&scope=openid%20profile%20email%20johodp.api&code_challenge=hKlNQr0lnnlMW5Yf3GdlpGJfl9SnY3CW_ktowi3c7zA&code_challenge_method=S256&state=5a223df34572489a89678a698307af5e&nonce=a1f6d229e9ee4aada5652fa77a853f46&acr_values=tenant:acme-corp
+```
+
+- Notes: 
+  - The tenant is specified via the standard OIDC `acr_values` parameter using the format `tenant:your-tenant-id`
+  - Users without a tenant assignment get wildcard access (`TenantId = "*"`) and can authenticate to any tenant
+  - Users with a specific `TenantId` can only authenticate when the requested tenant matches their assigned tenant
+  - Replace `code_challenge`, `state` and `nonce` with values generated for your test (or use the sample generator in `COMPLETION_SUMMARY.md`)
+  - If you start the flow from a different origin (e.g. `http://localhost:4200`), ensure your SPA sends login requests with credentials and that the server CORS policy allows credentials
 
 See the `COMPLETION_SUMMARY.md` for a longer changelog and testing tips (PKCE code_challenge/code_verifier flow, cookie SameSite notes).
 
@@ -126,36 +137,61 @@ See the `COMPLETION_SUMMARY.md` for a longer changelog and testing tips (PKCE co
 
 When testing a browser-based SPA that initiates PKCE flows from `http://localhost:4200`, the SPA must send its login requests with credentials and the server must allow the SPA origin and credentials (CORS). The project includes a development CORS policy `AllowSpa` which permits `http://localhost:4200` and allows credentials.
 
-Examples (PowerShell) — register/login and inspect `Set-Cookie` header:
+#### Multi-tenant authentication
+
+The API supports tenant-based authentication using the `acr_values` query parameter:
+
+**PowerShell examples:**
 
 ```powershell
-# Register or login (the API creates the user if it doesn't exist in this project)
+# Login without tenant (creates user with wildcard access TenantId = "*")
 $body = '{"email":"spa.test+1@example.com","password":"P@ssw0rd!"}'
-$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login' -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing -ErrorAction Stop
+$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login' -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
+$resp.StatusCode
+$resp.Headers['Set-Cookie']
+
+# Login with specific tenant (creates user restricted to acme-corp)
+$body = '{"email":"spa.test+2@example.com","password":"P@ssw0rd!"}'
+$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp' -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
 $resp.StatusCode
 $resp.Headers['Set-Cookie']
 ```
 
-Examples (curl) — show response headers including `Set-Cookie`:
+**Curl examples:**
 
 ```bash
+# Login without tenant (wildcard access)
 curl -i -X POST http://localhost:5000/api/auth/login \
    -H "Content-Type: application/json" \
    -d '{"email":"spa.test+1@example.com","password":"P@ssw0rd!"}'
+
+# Login with specific tenant
+curl -i -X POST "http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp" \
+   -H "Content-Type: application/json" \
+   -d '{"email":"spa.test+2@example.com","password":"P@ssw0rd!"}'
 ```
 
-When running the SPA from `http://localhost:4200`, make sure your fetch/XHR includes credentials so the browser stores the cookie produced by the API:
+**JavaScript/SPA example:**
 
 ```js
+// Login without tenant (wildcard access)
 fetch('http://localhost:5000/api/auth/login', {
    method: 'POST',
    credentials: 'include',
    headers: { 'Content-Type': 'application/json' },
    body: JSON.stringify({ email: 'spa.test+1@example.com', password: 'P@ssw0rd!' })
 });
+
+// Login with specific tenant
+fetch('http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp', {
+   method: 'POST',
+   credentials: 'include',
+   headers: { 'Content-Type': 'application/json' },
+   body: JSON.stringify({ email: 'spa.test+2@example.com', password: 'P@ssw0rd!' })
+});
 ```
 
-After a successful login you can visit `http://localhost:5000/account/claims` (or fetch it from the SPA with `credentials: 'include'`) to confirm the server sees the authentication cookie and the expected claims.
+After a successful login you can visit `http://localhost:5000/account/claims` (or fetch it from the SPA with `credentials: 'include'`) to confirm the server sees the authentication cookie and the expected claims (including `tenant_id` claim if a tenant was assigned).
 
 ### Account Management Pages
 
