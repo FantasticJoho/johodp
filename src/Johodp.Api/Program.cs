@@ -62,6 +62,42 @@ if (app.Environment.IsDevelopment())
         opt.Title = "WebApi with Scalar Example";
         opt.Theme = ScalarTheme.BluePlanet;
         opt.DefaultHttpClient = new(ScalarTarget.Http, ScalarClient.Http11);
+        opt.HideModels = true;
+        opt.ShowSidebar = true;
+        opt.CustomCss = @"
+            /* Hide Share and Generate SDK buttons - even on localhost */
+            button:has-text('Generate SDKs'),
+            button:has-text('Share'),
+            [data-testid='share-button'],
+            [data-testid='generate-sdk-button'],
+            button[title*='Share'],
+            button[title*='SDK'],
+            button[aria-label*='Generate'],
+            button[aria-label*='Share'],
+            .scalar-card-button,
+            .scalar-api-client-button {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            /* Additional selector to target sidebar items */
+            [class*='generate'] button,
+            [class*='share'] button {
+                display: none !important;
+            }
+            /* Hide OpenAPI Client sidebar button */
+            button[class*='sidebar']:has-text('Client'),
+            [class*='sidebar'] button:has-text('Client'),
+            [class*='sidebar'] [class*='client'],
+            nav button[aria-label*='Client'],
+            aside button[aria-label*='Client'],
+            .sidebar-button,
+            button[data-sidebar-trigger] {
+                display: none !important;
+                visibility: hidden !important;
+            }
+        ";
     }
 );
 }

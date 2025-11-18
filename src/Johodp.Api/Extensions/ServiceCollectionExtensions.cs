@@ -10,8 +10,7 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Infrastructure.Persistence;
 using Johodp.Infrastructure.Services;
 using Johodp.Infrastructure.IdentityServer;
-using Duende.IdentityServer.Models;
-using Duende.IdentityServer.AspNetIdentity;
+using Duende.IdentityServer.Services;
 
 public static class ServiceCollectionExtensions
 {
@@ -56,7 +55,7 @@ public static class ServiceCollectionExtensions
                    .AddDeveloperSigningCredential();
 
         // Profile service: map domain user -> token/userinfo claims
-        services.AddScoped<Duende.IdentityServer.Services.IProfileService, IdentityServerProfileService>();
+        services.AddScoped<IProfileService, IdentityServerProfileService>();
 
         // ASP.NET Identity integration using domain User and custom stores
         services.AddIdentityCore<Johodp.Domain.Users.Aggregates.User>(options =>
@@ -79,12 +78,12 @@ public static class ServiceCollectionExtensions
             opts.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
         });
 
-        // CORS policy for local SPA development (allow credentials)
+        // CORS policy for development (allow any origin with credentials)
         services.AddCors(options =>
         {
             options.AddPolicy("AllowSpa", policy =>
             {
-                policy.WithOrigins("http://localhost:4200")
+                policy.SetIsOriginAllowed(origin => true) // Allow any origin in development
                       .AllowCredentials()
                       .AllowAnyHeader()
                       .AllowAnyMethod();
