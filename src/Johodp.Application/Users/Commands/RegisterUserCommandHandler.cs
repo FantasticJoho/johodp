@@ -10,7 +10,9 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDomainEventPublisher _domainEventPublisher;
 
-    public RegisterUserCommandHandler(IUnitOfWork unitOfWork, IDomainEventPublisher domainEventPublisher)
+    public RegisterUserCommandHandler(
+        IUnitOfWork unitOfWork, 
+        IDomainEventPublisher domainEventPublisher)
     {
         _unitOfWork = unitOfWork;
         _domainEventPublisher = domainEventPublisher;

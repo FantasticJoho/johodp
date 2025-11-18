@@ -1,14 +1,19 @@
 using Johodp.Api.Extensions;
+using Johodp.Api.Middleware;
 using Serilog;
 using Scalar.AspNetCore;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Serilog
+// Add Serilog with enrichment for production readiness
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
-    .WriteTo.Console()
+    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "Johodp")
+    .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -50,6 +55,26 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
+
+// Add request logging middleware for production monitoring
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+        diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+        if (httpContext.User?.Identity?.IsAuthenticated == true)
+        {
+            diagnosticContext.Set("UserEmail", httpContext.User.FindFirst("email")?.Value);
+            diagnosticContext.Set("UserId", httpContext.User.FindFirst("sub")?.Value);
+        }
+    };
+});
+
+// Global exception handler for production-ready error handling
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 // Ensure HTTPS redirection
 app.UseHttpsRedirection();
@@ -125,14 +150,19 @@ app.MapDefaultControllerRoute();
 
 try
 {
-    Log.Information("Starting application...");
+    Log.Information("Starting Johodp Identity Provider application");
+    Log.Information("Environment: {Environment}", app.Environment.EnvironmentName);
+    Log.Information("Application URLs: {Urls}", string.Join(", ", builder.Configuration["urls"] ?? "not configured"));
+    
     app.Run();
 }
 catch (Exception ex)
 {
-    Log.Fatal(ex, "Application terminated unexpectedly");
+    Log.Fatal(ex, "Application terminated unexpectedly. Error: {ErrorMessage}", ex.Message);
+    throw;
 }
 finally
 {
+    Log.Information("Shutting down Johodp Identity Provider");
     Log.CloseAndFlush();
 }

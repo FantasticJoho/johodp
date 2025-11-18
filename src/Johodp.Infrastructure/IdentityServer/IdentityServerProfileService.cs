@@ -3,6 +3,7 @@ namespace Johodp.Infrastructure.IdentityServer;
 using System.Security.Claims;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Johodp.Application.Common.Interfaces;
@@ -11,19 +12,28 @@ using Johodp.Domain.Users.ValueObjects;
 public class IdentityServerProfileService : IProfileService
 {
     private readonly IUserRepository _userRepository;
+    private readonly ILogger<IdentityServerProfileService> _logger;
 
-    public IdentityServerProfileService(IUserRepository userRepository)
+    public IdentityServerProfileService(
+        IUserRepository userRepository,
+        ILogger<IdentityServerProfileService> logger)
     {
         _userRepository = userRepository;
+        _logger = logger;
     }
 
     public async Task GetProfileDataAsync(ProfileDataRequestContext context)
     {
         if (context.Subject == null)
+        {
+            _logger.LogWarning("GetProfileDataAsync called with null subject");
             return;
+        }
 
         var sub = context.Subject.FindFirst("sub")?.Value
                   ?? context.Subject.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        _logger.LogDebug("Generating profile data for subject: {Subject}", sub);
 
         Domain.Users.Aggregates.User? user = null;
 
@@ -40,9 +50,12 @@ public class IdentityServerProfileService : IProfileService
 
         if (user == null)
         {
+            _logger.LogWarning("User not found for subject: {Subject}", sub);
             context.IssuedClaims = new List<Claim>();
             return;
         }
+        
+        _logger.LogInformation("Building claims for user: {Email}, tenant: {TenantId}", user.Email.Value, user.TenantId);
 
         var claims = new List<Claim>
         {
@@ -109,12 +122,15 @@ public class IdentityServerProfileService : IProfileService
     {
         if (context.Subject == null)
         {
+            _logger.LogWarning("IsActiveAsync called with null subject");
             context.IsActive = false;
             return;
         }
 
         var sub = context.Subject.FindFirst("sub")?.Value
                   ?? context.Subject.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        
+        _logger.LogDebug("Checking if user is active for subject: {Subject}", sub);
 
         Domain.Users.Aggregates.User? user = null;
         if (Guid.TryParse(sub, out var guid))
@@ -129,5 +145,18 @@ public class IdentityServerProfileService : IProfileService
         }
 
         context.IsActive = user != null && user.IsActive;
+        
+        if (user == null)
+        {
+            _logger.LogWarning("User not found for subject: {Subject} in IsActiveAsync", sub);
+        }
+        else if (!user.IsActive)
+        {
+            _logger.LogWarning("User {Email} is not active", user.Email.Value);
+        }
+        else
+        {
+            _logger.LogDebug("User {Email} is active", user.Email.Value);
+        }
     }
 }

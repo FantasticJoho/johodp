@@ -10,16 +10,22 @@ public class AccountController : Controller
 {
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
+    private readonly ILogger<AccountController> _logger;
 
-    public AccountController(UserManager<User> userManager, SignInManager<User> signInManager)
+    public AccountController(
+        UserManager<User> userManager, 
+        SignInManager<User> signInManager,
+        ILogger<AccountController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
+        _logger = logger;
     }
 
     [HttpGet]
     public IActionResult Login(string? returnUrl = null)
     {
+        _logger.LogInformation("Login page requested. ReturnUrl: {ReturnUrl}", returnUrl);
         ViewData["ReturnUrl"] = returnUrl;
         
         // Extract tenantId from acr_values if present in the authorize request
@@ -40,6 +46,7 @@ public class AccountController : Controller
                 tenantId = acrValues.Split(' ')
                     .FirstOrDefault(x => x.StartsWith("tenant:"))
                     ?.Replace("tenant:", "");
+                _logger.LogDebug("Extracted tenant from acr_values: {TenantId}", tenantId);
             }
         }
         
@@ -50,8 +57,11 @@ public class AccountController : Controller
     [HttpPost]
     public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
     {
+        _logger.LogInformation("Login attempt for email: {Email}", model.Email);
+        
         if (!ModelState.IsValid)
         {
+            _logger.LogWarning("Login failed - invalid model state for email: {Email}", model.Email);
             ViewData["ReturnUrl"] = returnUrl;
             return View(model);
         }
@@ -87,11 +97,13 @@ public class AccountController : Controller
 
         if (user == null)
         {
+            _logger.LogInformation("Creating new user during login: {Email} with tenant: {TenantId}", model.Email, tenantId);
             // Create domain user and persist with password, set tenantId
             user = Johodp.Domain.Users.Aggregates.User.Create(model.Email, "User", "Login", tenantId);
             var createResult = await _userManager.CreateAsync(user, model.Password);
             if (!createResult.Succeeded)
             {
+                _logger.LogError("Failed to create user {Email}: {Errors}", model.Email, string.Join(", ", createResult.Errors.Select(e => e.Description)));
                 foreach (var err in createResult.Errors)
                     ModelState.AddModelError(string.Empty, err.Description);
 
@@ -108,6 +120,8 @@ public class AccountController : Controller
         //  - User's tenant matches the requested tenant
         if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
         {
+            _logger.LogWarning("Tenant access denied for user {Email}. User tenant: {UserTenant}, Requested tenant: {RequestedTenant}", 
+                model.Email, user.TenantId, tenantId);
             ModelState.AddModelError(string.Empty, "User does not have access to this tenant.");
             ViewData["ReturnUrl"] = returnUrl;
             ViewData["TenantId"] = tenantId;
@@ -119,6 +133,7 @@ public class AccountController : Controller
 
         if (signInResult.Succeeded)
         {
+            _logger.LogInformation("Successful login for user: {Email}, tenant: {TenantId}", model.Email, tenantId);
             if (string.IsNullOrEmpty(returnUrl))
                 returnUrl = "/";
 
@@ -127,11 +142,13 @@ public class AccountController : Controller
 
         if (signInResult.RequiresTwoFactor)
         {
+            _logger.LogInformation("MFA required for user: {Email}", model.Email);
             ModelState.AddModelError(string.Empty, "Two-factor authentication required.");
             ViewData["ReturnUrl"] = returnUrl;
             return View(model);
         }
 
+        _logger.LogWarning("Failed login attempt for user: {Email}", model.Email);
         ModelState.AddModelError(string.Empty, "Invalid login attempt.");
         ViewData["ReturnUrl"] = returnUrl;
         return View(model);
@@ -141,8 +158,11 @@ public class AccountController : Controller
     [Produces("application/json")]
     public async Task<IActionResult> LoginApi([FromBody] LoginApiRequest request, [FromQuery] string? acr_values = null)
     {
+        _logger.LogInformation("API login attempt for email: {Email}, acr_values: {AcrValues}", request.Email, acr_values);
+        
         if (!ModelState.IsValid)
         {
+            _logger.LogWarning("API login failed - invalid model state for email: {Email}", request.Email);
             return BadRequest(new { error = "Invalid request" });
         }
 
@@ -165,15 +185,18 @@ public class AccountController : Controller
 
         if (user == null)
         {
+            _logger.LogInformation("Creating new user via API: {Email} with tenant: {TenantId}", request.Email, tenantId);
             // Create domain user and persist with password, set tenantId
             user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, "User", "Login", tenantId);
             var createResult = await _userManager.CreateAsync(user, request.Password);
             if (!createResult.Succeeded)
             {
                 var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+                _logger.LogError("Failed to create user via API {Email}: {Errors}", request.Email, errors);
                 return BadRequest(new { error = "Registration failed", details = errors });
             }
 
+            _logger.LogInformation("User created and signed in via API: {Email}", request.Email);
             // If user was just created, sign them in so the auth cookie is issued
             await _signInManager.SignInAsync(user, isPersistent: false);
             return Ok(new { message = "Login successful", email = request.Email });
@@ -186,6 +209,8 @@ public class AccountController : Controller
         //  - User's tenant matches the requested tenant
         if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
         {
+            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenant: {UserTenant}, Requested tenant: {RequestedTenant}", 
+                request.Email, user.TenantId, tenantId);
             return Unauthorized(new { error = "User does not have access to this tenant" });
         }
 
@@ -193,6 +218,7 @@ public class AccountController : Controller
         var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
         if (passwordValid)
         {
+            _logger.LogInformation("Successful API login for user: {Email}, tenant: {TenantId}", request.Email, tenantId);
             await _signInManager.SignInAsync(user, isPersistent: false);
             return Ok(new { message = "Login successful", email = request.Email });
         }
@@ -200,9 +226,11 @@ public class AccountController : Controller
         // If MFA would be required, surface that result (the CustomSignInManager checks user.RequiresMFA())
         if (user.RequiresMFA())
         {
+            _logger.LogInformation("API: MFA required for user: {Email}", request.Email);
             return Unauthorized(new { error = "Two-factor authentication required" });
         }
 
+        _logger.LogWarning("API: Failed login attempt for user: {Email}", request.Email);
         return Unauthorized(new { error = "Invalid email or password" });
     }
 
@@ -221,13 +249,17 @@ public class AccountController : Controller
     [HttpPost]
     public async Task<IActionResult> Register(RegisterViewModel model)
     {
+        _logger.LogInformation("Registration attempt for email: {Email}", model.Email);
+        
         if (!ModelState.IsValid)
         {
+            _logger.LogWarning("Registration failed - invalid model state for email: {Email}", model.Email);
             return View(model);
         }
 
         if (model.Password != model.ConfirmPassword)
         {
+            _logger.LogWarning("Registration failed - password mismatch for email: {Email}", model.Email);
             ModelState.AddModelError("ConfirmPassword", "Passwords do not match.");
             return View(model);
         }
@@ -236,6 +268,7 @@ public class AccountController : Controller
         var existingUser = await _userManager.FindByEmailAsync(model.Email);
         if (existingUser != null)
         {
+            _logger.LogWarning("Registration failed - user already exists: {Email}", model.Email);
             ModelState.AddModelError("Email", "An account with this email already exists.");
             return View(model);
         }
@@ -247,12 +280,15 @@ public class AccountController : Controller
         var createResult = await _userManager.CreateAsync(user, model.Password);
         if (!createResult.Succeeded)
         {
+            _logger.LogError("Failed to register user {Email}: {Errors}", model.Email, 
+                string.Join(", ", createResult.Errors.Select(e => e.Description)));
             foreach (var err in createResult.Errors)
                 ModelState.AddModelError(string.Empty, err.Description);
 
             return View(model);
         }
 
+        _logger.LogInformation("User successfully registered and signed in: {Email}", model.Email);
         // Sign in the user
         await _signInManager.SignInAsync(user, isPersistent: false);
         return Redirect("/");
@@ -282,6 +318,8 @@ public class AccountController : Controller
     [HttpPost]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordViewModel model)
     {
+        _logger.LogInformation("Password reset requested for email: {Email}", model.Email);
+        
         if (!ModelState.IsValid)
         {
             return View(model);
@@ -290,6 +328,7 @@ public class AccountController : Controller
         var user = await _userManager.FindByEmailAsync(model.Email);
         if (user == null)
         {
+            _logger.LogWarning("Password reset requested for non-existent user: {Email}", model.Email);
             // Don't reveal if user exists for security reasons
             return RedirectToAction("ForgotPasswordConfirmation");
         }
@@ -302,6 +341,7 @@ public class AccountController : Controller
         // await _emailService.SendPasswordResetEmailAsync(user.Email, resetLink);
 
         // For development: log the token to console
+        _logger.LogWarning("[DEV ONLY] Password reset token for {Email}: {Token}", user.Email, token);
         System.Console.WriteLine($"Password reset token for {user.Email}: {token}");
 
         return RedirectToAction("ForgotPasswordConfirmation");
@@ -328,6 +368,8 @@ public class AccountController : Controller
     [HttpPost]
     public async Task<IActionResult> ResetPassword(ResetPasswordViewModel model)
     {
+        _logger.LogInformation("Password reset attempt for email: {Email}", model.Email);
+        
         if (!ModelState.IsValid)
         {
             return View(model);
@@ -335,6 +377,7 @@ public class AccountController : Controller
 
         if (model.Password != model.ConfirmPassword)
         {
+            _logger.LogWarning("Password reset failed - password mismatch for email: {Email}", model.Email);
             ModelState.AddModelError("ConfirmPassword", "Passwords do not match.");
             return View(model);
         }
@@ -342,18 +385,22 @@ public class AccountController : Controller
         var user = await _userManager.FindByEmailAsync(model.Email);
         if (user == null)
         {
+            _logger.LogWarning("Password reset attempted for non-existent user: {Email}", model.Email);
             return RedirectToAction("ResetPasswordConfirmation");
         }
 
         var resetResult = await _userManager.ResetPasswordAsync(user, model.Token, model.Password);
         if (!resetResult.Succeeded)
         {
+            _logger.LogError("Password reset failed for user {Email}: {Errors}", model.Email, 
+                string.Join(", ", resetResult.Errors.Select(e => e.Description)));
             foreach (var err in resetResult.Errors)
                 ModelState.AddModelError(string.Empty, err.Description);
 
             return View(model);
         }
 
+        _logger.LogInformation("Password successfully reset for user: {Email}", model.Email);
         return RedirectToAction("ResetPasswordConfirmation");
     }
 
