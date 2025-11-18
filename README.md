@@ -1,6 +1,471 @@
-# Johodp - Identity Provider DDD Architecture
+# Johodp - Identity Provider avec Architecture DDD
 
-Une application Identity Provider (IDP) basée sur .NET 8, utilisant les principes du Domain-Driven Design (DDD), IdentityServer4 et PostgreSQL.
+Fournisseur d'identité (IDP) moderne basé sur .NET 8, Duende IdentityServer 7, et PostgreSQL, utilisant les principes du Domain-Driven Design (DDD).
+
+## 📋 Table des matières
+
+- [Vue d'ensemble](#vue-densemble)
+- [Prérequis](#prérequis)
+- [Installation rapide](#installation-rapide)
+- [Architecture](#architecture)
+- [Fonctionnalités](#fonctionnalités)
+- [Authentification et autorisation](#authentification-et-autorisation)
+- [Multi-tenancy](#multi-tenancy)
+- [Tests et développement](#tests-et-développement)
+- [Structure du projet](#structure-du-projet)
+- [Ressources](#ressources)
+
+## 🎯 Vue d'ensemble
+
+Johodp est un serveur d'identité complet offrant :
+
+- **Authentification OAuth2/OIDC** avec support PKCE pour applications SPA
+- **Multi-tenancy** avec isolation des utilisateurs par tenant
+- **Gestion des rôles et permissions** avec valeurs par défaut
+- **Architecture DDD** pour une logique métier claire et maintenable
+- **ASP.NET Core Identity** intégré avec support MFA
+- **API REST** pour la gestion des utilisateurs et clients
+
+## 📦 Prérequis
+
+- .NET 8.0 SDK
+- PostgreSQL 12+
+- Docker (optionnel pour PostgreSQL)
+
+## 🚀 Installation rapide
+
+### 1. Configuration de PostgreSQL avec Docker
+
+```bash
+docker run --name johodp-postgres \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=johodp \
+  -p 5432:5432 \
+  -d postgres:15
+```
+
+### 2. Restaurer les dépendances
+
+```bash
+dotnet restore
+```
+
+### 3. Appliquer les migrations
+
+**Bash/Shell:**
+```bash
+dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
+```
+
+**PowerShell:**
+```powershell
+dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
+```
+
+**Ou utiliser les scripts fournis:**
+```bash
+# Bash/Shell
+./init-db.sh
+
+# PowerShell
+.\init-db.ps1
+```
+
+### 4. Lancer l'application
+
+```bash
+dotnet run --project src/Johodp.Api
+```
+
+L'API sera disponible sur :
+- HTTP : `http://localhost:5000`
+- HTTPS : `https://localhost:5001`
+
+## 🏗️ Architecture
+
+Le projet suit une architecture en couches basée sur les principes DDD :
+
+### Couches applicatives
+
+| Couche | Responsabilité | Contenu |
+|--------|----------------|---------|
+| **Johodp.Domain** | Logique métier | Agrégats (`User`, `Client`), Value Objects (`UserId`, `Email`, `ClientId`), Events |
+| **Johodp.Application** | Cas d'utilisation | Commands/Queries (CQRS), DTOs, Interfaces de repository |
+| **Johodp.Infrastructure** | Implémentation technique | EF Core, Repositories, Duende IdentityServer, Services |
+| **Johodp.Api** | Présentation | Contrôleurs REST, Configuration, Endpoints |
+
+### Concepts DDD
+
+**Agrégats:**
+- `User` : Utilisateur avec rôles, permissions, et tenant
+- `Client` : Application cliente OAuth2/OIDC
+
+**Value Objects:**
+- `UserId`, `Email`, `ClientId`, `ClientSecret`, `ScopeId`, `PermissionName`
+
+**Domain Events:**
+- `UserRegisteredEvent`, `UserEmailConfirmedEvent`, `ClientCreatedEvent`
+
+## ✨ Fonctionnalités
+
+### Authentification et autorisation
+
+#### Pages de gestion de compte
+
+| Route | Description |
+|-------|-------------|
+| `/account/login` | Connexion avec email et mot de passe |
+| `/account/register` | Création de compte |
+| `/account/forgot-password` | Demande de réinitialisation de mot de passe |
+| `/account/reset-password` | Réinitialisation avec token |
+| `/account/logout` | Déconnexion |
+| `/account/claims` | Page de debug affichant les claims de l'utilisateur |
+
+#### API d'authentification
+
+**Connexion via API :**
+```bash
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "P@ssw0rd!"
+}
+```
+
+**Réponse :** Cookie `Set-Cookie: .AspNetCore.Identity.Application=...` avec une durée de vie de 7 jours.
+
+### OAuth2/OIDC avec PKCE
+
+Le serveur supporte le flux **Authorization Code + PKCE** pour les applications SPA et mobiles.
+
+#### Clients configurés
+
+| Client ID | Type | Grant Type | Description |
+|-----------|------|------------|-------------|
+| `johodp-spa` | Public | Authorization Code + PKCE | Application SPA (React, Angular, Vue) |
+| `swagger-ui` | Public | Authorization Code + PKCE | Interface Swagger UI |
+| `johodp-client-credentials` | Confidentiel | Client Credentials | Service backend (M2M) |
+
+#### Scopes disponibles
+
+| Scope | Type | Claims inclus |
+|-------|------|---------------|
+| `openid` | Identity | `sub` |
+| `profile` | Identity | `given_name`, `family_name` |
+| `email` | Identity | `email`, `email_verified` |
+| `johodp.identity` | Identity | `tenant_id`, `role`, `permission` |
+| `johodp.api` | API Resource | Tous les claims ci-dessus |
+
+#### Exemple de flux PKCE
+
+**1. Générer les paramètres PKCE (PowerShell) :**
+```powershell
+$verifier = -join ((65..90) + (97..122) + (48..57) + 45 + 95 | Get-Random -Count 128 | % {[char]$_})
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+$hash = $sha256.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($verifier))
+$challenge = [Convert]::ToBase64String($hash).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+Write-Host "Code Verifier: $verifier"
+Write-Host "Code Challenge: $challenge"
+```
+
+**2. Initier l'autorisation (navigateur) :**
+```
+http://localhost:5000/connect/authorize?response_type=code&client_id=johodp-spa&redirect_uri=http%3A%2F%2Flocalhost%3A4200%2Fcallback&scope=openid%20profile%20email%20johodp.identity%20johodp.api&code_challenge=CODE_CHALLENGE&code_challenge_method=S256&state=RANDOM_STATE&nonce=RANDOM_NONCE
+```
+
+**3. Échanger le code contre un token :**
+```bash
+POST /connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&client_id=johodp-spa&code=AUTHORIZATION_CODE&redirect_uri=http%3A%2F%2Flocalhost%3A4200%2Fcallback&code_verifier=CODE_VERIFIER
+```
+
+**Voir le fichier `src/Johodp.Api/httpTest/pkceconnection.http` pour des exemples complets.**
+
+## 🏢 Multi-tenancy
+
+### Isolation par tenant
+
+Johodp supporte le multi-tenancy via le paramètre OIDC standard `acr_values` :
+
+**Format:** `acr_values=tenant:TENANT_ID`
+
+### Comportement
+
+| Scénario | TenantId utilisateur | Accès autorisé |
+|----------|---------------------|----------------|
+| Aucun `acr_values` spécifié | `*` (wildcard) | Tous les tenants |
+| `acr_values=tenant:acme` | `*` (wildcard) | Tenant `acme` autorisé |
+| `acr_values=tenant:acme` | `acme` | Tenant `acme` autorisé |
+| `acr_values=tenant:acme` | `contoso` | ❌ Accès refusé |
+| Aucun `acr_values` | `acme` | Tous les tenants autorisés |
+
+### Exemples d'authentification
+
+**Sans tenant (accès wildcard) :**
+```bash
+# Via API
+POST http://localhost:5000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "P@ssw0rd!"
+}
+
+# Via OIDC
+GET http://localhost:5000/connect/authorize?response_type=code&client_id=johodp-spa&...
+```
+→ Utilisateur créé avec `TenantId = "*"`
+
+**Avec tenant spécifique :**
+```bash
+# Via API
+POST http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "P@ssw0rd!"
+}
+
+# Via OIDC
+GET http://localhost:5000/connect/authorize?...&acr_values=tenant:acme-corp
+```
+→ Utilisateur créé avec `TenantId = "acme-corp"`
+
+### Claims JWT personnalisés
+
+Les tokens JWT incluent les claims suivants (scope `johodp.identity` requis) :
+
+| Claim | Description | Valeur par défaut |
+|-------|-------------|-------------------|
+| `tenant_id` | Identifiant du tenant | `"*"` si non spécifié |
+| `role` | Rôles de l'utilisateur | `"reader"` si aucun rôle |
+| `permission` | Permissions de l'utilisateur | `"reader"` si aucune permission |
+
+**Exemple de payload JWT :**
+```json
+{
+  "sub": "1bb71afc-e622-42f4-b3fd-df4956ebb3eb",
+  "email": "user@example.com",
+  "given_name": "John",
+  "family_name": "Doe",
+  "tenant_id": "acme-corp",
+  "role": ["admin", "user"],
+  "permission": ["users:read", "users:write"],
+  "scope": ["openid", "profile", "email", "johodp.identity", "johodp.api"]
+}
+```
+
+## 🧪 Tests et développement
+
+### Tester avec PowerShell
+
+```powershell
+# Connexion sans tenant
+$body = '{"email":"test@example.com","password":"P@ssw0rd!"}'
+$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login' `
+  -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
+$resp.StatusCode
+$resp.Headers['Set-Cookie']
+
+# Connexion avec tenant
+$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login?acr_values=tenant:acme' `
+  -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
+```
+
+### Tester avec cURL
+
+```bash
+# Connexion sans tenant
+curl -i -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"P@ssw0rd!"}'
+
+# Connexion avec tenant
+curl -i -X POST "http://localhost:5000/api/auth/login?acr_values=tenant:acme" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"P@ssw0rd!"}'
+```
+
+### Tester avec JavaScript (SPA)
+
+```javascript
+// Connexion sans tenant
+fetch('http://localhost:5000/api/auth/login', {
+  method: 'POST',
+  credentials: 'include', // Important pour les cookies
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: 'test@example.com', password: 'P@ssw0rd!' })
+});
+
+// Connexion avec tenant
+fetch('http://localhost:5000/api/auth/login?acr_values=tenant:acme', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: 'test@example.com', password: 'P@ssw0rd!' })
+});
+```
+
+### Configuration CORS pour SPA
+
+Le projet inclut une politique CORS `AllowSpa` autorisant :
+- Origine : `http://localhost:4200`
+- Credentials : Autorisés
+- Headers : Tous autorisés
+
+**Important :** Pour les requêtes cross-origin, utilisez toujours `credentials: 'include'` pour que le navigateur envoie les cookies.
+
+### Vérifier les claims
+
+Après authentification, visitez `http://localhost:5000/account/claims` pour voir tous les claims de l'utilisateur courant.
+
+## 📁 Structure du projet
+
+```
+johodp/
+├── src/
+│   ├── Johodp.Domain/              # Logique métier (DDD)
+│   │   ├── Common/                 # Classes de base DDD
+│   │   │   ├── AggregateRoot.cs
+│   │   │   ├── ValueObject.cs
+│   │   │   └── DomainEvent.cs
+│   │   ├── Users/                  # Agrégat User
+│   │   │   ├── Aggregates/
+│   │   │   │   └── User.cs
+│   │   │   ├── ValueObjects/
+│   │   │   │   ├── UserId.cs
+│   │   │   │   ├── Email.cs
+│   │   │   │   └── ScopeId.cs
+│   │   │   ├── Events/
+│   │   │   └── Specifications/
+│   │   └── Clients/                # Agrégat Client
+│   │       ├── Aggregates/
+│   │       │   └── Client.cs
+│   │       ├── ValueObjects/
+│   │       │   ├── ClientId.cs
+│   │       │   └── ClientSecret.cs
+│   │       └── Events/
+│   ├── Johodp.Application/         # Cas d'utilisation (CQRS)
+│   │   ├── Common/Interfaces/
+│   │   │   ├── IUserRepository.cs
+│   │   │   ├── IClientRepository.cs
+│   │   │   └── IUnitOfWork.cs
+│   │   ├── Users/
+│   │   │   ├── Commands/
+│   │   │   ├── Queries/
+│   │   │   └── DTOs/
+│   │   └── Clients/
+│   │       ├── Commands/
+│   │       ├── Queries/
+│   │       └── DTOs/
+│   ├── Johodp.Infrastructure/      # Implémentation technique
+│   │   ├── Persistence/
+│   │   │   ├── DbContext/
+│   │   │   │   └── JohodpDbContext.cs
+│   │   │   ├── Repositories/
+│   │   │   │   ├── UserRepository.cs
+│   │   │   │   └── ClientRepository.cs
+│   │   │   ├── Configurations/     # EF Core configurations
+│   │   │   └── UnitOfWork.cs
+│   │   ├── Identity/               # ASP.NET Identity stores
+│   │   │   ├── UserStore.cs
+│   │   │   └── CustomSignInManager.cs
+│   │   ├── IdentityServer/         # Duende IdentityServer
+│   │   │   ├── IdentityServerConfig.cs
+│   │   │   └── IdentityServerProfileService.cs
+│   │   ├── Migrations/             # EF Core migrations
+│   │   └── Services/
+│   └── Johodp.Api/                 # API Web (Présentation)
+│       ├── Controllers/
+│       │   ├── Account/
+│       │   │   └── AccountController.cs
+│       │   ├── UsersController.cs
+│       │   ├── ClientsController.cs
+│       │   └── TenantController.cs
+│       ├── Extensions/
+│       │   └── ServiceCollectionExtensions.cs
+│       ├── Views/                  # Razor Pages (Login, Register, etc.)
+│       ├── httpTest/
+│       │   └── pkceconnection.http # Tests HTTP/PKCE
+│       ├── Program.cs
+│       └── appsettings.json
+├── tests/
+│   └── Johodp.Tests/
+├── init-db.sh                      # Script d'initialisation DB (Bash)
+├── init-db.ps1                     # Script d'initialisation DB (PowerShell)
+├── docker-compose.yml              # Configuration Docker
+└── README.md
+```
+
+## 📚 Ressources
+
+### Documentation technique
+
+- [Duende IdentityServer](https://docs.duendesoftware.com/identityserver/v7)
+- [ASP.NET Core Identity](https://learn.microsoft.com/aspnet/core/security/authentication/identity)
+- [Entity Framework Core](https://learn.microsoft.com/ef/core/)
+- [PostgreSQL](https://www.postgresql.org/docs/)
+- [Domain-Driven Design](https://domainlanguage.com/ddd/)
+
+### Standards OAuth2/OIDC
+
+- [RFC 6749 - OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc6749)
+- [RFC 7636 - PKCE](https://datatracker.ietf.org/doc/html/rfc7636)
+- [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html)
+
+### Architecture
+
+- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [CQRS Pattern](https://martinfowler.com/bliki/CQRS.html)
+- [Repository Pattern](https://martinfowler.com/eaaCatalog/repository.html)
+
+## 📝 Notes de version
+
+### Version actuelle (2025-11-18)
+
+**Nouvelles fonctionnalités :**
+- ✅ Support multi-tenant via `acr_values`
+- ✅ Claims JWT personnalisés (`tenant_id`, `role`, `permission`)
+- ✅ Valeurs par défaut pour rôles et permissions (`reader`)
+- ✅ Migration vers Duende IdentityServer 7.3.2
+- ✅ Support PKCE complet pour applications SPA
+- ✅ Configuration CORS pour développement SPA
+- ✅ API d'authentification avec cookies
+- ✅ Pages de gestion de compte (login, register, reset password)
+
+**Améliorations techniques :**
+- Mise à niveau Npgsql 8.0.6 (résolution CVE)
+- Middleware ordering optimisé
+- Cookie configuration pour développement local
+- Page de debug des claims
+
+**Documentation :**
+- README.md réorganisé et traduit en français
+- Fichier `pkceconnection.http` avec exemples complets
+- Scripts d'initialisation DB (Bash et PowerShell)
+
+## 🤝 Contribution
+
+Ce projet suit les principes du Domain-Driven Design. Avant de contribuer, veuillez :
+1. Comprendre l'architecture en couches
+2. Respecter les patterns DDD (Agrégats, Value Objects, Domain Events)
+3. Ajouter des tests unitaires pour la logique métier
+4. Documenter les changements d'API
+
+## 📄 Licence
+
+[À définir]
+
+---
+
+**Développé avec ❤️ en .NET 8**
 
 ## Architecture
 
