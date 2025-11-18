@@ -13,6 +13,7 @@ builder.Host.UseSerilog();
 
 // Add services
 builder.Services.AddControllers();
+builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddInfrastructureServices(builder.Configuration);
@@ -31,6 +32,7 @@ app.UseIdentityServer();
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapDefaultControllerRoute();
 
 try
 {
