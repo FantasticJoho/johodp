@@ -347,6 +347,25 @@ The project now includes a complete integration with ASP.NET Core Identity that 
 - `User.PasswordHash`: domain `User` aggregate now stores the password hash via `SetPasswordHash` so Identity can persist credentials through the `UserStore`.
 - **Cookie Authentication** (7-day sliding expiration): secure session management with HttpOnly, Secure, SameSite flags.
 
+### Recent updates (2025-11-18)
+
+- **PKCE support**: IdentityServer clients updated to support PKCE (Authorization Code + PKCE). See `IdentityServerConfig` for the `johodp-spa` and `swagger-ui` client examples.
+- **Scope deduplication**: identity scopes (`openid`, `profile`, `email`) are now declared only as `IdentityResources` and removed from the API scopes list to avoid configuration errors.
+- **Middleware ordering**: `UseAuthentication()` is executed before `UseIdentityServer()` and routing is enabled so IdentityServer endpoints see the authenticated `HttpContext.User` (prevents unnecessary redirect-to-login when a cookie exists).
+- **AddAspNetIdentity wiring**: IdentityServer is wired to use ASP.NET Identity via `AddAspNetIdentity<TUser>()`; a simple `DomainUserClaimsPrincipalFactory` is registered to create the claims principal for the domain `User` aggregate.
+- **Cookie settings for local dev**: application cookie configured with an explicit name `.AspNetCore.Identity.Application`, `SameSite=Lax` and `SecurePolicy=SameAsRequest` to improve local testing behavior. For SPA PKCE flows in cross-origin scenarios prefer HTTPS and `SameSite=None` + `Secure`.
+- **Claims debug page**: added `/account/claims` to inspect the current user's claims (helps diagnose whether Identity cookies are sent and which claims the server sees).
+
+### Quick PKCE test notes
+
+- Generate a `code_verifier` and `code_challenge` (S256) and open the authorize URL for `johodp-spa`:
+
+  `GET /connect/authorize?response_type=code&client_id=johodp-spa&redirect_uri=http://localhost:4200/callback&scope=openid profile email johodp.api&code_challenge=<challenge>&code_challenge_method=S256&state=<state>&nonce=<nonce>`
+
+- After login, exchange the returned `code` at `/connect/token` with `grant_type=authorization_code` and the original `code_verifier` to receive tokens.
+
+If cookies are not being sent during the authorize/callback steps, check browser DevTools → Application → Cookies for `http://localhost:5000` and inspect the `.AspNetCore.Identity.Application` and `idsrv.session` cookies (SameSite/Secure attributes). For cross-origin flows use HTTPS with `SameSite=None` + `Secure` so browsers allow the cookie to be sent.
+
 ### Account Endpoints
 
 - `GET /account/login` — Display login form
