@@ -48,6 +48,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
+        builder.Property(x => x.TenantId)
+            .HasMaxLength(100)
+            .IsRequired(false);
+
         builder.Property(x => x.ScopeId)
             .HasConversion(
                 v => v != null ? v.Value : (Guid?)null,

@@ -1,6 +1,6 @@
 namespace Johodp.Infrastructure.IdentityServer;
 
-using IdentityServer4.Models;
+using Duende.IdentityServer.Models;
 
 /// <summary>
 /// Configuration IdentityServer pour le projet Johodp

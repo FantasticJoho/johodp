@@ -3,8 +3,8 @@ namespace Johodp.Infrastructure.IdentityServer;
 using System.Security.Claims;
 using System.Collections.Generic;
 using System.Linq;
-using IdentityServer4.Models;
-using IdentityServer4.Services;
+using Duende.IdentityServer.Models;
+using Duende.IdentityServer.Services;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.ValueObjects;
 

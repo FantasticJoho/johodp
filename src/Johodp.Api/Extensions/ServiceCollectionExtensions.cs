@@ -10,9 +10,8 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Infrastructure.Persistence;
 using Johodp.Infrastructure.Services;
 using Johodp.Infrastructure.IdentityServer;
-using IdentityServer4.Stores;
-using IdentityServer4.Models;
-using IdentityServer4.AspNetIdentity;
+using Duende.IdentityServer.Models;
+using Duende.IdentityServer.AspNetIdentity;
 
 public static class ServiceCollectionExtensions
 {
@@ -57,7 +56,7 @@ public static class ServiceCollectionExtensions
                    .AddDeveloperSigningCredential();
 
         // Profile service: map domain user -> token/userinfo claims
-        services.AddScoped<IdentityServer4.Services.IProfileService, IdentityServerProfileService>();
+        services.AddScoped<Duende.IdentityServer.Services.IProfileService, IdentityServerProfileService>();
 
         // ASP.NET Identity integration using domain User and custom stores
         services.AddIdentityCore<Johodp.Domain.Users.Aggregates.User>(options =>
