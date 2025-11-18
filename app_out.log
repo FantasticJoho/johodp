@@ -1,0 +1,32 @@
+Génération...
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1902: Package 'IdentityServer4' 4.1.2 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-55p7-v223-x366 [C:\Users\jonat\repo\johodp\src\Johodp.Api\Johodp.Api.csproj]
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1902: Package 'IdentityServer4' 4.1.2 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-ff4q-64jc-gx98 [C:\Users\jonat\repo\johodp\src\Johodp.Api\Johodp.Api.csproj]
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1903: Package 'Npgsql' 8.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c [C:\Users\jonat\repo\johodp\src\Johodp.Api\Johodp.Api.csproj]
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1902: Package 'IdentityServer4' 4.1.2 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-55p7-v223-x366
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1902: Package 'IdentityServer4' 4.1.2 has a known moderate severity vulnerability, https://github.com/advisories/GHSA-ff4q-64jc-gx98
+C:\Users\jonat\repo\johodp\src\Johodp.Infrastructure\Johodp.Infrastructure.csproj : warning NU1903: Package 'Npgsql' 8.0.0 has a known high severity vulnerability, https://github.com/advisories/GHSA-x9vc-6hfv-hg8c
+[13:42:48 INF] Starting application...
+[13:42:48 INF] Now listening on: http://localhost:5000
+[13:42:48 INF] Application started. Press Ctrl+C to shut down.
+[13:42:48 INF] Hosting environment: Development
+[13:42:48 INF] Content root path: C:\Users\jonat\repo\johodp\src\Johodp.Api
+[13:42:48 INF] Request starting HTTP/1.1 POST http://localhost:5000/api/users/register - application/json 89
+[13:42:48 WRN] Failed to determine the https port for redirect.
+[13:42:48 INF] Executing endpoint 'Johodp.Api.Controllers.UsersController.Register (Johodp.Api)'
+[13:42:48 INF] Route matched with {action = "Register", controller = "Users"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Johodp.Application.Users.Commands.RegisterUserResponse]] Register(Johodp.Application.Users.Commands.RegisterUserCommand) on controller Johodp.Api.Controllers.UsersController (Johodp.Api).
+[13:42:49 WRN] The property 'Client.AllowedCorsOrigins' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+[13:42:49 WRN] The property 'Client.AllowedRedirectUris' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+[13:42:49 WRN] The property 'Client.AllowedScopes' is a collection or enumeration type with a value converter but with no value comparer. Set a value comparer to ensure the collection/enumeration elements are compared correctly.
+[13:42:49 INF] Executed DbCommand (69ms) [Parameters=[@__emailVo_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT u."Id", u."CreatedAt", u."Email", u."EmailConfirmed", u."FirstName", u."IsActive", u."LastName", u."MFAEnabled", u."ScopeId", u."UpdatedAt"
+FROM users AS u
+WHERE u."Email" = @__emailVo_0
+LIMIT 1
+[13:42:50 INF] Executed DbCommand (11ms) [Parameters=[@p0='?' (DbType = Guid), @p1='?' (DbType = DateTime), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Guid), @p6='?' (DbType = DateTime)], CommandType='Text', CommandTimeout='30']
+INSERT INTO users ("Id", "CreatedAt", "Email", "FirstName", "LastName", "ScopeId", "UpdatedAt")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6)
+RETURNING "EmailConfirmed", "IsActive", "MFAEnabled";
+[13:42:50 INF] Executing OkObjectResult, writing value of type 'Johodp.Application.Users.Commands.RegisterUserResponse'.
+[13:42:50 INF] Executed action Johodp.Api.Controllers.UsersController.Register (Johodp.Api) in 1206.5546ms
+[13:42:50 INF] Executed endpoint 'Johodp.Api.Controllers.UsersController.Register (Johodp.Api)'
+[13:42:50 INF] Request finished HTTP/1.1 POST http://localhost:5000/api/users/register - 200 null application/json; charset=utf-8 1269.4211ms
