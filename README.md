@@ -290,7 +290,66 @@ Le serveur supporte le flux **Authorization Code + PKCE** pour les applications 
 | `johodp.identity` | Identity | `tenant_id`, `role`, `permission` |
 | `johodp.api` | API Resource | Tous les claims ci-dessus |
 
-#### Exemple de flux PKCE
+#### Diagramme de séquence du flux PKCE
+
+Le diagramme suivant illustre le flux complet d'authentification Authorization Code + PKCE entre une application SPA, l'Identity Provider Johodp, et l'API protégée :
+
+```mermaid
+sequenceDiagram
+    participant SPA as Application SPA
+    participant Browser as Navigateur
+    participant IDP as Johodp IDP
+    participant API as API Protégée
+
+    Note over SPA: 1. Génération PKCE
+    SPA->>SPA: Générer code_verifier (random)
+    SPA->>SPA: Calculer code_challenge<br/>SHA256(code_verifier)
+
+    Note over SPA,IDP: 2. Demande d'autorisation
+    SPA->>Browser: Rediriger vers /connect/authorize<br/>+ client_id, redirect_uri<br/>+ code_challenge, scope, state
+    Browser->>IDP: GET /connect/authorize
+    
+    alt Utilisateur non authentifié
+        IDP->>Browser: Rediriger vers /account/login
+        Browser->>IDP: Afficher page de connexion
+        Browser->>IDP: POST /account/login<br/>(email, password, tenant)
+        IDP->>IDP: Valider identifiants<br/>Vérifier droits tenant
+        IDP->>Browser: Cookie de session
+    end
+
+    Note over IDP: 3. Consentement (optionnel)
+    IDP->>Browser: Page de consentement<br/>(scopes demandés)
+    Browser->>IDP: Accepter
+
+    Note over IDP: 4. Génération du code
+    IDP->>IDP: Générer authorization_code<br/>Stocker code_challenge
+    IDP->>Browser: Rediriger vers redirect_uri<br/>+ code + state
+    Browser->>SPA: Callback avec authorization_code
+
+    Note over SPA,IDP: 5. Échange code contre tokens
+    SPA->>IDP: POST /connect/token<br/>code + code_verifier<br/>+ client_id + redirect_uri
+    IDP->>IDP: Vérifier code_challenge<br/>= SHA256(code_verifier)
+    IDP->>IDP: Générer tokens JWT
+    IDP->>SPA: access_token + id_token<br/>+ refresh_token
+
+    Note over SPA,API: 6. Appel API protégée
+    SPA->>API: GET /api/resource<br/>Authorization: Bearer {access_token}
+    API->>API: Valider JWT signature<br/>Vérifier claims (tenant, role)
+    API->>SPA: Ressource protégée
+
+    Note over SPA,IDP: 7. Rafraîchissement (optionnel)
+    SPA->>IDP: POST /connect/token<br/>grant_type=refresh_token
+    IDP->>IDP: Valider refresh_token
+    IDP->>SPA: Nouveaux access_token + id_token
+
+    Note over SPA,IDP: 8. Déconnexion
+    SPA->>IDP: GET /connect/endsession<br/>+ id_token_hint
+    IDP->>IDP: Invalider session
+    IDP->>Browser: Rediriger vers post_logout_redirect_uri
+    Browser->>SPA: Retour à l'application
+```
+
+#### Détails du flux PKCE
 
 **1. Générer les paramètres PKCE (PowerShell) :**
 ```powershell
