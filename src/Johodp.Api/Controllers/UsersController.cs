@@ -33,28 +33,47 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Register a new user
+    /// Register a new user (called by external application after validation)
+    /// TODO: Add API key authentication in the future
     /// </summary>
     [HttpPost("register")]
     [AllowAnonymous]
-    public async Task<ActionResult<RegisterUserResponse>> Register(RegisterUserCommand command)
+    public async Task<ActionResult<RegisterUserResponse>> Register([FromBody] RegisterUserCommand command)
     {
-        _logger.LogInformation("User registration requested for email: {Email}", command.Email);
+        _logger.LogInformation(
+            "User registration requested for email: {Email}, tenant: {TenantId}", 
+            command.Email, 
+            command.TenantId);
+
+        // Force CreateAsPending = true pour les appels API (l'app tierce demande la création)
+        command.CreateAsPending = true;
+
         try
         {
             var result = await _mediator.Send(command);
-            _logger.LogInformation("User successfully registered: {Email}, UserId: {UserId}", command.Email, result.UserId);
-            return Ok(result);
+            
+            _logger.LogInformation(
+                "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation", 
+                command.Email, 
+                result.UserId);
+
+            return Created($"/api/users/{result.UserId}", new
+            {
+                userId = result.UserId,
+                email = result.Email,
+                status = "PendingActivation",
+                message = "User created successfully. Activation email will be sent."
+            });
         }
         catch (InvalidOperationException ex)
         {
             _logger.LogWarning("User registration failed for {Email}: {Error}", command.Email, ex.Message);
-            return Conflict(new { message = ex.Message });
+            return Conflict(new { error = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unexpected error during user registration for {Email}", command.Email);
-            throw;
+            return StatusCode(500, new { error = "An error occurred during registration" });
         }
     }
 

@@ -39,6 +39,10 @@ public static class ServiceCollectionExtensions
         // Domain Event Publisher
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
 
+        // Notification Service (fire-and-forget HTTP calls to external apps)
+        services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
+            .SetHandlerLifetime(TimeSpan.FromMinutes(5));
+
         // Command and Query Handlers
         services.AddScoped<Johodp.Application.Tenants.Commands.CreateTenantCommandHandler>();
         services.AddScoped<Johodp.Application.Tenants.Commands.UpdateTenantCommandHandler>();
@@ -88,6 +92,12 @@ public static class ServiceCollectionExtensions
         .AddSignInManager<Johodp.Infrastructure.Identity.CustomSignInManager>()
         .AddUserStore<Johodp.Infrastructure.Identity.UserStore>()
         .AddDefaultTokenProviders();
+
+        // TODO: Add Tenant API Key Authentication for external applications later
+        // services.AddAuthentication()
+        //     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Johodp.Infrastructure.Identity.TenantApiKeyAuthenticationHandler>(
+        //         "TenantApiKey",
+        //         options => { });
 
         // Ensure the application cookie used by ASP.NET Identity has dev-friendly settings
         // so browsers accept it on localhost HTTP. For production, revisit these settings.

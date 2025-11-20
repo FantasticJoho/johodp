@@ -25,8 +25,22 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         if (existingUser != null)
             throw new InvalidOperationException($"User with email {request.Email} already exists");
 
-        // Create user aggregate
-        var user = User.Create(request.Email, request.FirstName, request.LastName);
+        // Create user aggregate (with or without pending status)
+        var user = User.Create(
+            request.Email, 
+            request.FirstName, 
+            request.LastName, 
+            request.TenantId,
+            request.CreateAsPending);
+
+        // If not pending and password provided, set it (for direct registration)
+        // Note: Password hashing should be handled by UserManager in the API layer
+        // This is just for the domain model
+        if (!request.CreateAsPending && !string.IsNullOrEmpty(request.Password))
+        {
+            // Password will be hashed by Identity UserManager in the API layer
+            user.SetPasswordHash(request.Password);
+        }
 
         // Add to repository
         await _unitOfWork.Users.AddAsync(user);

@@ -4,6 +4,14 @@ using Common;
 using Events;
 using ValueObjects;
 
+public enum UserStatus
+{
+    PendingActivation = 0,    // En attente activation (nouveau compte)
+    Active = 1,               // Compte actif
+    Suspended = 2,            // Compte suspendu
+    Deleted = 3               // Compte supprimé (soft delete)
+}
+
 public class User : AggregateRoot
 {
     public UserId Id { get; private set; } = null!;
@@ -13,6 +21,8 @@ public class User : AggregateRoot
     public bool EmailConfirmed { get; private set; }
     public bool IsActive { get; private set; }
     public bool MFAEnabled { get; private set; }
+    public UserStatus Status { get; private set; }
+    public DateTime? ActivatedAt { get; private set; }
     public string? PasswordHash { get; private set; }
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
@@ -34,7 +44,7 @@ public class User : AggregateRoot
 
     private User() { }
 
-    public static User Create(string email, string firstName, string lastName, string? tenantId = null)
+    public static User Create(string email, string firstName, string lastName, string? tenantId = null, bool createAsPending = false)
     {
         var user = new User
         {
@@ -42,8 +52,9 @@ public class User : AggregateRoot
             Email = Email.Create(email),
             FirstName = firstName,
             LastName = lastName,
-            EmailConfirmed = false,
-            IsActive = true,
+            EmailConfirmed = createAsPending ? false : false,
+            IsActive = createAsPending ? false : true,
+            Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -53,12 +64,25 @@ public class User : AggregateRoot
             user._tenantIds.Add(tenantId);
         }
 
-        user.AddDomainEvent(new UserRegisteredEvent(
-            user.Id.Value,
-            user.Email.Value,
-            user.FirstName,
-            user.LastName
-        ));
+        if (createAsPending)
+        {
+            user.AddDomainEvent(new UserPendingActivationEvent(
+                user.Id.Value,
+                user.Email.Value,
+                user.FirstName,
+                user.LastName,
+                tenantId
+            ));
+        }
+        else
+        {
+            user.AddDomainEvent(new UserRegisteredEvent(
+                user.Id.Value,
+                user.Email.Value,
+                user.FirstName,
+                user.LastName
+            ));
+        }
 
         return user;
     }
@@ -97,8 +121,36 @@ public class User : AggregateRoot
         AddDomainEvent(new UserEmailConfirmedEvent(Id.Value, Email.Value));
     }
 
+    public void Activate()
+    {
+        if (Status != UserStatus.PendingActivation)
+            throw new InvalidOperationException($"Cannot activate user with status {Status}");
+
+        if (string.IsNullOrEmpty(PasswordHash))
+            throw new InvalidOperationException("Cannot activate user without password");
+
+        Status = UserStatus.Active;
+        IsActive = true;
+        EmailConfirmed = true;
+        ActivatedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+
+        AddDomainEvent(new UserActivatedEvent(Id.Value, Email.Value));
+    }
+
+    public void Suspend(string reason)
+    {
+        if (Status == UserStatus.Deleted)
+            throw new InvalidOperationException("Cannot suspend a deleted user");
+
+        Status = UserStatus.Suspended;
+        IsActive = false;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
     public void Deactivate()
     {
+        Status = UserStatus.Deleted;
         IsActive = false;
         UpdatedAt = DateTime.UtcNow;
     }

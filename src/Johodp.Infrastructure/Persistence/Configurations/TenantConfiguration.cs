@@ -55,6 +55,19 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.CustomCss)
             .HasColumnType("text");
 
+        // Notification configuration
+        builder.Property(t => t.NotificationUrl)
+            .HasMaxLength(500)
+            .IsRequired(false);
+
+        builder.Property(t => t.ApiKey)
+            .HasMaxLength(100)
+            .IsRequired(false);
+
+        builder.Property(t => t.NotifyOnAccountRequest)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         // Localization
         builder.Property(t => t.DefaultLanguage)
             .IsRequired()

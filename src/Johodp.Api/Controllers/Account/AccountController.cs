@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 using Johodp.Domain.Users.Aggregates;
+using Johodp.Application.Common.Interfaces;
+using Johodp.Api.Models.ViewModels;
+using MediatR;
+using Johodp.Application.Users.Commands;
 
 namespace Johodp.Api.Controllers.Account;
 
@@ -11,15 +15,30 @@ public class AccountController : Controller
     private readonly UserManager<User> _userManager;
     private readonly SignInManager<User> _signInManager;
     private readonly ILogger<AccountController> _logger;
+    private readonly ITenantRepository _tenantRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IMediator _mediator;
+    private readonly INotificationService _notificationService;
 
     public AccountController(
         UserManager<User> userManager, 
         SignInManager<User> signInManager,
-        ILogger<AccountController> logger)
+        ILogger<AccountController> logger,
+        ITenantRepository tenantRepository,
+        IUserRepository userRepository,
+        IUnitOfWork unitOfWork,
+        IMediator mediator,
+        INotificationService notificationService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _logger = logger;
+        _tenantRepository = tenantRepository;
+        _userRepository = userRepository;
+        _unitOfWork = unitOfWork;
+        _mediator = mediator;
+        _notificationService = notificationService;
     }
 
     [HttpGet]
@@ -414,6 +433,251 @@ public class AccountController : Controller
     public IActionResult ResetPasswordConfirmation()
     {
         return View();
+    }
+
+    // ========== ONBOARDING FLOW ==========
+
+    /// <summary>
+    /// GET: /account/onboarding - Affiche le formulaire d'onboarding avec le branding du tenant
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Onboarding(
+        [FromQuery] string? acr_values,
+        [FromQuery] string? return_url)
+    {
+        // Extraire le tenant depuis acr_values
+        var tenantId = ExtractTenantFromAcrValues(acr_values);
+
+        if (string.IsNullOrEmpty(tenantId))
+        {
+            _logger.LogWarning("No tenant specified in onboarding request");
+            return BadRequest("Tenant is required for onboarding");
+        }
+
+        var tenant = await _tenantRepository.GetByNameAsync(tenantId);
+
+        if (tenant == null || !tenant.IsActive)
+        {
+            _logger.LogWarning("Invalid or inactive tenant: {TenantId}", tenantId);
+            return BadRequest("Invalid or inactive tenant");
+        }
+
+        var model = new OnboardingViewModel
+        {
+            TenantId = tenantId,
+            TenantDisplayName = tenant.DisplayName,
+            LogoUrl = tenant.LogoUrl,
+            ReturnUrl = return_url
+        };
+
+        return View(model);
+    }
+
+    /// <summary>
+    /// POST: /account/onboarding - Traite la demande d'onboarding
+    /// Envoie une notification à l'app tierce (fire-and-forget)
+    /// L'app tierce décidera si elle appelle /api/users/register ou non
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Onboarding(OnboardingViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            var tenant = await _tenantRepository.GetByNameAsync(model.TenantId);
+            model.TenantDisplayName = tenant?.DisplayName ?? model.TenantId;
+            model.LogoUrl = tenant?.LogoUrl;
+            return View(model);
+        }
+
+        // Vérifier que l'email n'existe pas déjà
+        var existingUser = await _userManager.FindByEmailAsync(model.Email);
+        if (existingUser != null)
+        {
+            ModelState.AddModelError("Email", "Un compte existe déjà avec cette adresse email");
+            var tenant = await _tenantRepository.GetByNameAsync(model.TenantId);
+            model.TenantDisplayName = tenant?.DisplayName ?? model.TenantId;
+            model.LogoUrl = tenant?.LogoUrl;
+            return View(model);
+        }
+
+        try
+        {
+            var requestId = Guid.NewGuid().ToString();
+
+            // Envoyer notification à l'application tierce (fire-and-forget)
+            // L'app tierce validera et appellera POST /api/users/register si OK
+            await _notificationService.NotifyAccountRequestAsync(
+                tenantId: model.TenantId,
+                email: model.Email,
+                firstName: model.FirstName,
+                lastName: model.LastName,
+                requestId: requestId);
+
+            _logger.LogInformation(
+                "Onboarding notification sent for {Email} on tenant {TenantId}, RequestId: {RequestId}",
+                model.Email,
+                model.TenantId,
+                requestId);
+
+            // Afficher page "en attente de validation"
+            // L'utilisateur recevra un email SEULEMENT si l'app tierce valide
+            var pendingModel = new OnboardingPendingViewModel
+            {
+                Email = model.Email,
+                ReturnUrl = model.ReturnUrl ?? "/"
+            };
+
+            return View("OnboardingPending", pendingModel);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during onboarding for {Email}", model.Email);
+            ModelState.AddModelError("", "Une erreur est survenue lors de la demande");
+            var tenant = await _tenantRepository.GetByNameAsync(model.TenantId);
+            model.TenantDisplayName = tenant?.DisplayName ?? model.TenantId;
+            model.LogoUrl = tenant?.LogoUrl;
+            return View(model);
+        }
+    }
+
+    // ========== ACTIVATION FLOW ==========
+
+    /// <summary>
+    /// GET: /account/activate - Affiche le formulaire d'activation avec le token
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Activate(
+        [FromQuery] string token,
+        [FromQuery] string userId,
+        [FromQuery] string tenant)
+    {
+        if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(userId))
+        {
+            return BadRequest("Invalid activation link");
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return BadRequest("Invalid activation link");
+        }
+
+        // Vérifier que le user est bien en statut PendingActivation
+        if (user.Status != UserStatus.PendingActivation)
+        {
+            return BadRequest("This account is not pending activation");
+        }
+
+        var tenantEntity = await _tenantRepository.GetByNameAsync(tenant);
+
+        var model = new ActivateViewModel
+        {
+            Token = token,
+            UserId = userId,
+            TenantId = tenant,
+            MaskedEmail = MaskEmail(user.Email.Value),
+            TenantDisplayName = tenantEntity?.DisplayName ?? tenant,
+            LogoUrl = tenantEntity?.LogoUrl
+        };
+
+        return View(model);
+    }
+
+    /// <summary>
+    /// POST: /account/activate - Active le compte en définissant le mot de passe
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Activate(ActivateViewModel model)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var user = await _userManager.FindByIdAsync(model.UserId);
+        if (user == null)
+        {
+            ModelState.AddModelError("", "Utilisateur invalide");
+            return View(model);
+        }
+
+        // Vérifier le token
+        var tokenValid = await _userManager.VerifyUserTokenAsync(
+            user,
+            _userManager.Options.Tokens.EmailConfirmationTokenProvider,
+            "EmailConfirmation",
+            model.Token);
+
+        if (!tokenValid)
+        {
+            ModelState.AddModelError("", "Le lien d'activation est invalide ou expiré");
+            return View(model);
+        }
+
+        // Définir le mot de passe
+        var passwordHash = _userManager.PasswordHasher.HashPassword(user, model.NewPassword);
+        user.SetPasswordHash(passwordHash);
+
+        // Confirmer l'email
+        var confirmResult = await _userManager.ConfirmEmailAsync(user, model.Token);
+        if (!confirmResult.Succeeded)
+        {
+            foreach (var error in confirmResult.Errors)
+            {
+                ModelState.AddModelError("", error.Description);
+            }
+            return View(model);
+        }
+
+        // Activer le compte (domain logic)
+        var domainUser = await _userRepository.GetByIdAsync(Johodp.Domain.Users.ValueObjects.UserId.From(Guid.Parse(user.Id.Value.ToString())));
+        if (domainUser != null)
+        {
+            domainUser.Activate();
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        // Connecter automatiquement l'utilisateur
+        await _signInManager.SignInAsync(user, isPersistent: true);
+
+        _logger.LogInformation("User {UserId} activated successfully", user.Id);
+
+        // Rediriger vers page de succès ou vers l'application
+        var successModel = new ActivateSuccessViewModel
+        {
+            ReturnUrl = model.ReturnUrl ?? "/"
+        };
+
+        return View("ActivateSuccess", successModel);
+    }
+
+    // ========== HELPER METHODS ==========
+
+    private string ExtractTenantFromAcrValues(string? acrValues)
+    {
+        if (string.IsNullOrEmpty(acrValues))
+            return string.Empty;
+
+        return acrValues.Split(' ')
+            .FirstOrDefault(x => x.StartsWith("tenant:"))?
+            .Replace("tenant:", "") ?? string.Empty;
+    }
+
+    private string MaskEmail(string email)
+    {
+        var parts = email.Split('@');
+        if (parts.Length != 2)
+            return email;
+
+        var username = parts[0];
+        var domain = parts[1];
+
+        if (username.Length <= 2)
+            return $"{username[0]}***@{domain}";
+
+        return $"{username[0]}***{username[^1]}@{domain}";
     }
 }
 

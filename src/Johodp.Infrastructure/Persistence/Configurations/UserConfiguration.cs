@@ -39,6 +39,15 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.IsActive)
             .HasDefaultValue(true);
 
+        builder.Property(x => x.Status)
+            .HasConversion<int>()
+            .IsRequired()
+            .HasDefaultValue(UserStatus.Active); // Active by default
+
+        builder.Property(x => x.ActivatedAt)
+            .HasColumnType("timestamp with time zone")
+            .IsRequired(false);
+
         builder.Property(x => x.CreatedAt)
             .HasColumnType("timestamp with time zone");
 

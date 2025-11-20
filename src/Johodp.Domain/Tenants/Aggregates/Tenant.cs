@@ -22,6 +22,11 @@ public class Tenant : AggregateRoot
     public string? BackgroundImageUrl { get; private set; }
     public string? CustomCss { get; private set; }
 
+    // Notification configuration (pour l'application tierce)
+    public string? NotificationUrl { get; private set; }
+    public string? ApiKey { get; private set; }
+    public bool NotifyOnAccountRequest { get; private set; }
+
     // Languages and localization
     private readonly List<string> _supportedLanguages = new();
     public IReadOnlyList<string> SupportedLanguages => _supportedLanguages.AsReadOnly();
@@ -193,6 +198,35 @@ public class Tenant : AggregateRoot
             throw new ArgumentException("Display name cannot be empty", nameof(displayName));
 
         DisplayName = displayName;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ConfigureNotifications(string url, string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            throw new ArgumentException("Notification URL cannot be empty", nameof(url));
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+            throw new ArgumentException("Notification URL must be a valid absolute URI", nameof(url));
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+            throw new ArgumentException("API key cannot be empty", nameof(apiKey));
+
+        NotificationUrl = url;
+        ApiKey = apiKey;
+        NotifyOnAccountRequest = true;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void DisableNotifications()
+    {
+        NotifyOnAccountRequest = false;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RegenerateApiKey()
+    {
+        ApiKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
         UpdatedAt = DateTime.UtcNow;
     }
 }
