@@ -2,6 +2,7 @@ namespace Johodp.Api.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Tenants.Commands;
 using Johodp.Application.Tenants.Queries;
 using Johodp.Application.Tenants.DTOs;
@@ -12,6 +13,8 @@ using Johodp.Application.Tenants.DTOs;
 public class TenantController : ControllerBase
 {
     private readonly ILogger<TenantController> _logger;
+    private readonly ITenantRepository _tenantRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly CreateTenantCommandHandler _createTenantHandler;
     private readonly UpdateTenantCommandHandler _updateTenantHandler;
     private readonly GetTenantByIdQueryHandler _getTenantByIdHandler;
@@ -20,6 +23,8 @@ public class TenantController : ControllerBase
 
     public TenantController(
         ILogger<TenantController> logger,
+        ITenantRepository tenantRepository,
+        IUnitOfWork unitOfWork,
         CreateTenantCommandHandler createTenantHandler,
         UpdateTenantCommandHandler updateTenantHandler,
         GetTenantByIdQueryHandler getTenantByIdHandler,
@@ -27,6 +32,8 @@ public class TenantController : ControllerBase
         GetTenantByNameQueryHandler getTenantByNameHandler)
     {
         _logger = logger;
+        _tenantRepository = tenantRepository;
+        _unitOfWork = unitOfWork;
         _createTenantHandler = createTenantHandler;
         _updateTenantHandler = updateTenantHandler;
         _getTenantByIdHandler = getTenantByIdHandler;
@@ -170,6 +177,37 @@ public class TenantController : ControllerBase
         {
             _logger.LogError(ex, "Error updating tenant {TenantId}", id);
             return StatusCode(500, "An error occurred while updating the tenant");
+        }
+    }
+
+    /// <summary>
+    /// Delete a tenant
+    /// </summary>
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        _logger.LogInformation("Deleting tenant: {TenantId}", id);
+        
+        try
+        {
+            var tenantId = Johodp.Domain.Tenants.ValueObjects.TenantId.From(id);
+            var deleted = await _tenantRepository.DeleteAsync(tenantId);
+            
+            if (!deleted)
+            {
+                _logger.LogWarning("Tenant not found for deletion: {TenantId}", id);
+                return NotFound($"Tenant with ID '{id}' not found");
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("Successfully deleted tenant: {TenantId}", id);
+            
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting tenant {TenantId}", id);
+            return StatusCode(500, "An error occurred while deleting the tenant");
         }
     }
 

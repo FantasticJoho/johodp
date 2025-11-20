@@ -17,8 +17,9 @@ public class User : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    // Multi-tenancy
-    public string? TenantId { get; private set; }
+    // Multi-tenancy - supports multiple tenants
+    private readonly List<string> _tenantIds = new();
+    public IReadOnlyList<string> TenantIds => _tenantIds.AsReadOnly();
 
     // Relations
     public ScopeId? ScopeId { get; private set; }
@@ -43,9 +44,14 @@ public class User : AggregateRoot
             LastName = lastName,
             EmailConfirmed = false,
             IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            TenantId = tenantId
+            CreatedAt = DateTime.UtcNow
         };
+
+        // Add tenant if provided
+        if (!string.IsNullOrWhiteSpace(tenantId))
+        {
+            user._tenantIds.Add(tenantId);
+        }
 
         user.AddDomainEvent(new UserRegisteredEvent(
             user.Id.Value,
@@ -57,10 +63,27 @@ public class User : AggregateRoot
         return user;
     }
 
-    public void SetTenantId(string? tenantId)
+    public void AddTenant(string tenantId)
     {
-        TenantId = tenantId;
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant ID cannot be empty", nameof(tenantId));
+
+        if (_tenantIds.Contains(tenantId))
+            return;
+
+        _tenantIds.Add(tenantId);
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RemoveTenant(string tenantId)
+    {
+        _tenantIds.Remove(tenantId);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool BelongsToTenant(string tenantId)
+    {
+        return _tenantIds.Contains(tenantId);
     }
 
     public void ConfirmEmail()

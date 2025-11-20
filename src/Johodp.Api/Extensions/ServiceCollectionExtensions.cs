@@ -46,6 +46,16 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Johodp.Application.Tenants.Queries.GetAllTenantsQueryHandler>();
         services.AddScoped<Johodp.Application.Tenants.Queries.GetTenantByNameQueryHandler>();
 
+        // Client Command and Query Handlers
+        services.AddScoped<Johodp.Application.Clients.Commands.CreateClientCommandHandler>();
+        services.AddScoped<Johodp.Application.Clients.Commands.UpdateClientCommandHandler>();
+        services.AddScoped<Johodp.Application.Clients.Queries.GetClientByIdQueryHandler>();
+        services.AddScoped<Johodp.Application.Clients.Queries.GetClientByNameQueryHandler>();
+
+        // User Tenant Management Handlers
+        services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
+        services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
+
         // MediatR
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly));
 

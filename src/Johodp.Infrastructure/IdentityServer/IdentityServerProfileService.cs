@@ -55,7 +55,7 @@ public class IdentityServerProfileService : IProfileService
             return;
         }
         
-        _logger.LogInformation("Building claims for user: {Email}, tenant: {TenantId}", user.Email.Value, user.TenantId);
+        _logger.LogInformation("Building claims for user: {Email}, tenants: {TenantCount}", user.Email.Value, user.TenantIds.Count);
 
         var claims = new List<Claim>
         {
@@ -66,9 +66,10 @@ public class IdentityServerProfileService : IProfileService
             new Claim("email_verified", user.EmailConfirmed.ToString().ToLowerInvariant())
         };
 
-        if (!string.IsNullOrWhiteSpace(user.TenantId))
+        // Add all tenant IDs as separate claims
+        foreach (var tenantId in user.TenantIds)
         {
-            claims.Add(new Claim("tenant_id", user.TenantId));
+            claims.Add(new Claim("tenant_id", tenantId));
         }
 
         if (user.Scope != null)

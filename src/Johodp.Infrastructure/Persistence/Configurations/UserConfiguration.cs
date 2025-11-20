@@ -48,9 +48,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
-        builder.Property(x => x.TenantId)
-            .HasMaxLength(100)
-            .IsRequired(false);
+        // Multi-tenancy - store as JSONB array
+        builder.Property<List<string>>("_tenantIds")
+            .HasColumnName("TenantIds")
+            .HasColumnType("jsonb")
+            .IsRequired();
 
         builder.Property(x => x.ScopeId)
             .HasConversion(

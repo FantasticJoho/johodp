@@ -40,10 +40,10 @@ public class DomainUserClaimsPrincipalFactory : IUserClaimsPrincipalFactory<User
                 identity.AddClaim(new Claim("permission", permissionName));
         }
 
-        // TenantId claim (if present)
-        if (!string.IsNullOrWhiteSpace(user.TenantId))
+        // Add all tenant IDs as separate claims
+        foreach (var tenantId in user.TenantIds)
         {
-            identity.AddClaim(new Claim("tenantid", user.TenantId));
+            identity.AddClaim(new Claim("tenantid", tenantId));
         }
 
         var principal = new ClaimsPrincipal(identity);

@@ -116,12 +116,15 @@ public class AccountController : Controller
         // Refuse authentication if user does not have rights on the requested tenant
         // Allow if:
         //  - No specific tenant requested (tenantId == "*")
-        //  - User has wildcard tenant access (user.TenantId == "*")
-        //  - User's tenant matches the requested tenant
-        if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
+        //  - User has wildcard tenant access (TenantIds contains "*")
+        //  - User's tenants include the requested tenant
+        bool hasWildcardAccess = user.TenantIds.Contains("*");
+        bool hasTenantAccess = user.TenantIds.Contains(tenantId) || hasWildcardAccess || tenantId == "*";
+        
+        if (!hasTenantAccess)
         {
-            _logger.LogWarning("Tenant access denied for user {Email}. User tenant: {UserTenant}, Requested tenant: {RequestedTenant}", 
-                model.Email, user.TenantId, tenantId);
+            _logger.LogWarning("Tenant access denied for user {Email}. User tenants: {UserTenants}, Requested tenant: {RequestedTenant}", 
+                model.Email, string.Join(", ", user.TenantIds), tenantId);
             ModelState.AddModelError(string.Empty, "User does not have access to this tenant.");
             ViewData["ReturnUrl"] = returnUrl;
             ViewData["TenantId"] = tenantId;
@@ -205,12 +208,15 @@ public class AccountController : Controller
         // Refuse authentication if user does not have rights on the requested tenant
         // Allow if:
         //  - No specific tenant requested (tenantId == "*")
-        //  - User has wildcard tenant access (user.TenantId == "*")
-        //  - User's tenant matches the requested tenant
-        if (tenantId != "*" && user.TenantId != "*" && user.TenantId != tenantId)
+        //  - User has wildcard tenant access (TenantIds contains "*")
+        //  - User's tenants include the requested tenant
+        bool hasWildcardAccess = user.TenantIds.Contains("*");
+        bool hasTenantAccess = user.TenantIds.Contains(tenantId) || hasWildcardAccess || tenantId == "*";
+        
+        if (!hasTenantAccess)
         {
-            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenant: {UserTenant}, Requested tenant: {RequestedTenant}", 
-                request.Email, user.TenantId, tenantId);
+            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenants: {UserTenants}, Requested tenant: {RequestedTenant}", 
+                request.Email, string.Join(", ", user.TenantIds), tenantId);
             return Unauthorized(new { error = "User does not have access to this tenant" });
         }
 

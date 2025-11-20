@@ -86,4 +86,28 @@ public class Client : AggregateRoot
     {
         AllowedScopes = scopes ?? Array.Empty<string>();
     }
+
+    public void AddCorsOrigin(string origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            throw new ArgumentException("CORS origin cannot be empty", nameof(origin));
+
+        if (AllowedCorsOrigins.Contains(origin))
+            return;
+
+        AllowedCorsOrigins = AllowedCorsOrigins.Append(origin).ToArray();
+    }
+
+    public void RemoveCorsOrigin(string origin)
+    {
+        if (string.IsNullOrWhiteSpace(origin))
+            throw new ArgumentException("CORS origin cannot be empty", nameof(origin));
+
+        AllowedCorsOrigins = AllowedCorsOrigins.Where(o => o != origin).ToArray();
+    }
+
+    public void UpdateCorsOrigins(string[] origins)
+    {
+        AllowedCorsOrigins = origins ?? Array.Empty<string>();
+    }
 }
