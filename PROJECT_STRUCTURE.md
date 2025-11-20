@@ -9,12 +9,15 @@ La couche métier encapsule la logique d'affaires :
 - ✅ `AggregateRoot.cs` - Classe de base pour les agrégats avec gestion des domain events
 - ✅ `DomainEvent.cs` - Classe de base pour les événements de domaine
 - ✅ `ValueObject.cs` - Classe de base pour les Value Objects immutables et comparables
+- ✅ `Enumeration.cs` - Classe de base pour les enumerations DDD (pattern Jimmy Bogard)
 
 #### Agrégat User
 - ✅ `User.cs` - Agrégat principal avec états et comportements
   - Créer un utilisateur
   - Confirmer l'email
   - Désactiver le compte
+  - **UserStatus** - Enumeration class (PendingActivation, Active, Suspended, Deleted)
+  - **IsActive** - Propriété calculée basée sur Status
 - ✅ `Email.cs` - Value Object avec validation email
 - ✅ `UserId.cs` - Value Object typé pour l'identité utilisateur
 - ✅ `UserRegisteredEvent.cs` - Événement déclenché à la création
@@ -188,6 +191,8 @@ Tests unitaires avec xUnit :
 ### DDD Concepts appliqués ✅
 - **Agrégats** : User et Client encapsulent les données et comportements
 - **Value Objects** : Email, UserId immutables et comparables par valeur
+- **Enumeration Classes** : UserStatus avec comportements métier (CanActivate, CanLogin)
+- **Propriétés calculées** : IsActive calculé à partir de Status (pas de colonne DB)
 - **Domain Events** : Events publiés lors de changements d'état
 - **Repositories** : Abstraction de la persistance
 - **Unit of Work** : Transactions atomiques

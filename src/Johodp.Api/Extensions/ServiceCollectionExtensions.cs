@@ -4,13 +4,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using MediatR;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Infrastructure.Persistence;
 using Johodp.Infrastructure.Services;
 using Johodp.Infrastructure.IdentityServer;
 using Duende.IdentityServer.Services;
+using Johodp.Application.Common.Mediator;
 
 public static class ServiceCollectionExtensions
 {
@@ -18,10 +18,15 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Database
+        // Database - Configure Npgsql for dynamic JSON serialization
         var connectionString = configuration.GetConnectionString("DefaultConnection");
+        
+        var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
+        dataSourceBuilder.EnableDynamicJson();
+        var dataSource = dataSourceBuilder.Build();
+        
         services.AddDbContext<JohodpDbContext>(options =>
-            options.UseNpgsql(connectionString,
+            options.UseNpgsql(dataSource,
                 npgsqlOptions => npgsqlOptions.MigrationsAssembly("Johodp.Infrastructure")));
 
         // User Repository (for profile service)
@@ -36,32 +41,29 @@ public static class ServiceCollectionExtensions
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Domain Event Publisher
+        // Mini-MediatR: Auto-register all handlers from Application assembly
+        services.AddMediator(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly);
+
+        // Domain Event Publisher with Channel-based Event Bus
+        services.AddSingleton<Johodp.Application.Common.Events.IEventBus, Johodp.Infrastructure.Services.ChannelEventBus>();
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
+        
+        // Domain Event Processor (Background Service)
+        services.AddHostedService<Johodp.Infrastructure.Services.DomainEventProcessor>();
+        
+        // Event Handlers
+        services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserPendingActivationEvent>, 
+            Johodp.Application.Users.EventHandlers.SendActivationEmailHandler>();
+        services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserActivatedEvent>, 
+            Johodp.Application.Users.EventHandlers.UserActivatedEventHandler>();
 
         // Notification Service (fire-and-forget HTTP calls to external apps)
         services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
-        // Command and Query Handlers
-        services.AddScoped<Johodp.Application.Tenants.Commands.CreateTenantCommandHandler>();
-        services.AddScoped<Johodp.Application.Tenants.Commands.UpdateTenantCommandHandler>();
-        services.AddScoped<Johodp.Application.Tenants.Queries.GetTenantByIdQueryHandler>();
-        services.AddScoped<Johodp.Application.Tenants.Queries.GetAllTenantsQueryHandler>();
-        services.AddScoped<Johodp.Application.Tenants.Queries.GetTenantByNameQueryHandler>();
-
-        // Client Command and Query Handlers
-        services.AddScoped<Johodp.Application.Clients.Commands.CreateClientCommandHandler>();
-        services.AddScoped<Johodp.Application.Clients.Commands.UpdateClientCommandHandler>();
-        services.AddScoped<Johodp.Application.Clients.Queries.GetClientByIdQueryHandler>();
-        services.AddScoped<Johodp.Application.Clients.Queries.GetClientByNameQueryHandler>();
-
-        // User Tenant Management Handlers
+        // Additional handlers not yet converted to IRequestHandler (will be auto-registered once converted)
         services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
         services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
-
-        // MediatR
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly));
 
         // IdentityServer (in-memory for dev) and integrate with ASP.NET Identity
         var idServerBuilder = services.AddIdentityServer()
@@ -92,6 +94,12 @@ public static class ServiceCollectionExtensions
         .AddSignInManager<Johodp.Infrastructure.Identity.CustomSignInManager>()
         .AddUserStore<Johodp.Infrastructure.Identity.UserStore>()
         .AddDefaultTokenProviders();
+
+        // Configure token lifespan for email confirmation tokens (activation)
+        services.Configure<DataProtectionTokenProviderOptions>(options =>
+        {
+            options.TokenLifespan = TimeSpan.FromHours(24);
+        });
 
         // TODO: Add Tenant API Key Authentication for external applications later
         // services.AddAuthentication()

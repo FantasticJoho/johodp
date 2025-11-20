@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.Commands.AssignScopeToUser;
 
-using MediatR;
+using Johodp.Application.Common.Mediator;
 
 public class AssignScopeToUserCommand : IRequest<AssignScopeToUserResponse>
 {

@@ -4,12 +4,20 @@ using Common;
 using Events;
 using ValueObjects;
 
-public enum UserStatus
+public class UserStatus : Enumeration
 {
-    PendingActivation = 0,    // En attente activation (nouveau compte)
-    Active = 1,               // Compte actif
-    Suspended = 2,            // Compte suspendu
-    Deleted = 3               // Compte supprimé (soft delete)
+    public static readonly UserStatus PendingActivation = new(0, nameof(PendingActivation));
+    public static readonly UserStatus Active = new(1, nameof(Active));
+    public static readonly UserStatus Suspended = new(2, nameof(Suspended));
+    public static readonly UserStatus Deleted = new(3, nameof(Deleted));
+
+    private UserStatus(int value, string name) : base(value, name) { }
+
+    // Behavior methods
+    public bool CanActivate() => this == PendingActivation;
+    public bool CanLogin() => this == Active;
+    public bool CanSuspend() => this == Active;
+    public bool IsDeleted() => this == Deleted;
 }
 
 public class User : AggregateRoot
@@ -19,9 +27,9 @@ public class User : AggregateRoot
     public string FirstName { get; private set; } = null!;
     public string LastName { get; private set; } = null!;
     public bool EmailConfirmed { get; private set; }
-    public bool IsActive { get; private set; }
+    public bool IsActive => Status == UserStatus.Active;
     public bool MFAEnabled { get; private set; }
-    public UserStatus Status { get; private set; }
+    public UserStatus Status { get; private set; } = UserStatus.PendingActivation;
     public DateTime? ActivatedAt { get; private set; }
     public string? PasswordHash { get; private set; }
     public DateTime CreatedAt { get; private set; }
@@ -53,7 +61,6 @@ public class User : AggregateRoot
             FirstName = firstName,
             LastName = lastName,
             EmailConfirmed = createAsPending ? false : false,
-            IsActive = createAsPending ? false : true,
             Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
@@ -130,7 +137,6 @@ public class User : AggregateRoot
             throw new InvalidOperationException("Cannot activate user without password");
 
         Status = UserStatus.Active;
-        IsActive = true;
         EmailConfirmed = true;
         ActivatedAt = DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
@@ -144,14 +150,12 @@ public class User : AggregateRoot
             throw new InvalidOperationException("Cannot suspend a deleted user");
 
         Status = UserStatus.Suspended;
-        IsActive = false;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void Deactivate()
     {
         Status = UserStatus.Deleted;
-        IsActive = false;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -1,39 +1,31 @@
 namespace Johodp.Infrastructure.Services;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Events;
 using Johodp.Domain.Common;
-using MediatR;
 
+/// <summary>
+/// Publishes domain events to the channel-based event bus
+/// </summary>
 public class DomainEventPublisher : IDomainEventPublisher
 {
-    private readonly IMediator _mediator;
+    private readonly IEventBus _eventBus;
 
-    public DomainEventPublisher(IMediator mediator)
+    public DomainEventPublisher(IEventBus eventBus)
     {
-        _mediator = mediator;
+        _eventBus = eventBus;
     }
+    
     public async Task PublishAsync(DomainEvent domainEvent, CancellationToken cancellationToken = default)
     {
-        var notification = new DomainEventNotification(domainEvent);
-        await _mediator.Publish(notification, cancellationToken);
+        await _eventBus.PublishAsync(domainEvent, cancellationToken);
     }
 
     public async Task PublishAsync(IEnumerable<DomainEvent> domainEvents, CancellationToken cancellationToken = default)
     {
         foreach (var domainEvent in domainEvents)
         {
-            var notification = new DomainEventNotification(domainEvent);
-            await _mediator.Publish(notification, cancellationToken);
+            await _eventBus.PublishAsync(domainEvent, cancellationToken);
         }
-    }
-}
-
-internal class DomainEventNotification : INotification
-{
-    public DomainEvent DomainEvent { get; }
-
-    public DomainEventNotification(DomainEvent domainEvent)
-    {
-        DomainEvent = domainEvent;
     }
 }

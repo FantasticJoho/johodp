@@ -1,8 +1,8 @@
 namespace Johodp.Application.Users.Commands.AssignScopeToUser;
 
-using MediatR;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 
 public class AssignScopeToUserCommandHandler : IRequestHandler<AssignScopeToUserCommand, AssignScopeToUserResponse>
 {
@@ -13,7 +13,7 @@ public class AssignScopeToUserCommandHandler : IRequestHandler<AssignScopeToUser
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<AssignScopeToUserResponse> Handle(AssignScopeToUserCommand request, CancellationToken cancellationToken)
+    public async Task<AssignScopeToUserResponse> Handle(AssignScopeToUserCommand request, CancellationToken cancellationToken = default)
     {
         // Récupérer l'utilisateur
         var userId = UserId.From(request.UserId);

@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.Commands;
 
-using MediatR;
+using Johodp.Application.Common.Mediator;
 
 public class RegisterUserCommand : IRequest<RegisterUserResponse>
 {

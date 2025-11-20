@@ -3,42 +3,31 @@ namespace Johodp.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.Commands;
 using Johodp.Application.Tenants.Queries;
 using Johodp.Application.Tenants.DTOs;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous]
 public class TenantController : ControllerBase
 {
+    private readonly ISender _sender;
     private readonly ILogger<TenantController> _logger;
     private readonly ITenantRepository _tenantRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly CreateTenantCommandHandler _createTenantHandler;
-    private readonly UpdateTenantCommandHandler _updateTenantHandler;
-    private readonly GetTenantByIdQueryHandler _getTenantByIdHandler;
-    private readonly GetAllTenantsQueryHandler _getAllTenantsHandler;
-    private readonly GetTenantByNameQueryHandler _getTenantByNameHandler;
 
     public TenantController(
+        ISender sender,
         ILogger<TenantController> logger,
         ITenantRepository tenantRepository,
-        IUnitOfWork unitOfWork,
-        CreateTenantCommandHandler createTenantHandler,
-        UpdateTenantCommandHandler updateTenantHandler,
-        GetTenantByIdQueryHandler getTenantByIdHandler,
-        GetAllTenantsQueryHandler getAllTenantsHandler,
-        GetTenantByNameQueryHandler getTenantByNameHandler)
+        IUnitOfWork unitOfWork)
     {
+        _sender = sender;
         _logger = logger;
         _tenantRepository = tenantRepository;
         _unitOfWork = unitOfWork;
-        _createTenantHandler = createTenantHandler;
-        _updateTenantHandler = updateTenantHandler;
-        _getTenantByIdHandler = getTenantByIdHandler;
-        _getAllTenantsHandler = getAllTenantsHandler;
-        _getTenantByNameHandler = getTenantByNameHandler;
     }
 
     /// <summary>
@@ -51,7 +40,7 @@ public class TenantController : ControllerBase
         
         try
         {
-            var tenants = await _getAllTenantsHandler.Handle(new GetAllTenantsQuery());
+            var tenants = await _sender.Send(new GetAllTenantsQuery());
             _logger.LogInformation("Retrieved {Count} tenants", tenants.Count());
             return Ok(tenants);
         }
@@ -72,7 +61,7 @@ public class TenantController : ControllerBase
         
         try
         {
-            var tenant = await _getTenantByIdHandler.Handle(new GetTenantByIdQuery { TenantId = id });
+            var tenant = await _sender.Send(new GetTenantByIdQuery { TenantId = id });
             
             if (tenant == null)
             {
@@ -100,7 +89,7 @@ public class TenantController : ControllerBase
         
         try
         {
-            var tenant = await _getTenantByNameHandler.Handle(new GetTenantByNameQuery { Name = name });
+            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = name });
             
             if (tenant == null)
             {
@@ -129,7 +118,7 @@ public class TenantController : ControllerBase
         try
         {
             var command = new CreateTenantCommand { Data = dto };
-            var tenant = await _createTenantHandler.Handle(command);
+            var tenant = await _sender.Send(command);
             
             _logger.LogInformation(
                 "Successfully created tenant {TenantId} with {ClientCount} associated clients and {UrlCount} return URLs",
@@ -160,7 +149,7 @@ public class TenantController : ControllerBase
         try
         {
             var command = new UpdateTenantCommand { TenantId = id, Data = dto };
-            var tenant = await _updateTenantHandler.Handle(command);
+            var tenant = await _sender.Send(command);
             
             _logger.LogInformation(
                 "Successfully updated tenant {TenantId}. Associated clients: {ClientCount}, Return URLs: {UrlCount}",
@@ -232,7 +221,7 @@ public class TenantController : ControllerBase
 
         try
         {
-            var tenant = await _getTenantByNameHandler.Handle(new GetTenantByNameQuery { Name = tenantId });
+            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = tenantId });
             
             if (tenant == null)
             {
@@ -305,7 +294,7 @@ body {
 
         try
         {
-            var tenant = await _getTenantByNameHandler.Handle(new GetTenantByNameQuery { Name = tenantId });
+            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = tenantId });
             
             if (tenant == null)
             {

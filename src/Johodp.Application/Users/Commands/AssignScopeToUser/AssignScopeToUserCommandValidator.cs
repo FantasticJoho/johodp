@@ -1,6 +1,5 @@
 namespace Johodp.Application.Users.Commands.AssignScopeToUser;
 
-using MediatR;
 using FluentValidation;
 
 public class AssignScopeToUserCommandValidator : AbstractValidator<AssignScopeToUserCommand>

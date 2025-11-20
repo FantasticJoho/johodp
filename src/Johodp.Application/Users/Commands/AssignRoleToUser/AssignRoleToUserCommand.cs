@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.Commands.AssignRoleToUser;
 
-using MediatR;
+using Johodp.Application.Common.Mediator;
 
 public class AssignRoleToUserCommand : IRequest<AssignRoleToUserResponse>
 {

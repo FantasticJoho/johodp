@@ -1,15 +1,16 @@
 namespace Johodp.Application.Tenants.Queries;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
 
-public class GetTenantByIdQuery
+public class GetTenantByIdQuery : IRequest<TenantDto?>
 {
     public Guid TenantId { get; set; }
 }
 
-public class GetTenantByIdQueryHandler
+public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, TenantDto?>
 {
     private readonly ITenantRepository _tenantRepository;
 
@@ -18,7 +19,7 @@ public class GetTenantByIdQueryHandler
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<TenantDto?> Handle(GetTenantByIdQuery query)
+    public async Task<TenantDto?> Handle(GetTenantByIdQuery query, CancellationToken cancellationToken = default)
     {
         var tenantId = TenantId.From(query.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);
@@ -54,9 +55,9 @@ public class GetTenantByIdQueryHandler
     }
 }
 
-public class GetAllTenantsQuery { }
+public class GetAllTenantsQuery : IRequest<IEnumerable<TenantDto>> { }
 
-public class GetAllTenantsQueryHandler
+public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, IEnumerable<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
@@ -65,7 +66,7 @@ public class GetAllTenantsQueryHandler
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<IEnumerable<TenantDto>> Handle(GetAllTenantsQuery query)
+    public async Task<IEnumerable<TenantDto>> Handle(GetAllTenantsQuery query, CancellationToken cancellationToken = default)
     {
         var tenants = await _tenantRepository.GetAllAsync();
         return tenants.Select(MapToDto);
@@ -96,12 +97,12 @@ public class GetAllTenantsQueryHandler
     }
 }
 
-public class GetTenantByNameQuery
+public class GetTenantByNameQuery : IRequest<TenantDto?>
 {
     public string Name { get; set; } = string.Empty;
 }
 
-public class GetTenantByNameQueryHandler
+public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery, TenantDto?>
 {
     private readonly ITenantRepository _tenantRepository;
 
@@ -110,7 +111,7 @@ public class GetTenantByNameQueryHandler
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<TenantDto?> Handle(GetTenantByNameQuery query)
+    public async Task<TenantDto?> Handle(GetTenantByNameQuery query, CancellationToken cancellationToken = default)
     {
         var tenant = await _tenantRepository.GetByNameAsync(query.Name);
 

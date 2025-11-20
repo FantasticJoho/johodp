@@ -1372,18 +1372,18 @@ src/Johodp.Api/Models/Requests/ActivateAccountRequest.cs
 
 **Estimation :** 2-3 jours
 
-### ⏳ Phase 5 : Database Migration (À FAIRE)
+### ✅ Phase 5 : Database Migration (TERMINÉ)
 
-- [ ] Migration EF Core pour ajouter:
+- [x] Migration EF Core pour ajouter:
   - `Users.Status` (int, NOT NULL, default 1)
   - `Users.ActivatedAt` (datetime, nullable)
   - `Tenants.NotificationUrl` (varchar(500), nullable)
   - `Tenants.ApiKey` (varchar(100), nullable)
   - `Tenants.NotifyOnAccountRequest` (bool, NOT NULL, default false)
-- [ ] Appliquer la migration
-- [ ] Script de migration de données si besoin
+- [x] Migration créée: `20251120113742_AddOnboardingFlowSupport`
+- [x] Migration appliquée à la base de données
 
-**Estimation :** 1 jour
+**Terminé le :** 20 novembre 2025
 
 ### ⏳ Phase 6 : Views Razor (À FAIRE)
 
@@ -1443,11 +1443,11 @@ src/Johodp.Api/Models/Requests/ActivateAccountRequest.cs
 | ActivateViewModel | ✅ | `Api/Models/ViewModels/ActivateViewModel.cs` |
 | TenantApiKeyAuthenticationHandler | ✅ (commenté) | `Infrastructure/Identity/TenantApiKeyAuthenticationHandler.cs` |
 
-### ⏳ À Faire (30%)
+### ⏳ À Faire (25%)
 
 | Composant | Status | Priorité |
 |-----------|--------|----------|
-| Migration EF Core | ❌ | 🔴 Haute |
+| Migration EF Core | ✅ | 🔴 Haute |
 | IEmailService implémentation | ❌ | 🔴 Haute |
 | EmailTemplateService | ❌ | 🔴 Haute |
 | UserPendingActivationEventHandler | ❌ | 🔴 Haute |
@@ -1521,10 +1521,16 @@ src/Johodp.Api/Models/Requests/ActivateAccountRequest.cs
 - [ ] CSS dynamique avec branding
 - [ ] Validation client (jQuery)
 
-### ⏳ Database
+### ✅ Database
 
-- [ ] Migration créée
-- [ ] Migration appliquée
+- [x] Migration créée (`20251120113742_AddOnboardingFlowSupport`)
+- [x] Migration appliquée
+- [x] Colonnes ajoutées:
+  - users.Status (integer, default 1)
+  - users.ActivatedAt (timestamp with time zone, nullable)
+  - tenants.NotificationUrl (varchar 500, nullable)
+  - tenants.ApiKey (varchar 100, nullable)
+  - tenants.NotifyOnAccountRequest (boolean, default false)
 - [ ] Indexes optimisés
 - [ ] Contraintes validées
 
@@ -1547,17 +1553,13 @@ src/Johodp.Api/Models/Requests/ActivateAccountRequest.cs
 
 ## Prochaines Étapes Recommandées
 
-### 🔴 Priorité 1 : Migration Database (1 jour)
+### ✅ ~~Priorité 1 : Migration Database~~ (TERMINÉ)
 
-Créer et appliquer la migration pour ajouter les nouvelles colonnes.
+~~Créer et appliquer la migration pour ajouter les nouvelles colonnes.~~
 
-```powershell
-cd src/Johodp.Infrastructure
-dotnet ef migrations add AddOnboardingFlowSupport --startup-project ../Johodp.Api
-dotnet ef database update --startup-project ../Johodp.Api
-```
+Migration `20251120113742_AddOnboardingFlowSupport` créée et appliquée avec succès.
 
-### 🔴 Priorité 2 : Email Service (2-3 jours)
+### 🔴 Priorité 1 : Email Service (2-3 jours)
 
 1. Choisir le provider (recommandation: **SendGrid** pour simplicité)
 2. Implémenter `IEmailService` et `EmailTemplateService`
@@ -1581,8 +1583,8 @@ dotnet ef database update --startup-project ../Johodp.Api
 
 ## Conclusion
 
-**État actuel :** ~70% implémenté (code backend) ✅  
-**Effort restant :** 5-7 jours développement  
+**État actuel :** ~75% implémenté (code backend + database) ✅  
+**Effort restant :** 4-6 jours développement  
 **Complexité :** Moyenne (architecture simplifiée réussie)  
 
 **Avantages du flow actuel :**
@@ -1591,14 +1593,15 @@ dotnet ef database update --startup-project ../Johodp.Api
 - ✅ Pas de dépendance message broker
 - ✅ L'app tierce garde le contrôle
 - ✅ Code backend pratiquement terminé
+- ✅ Database schema mis à jour
 
 **Bloqueurs pour mise en production :**
-1. ❌ Migration database non créée
+1. ✅ ~~Migration database~~ (TERMINÉ)
 2. ❌ Email service non implémenté
 3. ❌ Views Razor non créées
 4. ❌ Tests manquants
 
-**Recommandation :** Commencer par la **migration database** puis implémenter le **service email** pour avoir un flow E2E fonctionnel rapidement.
+**Recommandation :** Implémenter le **service email** puis créer les **views Razor** pour avoir un flow E2E fonctionnel rapidement.
 
 ### Phase 1 : Foundation (Jours 1-2)
 
@@ -1756,8 +1759,8 @@ dotnet ef database update --startup-project ../Johodp.Api
 
 ## Conclusion
 
-**État actuel :** ~40% implémenté  
-**Effort restant :** 8-10 jours développement ✅ (Simplifié !)  
+**État actuel :** ~75% implémenté ✅  
+**Effort restant :** 4-6 jours développement (Simplifié !)  
 **Complexité réduite :** Pas de webhook synchrone, pas d'inbox pattern, pas de message broker  
 
 **Avantages du flow simplifié :**
@@ -1766,9 +1769,11 @@ dotnet ef database update --startup-project ../Johodp.Api
 - ✅ Temps de développement réduit de 40%
 - ✅ L'application tierce garde le contrôle (elle décide quand créer le compte)
 - ✅ Fire-and-forget évite les timeouts et complexités
+- ✅ Database schema complet
 
 **Prochaines étapes recommandées :**
-1. Choisir provider email (SendGrid vs SMTP custom vs MailKit)
-2. Définir le format des templates email
-3. Commencer Phase 1 (Domain Model)
-4. Documenter l'API pour l'application tierce
+1. ✅ ~~Migration database~~ (TERMINÉ)
+2. Implémenter EmailService (SendGrid ou SMTP)
+3. Créer UserPendingActivationEventHandler
+4. Créer les views Razor (Onboarding, Activate)
+5. Tests E2E du flow complet

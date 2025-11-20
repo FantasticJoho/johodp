@@ -1,15 +1,16 @@
 namespace Johodp.Application.Clients.Queries;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.ValueObjects;
 
-public class GetClientByIdQuery
+public class GetClientByIdQuery : IRequest<ClientDto?>
 {
     public Guid ClientId { get; set; }
 }
 
-public class GetClientByIdQueryHandler
+public class GetClientByIdQueryHandler : IRequestHandler<GetClientByIdQuery, ClientDto?>
 {
     private readonly IClientRepository _clientRepository;
 
@@ -18,7 +19,7 @@ public class GetClientByIdQueryHandler
         _clientRepository = clientRepository;
     }
 
-    public async Task<ClientDto?> Handle(GetClientByIdQuery query)
+    public async Task<ClientDto?> Handle(GetClientByIdQuery query, CancellationToken cancellationToken = default)
     {
         var clientId = ClientId.From(query.ClientId);
         var client = await _clientRepository.GetByIdAsync(clientId);
@@ -46,12 +47,12 @@ public class GetClientByIdQueryHandler
     }
 }
 
-public class GetClientByNameQuery
+public class GetClientByNameQuery : IRequest<ClientDto?>
 {
     public string ClientName { get; set; } = string.Empty;
 }
 
-public class GetClientByNameQueryHandler
+public class GetClientByNameQueryHandler : IRequestHandler<GetClientByNameQuery, ClientDto?>
 {
     private readonly IClientRepository _clientRepository;
 
@@ -60,7 +61,7 @@ public class GetClientByNameQueryHandler
         _clientRepository = clientRepository;
     }
 
-    public async Task<ClientDto?> Handle(GetClientByNameQuery query)
+    public async Task<ClientDto?> Handle(GetClientByNameQuery query, CancellationToken cancellationToken = default)
     {
         var client = await _clientRepository.GetByNameAsync(query.ClientName);
 

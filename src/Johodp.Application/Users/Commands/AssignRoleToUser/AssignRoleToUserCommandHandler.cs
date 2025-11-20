@@ -1,8 +1,8 @@
 namespace Johodp.Application.Users.Commands.AssignRoleToUser;
 
-using MediatR;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 
 public class AssignRoleToUserCommandHandler : IRequestHandler<AssignRoleToUserCommand, AssignRoleToUserResponse>
 {
@@ -13,7 +13,7 @@ public class AssignRoleToUserCommandHandler : IRequestHandler<AssignRoleToUserCo
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<AssignRoleToUserResponse> Handle(AssignRoleToUserCommand request, CancellationToken cancellationToken)
+    public async Task<AssignRoleToUserResponse> Handle(AssignRoleToUserCommand request, CancellationToken cancellationToken = default)
     {
         // Récupérer l'utilisateur
         var userId = UserId.From(request.UserId);

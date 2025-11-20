@@ -1,16 +1,17 @@
 namespace Johodp.Application.Tenants.Commands;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
 
-public class UpdateTenantCommand
+public class UpdateTenantCommand : IRequest<TenantDto>
 {
     public Guid TenantId { get; set; }
     public UpdateTenantDto Data { get; set; } = null!;
 }
 
-public class UpdateTenantCommandHandler
+public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, TenantDto>
 {
     private readonly ITenantRepository _tenantRepository;
     private readonly IClientRepository _clientRepository;
@@ -26,7 +27,7 @@ public class UpdateTenantCommandHandler
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<TenantDto> Handle(UpdateTenantCommand command)
+    public async Task<TenantDto> Handle(UpdateTenantCommand command, CancellationToken cancellationToken = default)
     {
         var tenantId = TenantId.From(command.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);

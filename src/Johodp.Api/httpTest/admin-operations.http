@@ -1,0 +1,419 @@
+### Admin Operations - Client, Tenant and User Management
+### This file demonstrates CRUD operations for Clients, Tenants and User registration
+
+### Variables
+@baseUrl = http://localhost:5000
+
+###############################################################################
+### CLIENT MANAGEMENT (All endpoints are public - No authentication required)
+###############################################################################
+
+### Create a new OAuth2 Client
+POST {{baseUrl}}/api/clients
+Content-Type: application/json
+
+{
+  "clientName": "my-spa-app",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api"
+  ],
+  "allowedRedirectUris": [
+    "http://localhost:4200/callback",
+    "http://localhost:4200/silent-renew"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200"
+  ],
+  "requireConsent": false
+}
+
+### Get Client by ID
+@clientId = 27ee710b-8455-4bf7-ae35-2e6e8a2560d1
+GET {{baseUrl}}/api/clients/{{clientId}}
+
+### Get Client by Name
+@clientName = my-spa-app
+GET {{baseUrl}}/api/clients/by-name/{{clientName}}
+
+### Update Client
+PUT {{baseUrl}}/api/clients/{{clientId}}
+Content-Type: application/json
+
+{
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access"
+  ],
+  "allowedRedirectUris": [
+    "http://localhost:4200/callback",
+    "http://localhost:4200/silent-renew",
+    "https://myapp.com/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://myapp.com"
+  ],
+  "isActive": true
+}
+
+### Add Redirect URI to Client
+POST {{baseUrl}}/api/clients/{{clientId}}/redirect-uris
+Content-Type: application/json
+
+{
+  "redirectUri": "https://myapp.com/auth/callback"
+}
+
+### Remove Redirect URI from Client
+DELETE {{baseUrl}}/api/clients/{{clientId}}/redirect-uris
+Content-Type: application/json
+
+{
+  "redirectUri": "http://localhost:4200/silent-renew"
+}
+
+### Delete Client
+DELETE {{baseUrl}}/api/clients/{{clientId}}
+
+
+###############################################################################
+### TENANT MANAGEMENT (All endpoints are public - No authentication required)
+###############################################################################
+
+### Create a new Tenant
+POST {{baseUrl}}/api/tenant
+Content-Type: application/json
+
+{
+  "name": "acme-corp",
+  "displayName": "ACME Corporation",
+  "defaultLanguage": "en-US",
+  "supportedLanguages": [
+    "en-US",
+    "fr-FR",
+    "es-ES"
+  ],
+  "timezone": "America/New_York",
+  "currency": "USD",
+  "primaryColor": "#0066CC",
+  "secondaryColor": "#003366",
+  "logoUrl": "https://example.com/acme-logo.png",
+  "backgroundImageUrl": "https://example.com/acme-bg.jpg",
+  "customCss": "body { font-family: 'Roboto', sans-serif; }",
+  "allowedReturnUrls": [
+    "http://localhost:4200/callback",
+    "https://acme.example.com/callback"
+  ],
+  "associatedClientIds": [
+    "my-spa-app"
+  ]
+}
+
+### Get All Tenants
+GET {{baseUrl}}/api/tenant
+
+### Get Tenant by ID
+@tenantId = f7f4649b-017d-46af-a264-c54cf55f21e8
+GET {{baseUrl}}/api/tenant/{{tenantId}}
+
+### Get Tenant by Name
+@tenantName = acme-corp
+GET {{baseUrl}}/api/tenant/by-name/{{tenantName}}
+
+### Update Tenant
+PUT {{baseUrl}}/api/tenant/{{tenantId}}
+Content-Type: application/json
+
+{
+  "displayName": "ACME Corporation International",
+  "supportedLanguages": [
+    "en-US",
+    "fr-FR",
+    "es-ES",
+    "de-DE"
+  ],
+  "timezone": "America/New_York",
+  "currency": "USD",
+  "primaryColor": "#0066CC",
+  "secondaryColor": "#003366",
+  "logoUrl": "https://example.com/acme-logo-v2.png",
+  "allowedReturnUrls": [
+    "http://localhost:4200/callback",
+    "https://acme.example.com/callback",
+    "https://app.acme.com/auth/callback"
+  ],
+  "associatedClientIds": [
+    "my-spa-app",
+    "acme-mobile-app",
+    "acme-desktop-app"
+  ],
+  "isActive": true
+}
+
+### Get Tenant Branding CSS (Public - No Auth Required)
+GET {{baseUrl}}/api/tenant/{{tenantName}}/branding.css
+
+### Get Tenant Language Settings (Public - No Auth Required)
+GET {{baseUrl}}/api/tenant/{{tenantName}}/language
+
+### Delete Tenant
+DELETE {{baseUrl}}/api/tenant/{{tenantId}}
+
+
+###############################################################################
+### USER MANAGEMENT - ONBOARDING FLOW
+###############################################################################
+
+### Step 1: User initiates onboarding (public endpoint)
+# This is typically a GET request in a browser, but shown here for reference
+# GET {{baseUrl}}/account/onboarding?acr_values=tenant:acme-corp&return_url=/
+
+### Step 2: User submits onboarding form
+# This sends a notification to the external tenant application
+# The tenant app will validate and call the registration endpoint if approved
+POST {{baseUrl}}/account/onboarding
+Content-Type: application/x-www-form-urlencoded
+
+email=john.doe@example.com
+&firstName=John
+&lastName=Doe
+&tenantId=acme-corp
+&returnUrl=%2F
+
+# Response: Redirects to OnboardingPending view
+# User will receive activation email ONLY if tenant app approves
+
+
+###############################################################################
+### USER MANAGEMENT - DIRECT REGISTRATION (All endpoints are public - No authentication required)
+###############################################################################
+
+### Register User (Creates user with PendingActivation status)
+# @name registerUser
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "jane.smith@examplev.com",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "password": "TempP@ssw0rd123!",
+  "tenantId": "acme-corp"
+}
+
+# Response includes:
+# - userId: GUID of created user
+# - email: User's email
+# - status: "PendingActivation"
+# - message: Confirmation message
+# NOTE: Activation token is NOT returned in response for security
+# In DEV mode, check console logs for activation token and URL
+
+### Extract data from registration response
+@registeredUserId = {{registerUser.response.body.userId}}
+
+### Get the registered user details
+GET {{baseUrl}}/api/users/{{registeredUserId}}
+
+### Get user's tenants
+GET {{baseUrl}}/api/users/{{registeredUserId}}/tenants
+
+### Activate the registered user (API endpoint - Copy token from console logs)
+# IMPORTANT: Get the token from application console output (DEV mode only)
+##@activationToken = "CfDJ8IISH9pSP0dDqu2Sb7sBxQFFduQGDhVUre62GHbtirCSiG9ZJ0LERld0npSOsZHZYlrdR9yplHJVCHSB0YfGU3mW3EzFrczaZkcVU4WNebYyNCalxXWgrIe7qXuWbyBHjL0RwrEtG1DgZPtTZ0ILZtPnlLyF8eODlkHTDcNF592QfV+w0noIPsitC2h1zKBs+kKEWx68QCVnHcJb08eNb+U="
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "CfDJ8IISH9pSP0dDqu2Sb7sBxQHktOuKbRGcPPV5NhosiFNJWbF9aTZohF+//R6ArG0wtXQmZXULeXWqoS+NwIu5ojrqMdomXTZIBsHohQJp6p5POoKQVu9zpG9Gi36NDtASqAk6ZbnroRNV+zu61txt/qUpayPJ/IrAbI7tAHPGh05o8MXIVJiW/+ekidupmEGOWiGBf1Z4YnHHjQ2ArGeay3M=",
+  "userId": "f15b6910-4130-40ec-8651-e536bd6a88b4",
+  "tenantId": "acme-corp",
+  "newPassword": "MyNewP@ssw0rd123!",
+  "confirmPassword": "MyNewP@ssw0rd123!"
+}
+
+
+### Get user's tenants
+GET {{baseUrl}}/api/users/{{registeredUserId}}/tenants
+
+
+### Register Another User (Different email for testing)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "bob.wilson@example.com",
+  "firstName": "Bob",
+  "lastName": "Wilson",
+  "password": "P@ssw0rd123!",
+  "tenantId": "acme-corp"
+}
+
+
+### Register User with Wildcard Tenant Access
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "firstName": "Admin",
+  "lastName": "User",
+  "password": "AdminP@ss123!",
+  "tenantId": "*"
+}
+
+
+###############################################################################
+### USER MANAGEMENT - ACTIVATION FLOW
+###############################################################################
+
+### Step 1: User clicks activation link in email (GET request in browser)
+# GET {{baseUrl}}/account/activate?token=ACTIVATION_TOKEN&userId=USER_GUID&tenant=acme-corp
+
+### Activate the registered user (Copy token from console logs)
+# IMPORTANT: Get the token from application console output (DEV mode only)
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQFFduQGDhVUre62GHbtirCSiG9ZJ0LERld0npSOsZHZYlrdR9yplHJVCHSB0YfGU3mW3EzFrczaZkcVU4WNebYyNCalxXWgrIe7qXuWbyBHjL0RwrEtG1DgZPtTZ0ILZtPnlLyF8eODlkHTDcNF592QfV+w0noIPsitC2h1zKBs+kKEWx68QCVnHcJb08eNb+U=
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "{{activationToken}}",
+  "userId": "{{registeredUserId}}",
+  "tenantId": "acme-corp",
+  "newPassword": "MyNewP@ssw0rd123!",
+  "confirmPassword": "MyNewP@ssw0rd123!"
+}
+
+
+###############################################################################
+### USER MANAGEMENT - ACTIVATION FLOW (MVC Form - for browser use)
+###############################################################################
+
+### Step 1: User clicks activation link in email (GET request in browser)
+# GET {{baseUrl}}/account/activate?token=ACTIVATION_TOKEN&userId=USER_GUID&tenant=acme-corp
+
+### Step 2: User submits activation form with new password (MVC endpoint)
+@activationToken2 = YOUR_ACTIVATION_TOKEN
+@userId = 00000000-0000-0000-0000-000000000000
+POST {{baseUrl}}/account/activate
+Content-Type: application/x-www-form-urlencoded
+
+token={{activationToken2}}
+&userId={{userId}}
+&tenantId=acme-corp
+&newPassword=MyNewP@ssw0rd123!
+&confirmPassword=MyNewP@ssw0rd123!
+
+# Response: User is activated and automatically signed in
+
+
+###############################################################################
+### USER MANAGEMENT - QUERY OPERATIONS (All endpoints are public)
+###############################################################################
+
+### Get User by ID
+@userId = 00000000-0000-0000-0000-000000000000
+GET {{baseUrl}}/api/users/{{userId}}
+
+# Response includes:
+# - id, email, firstName, lastName
+# - tenantIds (array of tenant access)
+# - roles (array of role names)
+# - scopes (array of permission scopes)
+# - status (Active, PendingActivation, etc.)
+
+
+###############################################################################
+### USER MANAGEMENT - TENANT ASSIGNMENT (All endpoints are public)
+###############################################################################
+
+### Add User to Additional Tenant
+POST {{baseUrl}}/api/users/{{userId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "another-tenant"
+}
+
+### Remove User from Tenant
+DELETE {{baseUrl}}/api/users/{{userId}}/tenants/another-tenant
+
+
+###############################################################################
+### USER MANAGEMENT - ROLE ASSIGNMENT (All endpoints are public)
+###############################################################################
+
+### Assign Role to User
+POST {{baseUrl}}/api/users/assign-role
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "roleName": "TenantAdmin"
+}
+
+# Available roles: TenantAdmin, User, etc.
+
+
+###############################################################################
+### USER MANAGEMENT - SCOPE/PERMISSION ASSIGNMENT (All endpoints are public)
+###############################################################################
+
+### Assign Scope to User
+POST {{baseUrl}}/api/users/assign-scope
+Content-Type: application/json
+
+{
+  "userId": "{{userId}}",
+  "scopeName": "users.write"
+}
+
+# Scopes represent fine-grained permissions
+# Examples: users.read, users.write, tenants.manage, clients.manage
+
+
+###############################################################################
+### NOTES:
+###############################################################################
+#
+# Onboarding Flow (User-initiated):
+# 1. User visits /account/onboarding with tenant parameter
+# 2. User fills form and submits
+# 3. Notification sent to tenant's external application
+# 4. Tenant app validates and calls POST /api/users/register if approved
+# 5. User receives activation email with token
+# 6. User clicks link and sets password via /account/activate
+# 7. User is activated and can log in
+#
+# Direct Registration Flow (Admin/API):
+# 1. Admin calls POST /api/users/register with isPendingActivation=true
+# 2. User created with PendingActivation status
+# 3. Activation token returned in response
+# 4. Admin sends custom activation email with token
+# 5. User activates via /account/activate
+#
+# Tenant Access Control:
+# - tenantId="*": Wildcard access to all tenants (super admin)
+# - tenantId="specific": Access only to that tenant
+# - Users can be added to multiple tenants via /api/users/{id}/tenants
+#
+# User Status Values:
+# - PendingActivation: Awaiting email activation
+# - Active: Can log in
+# - Suspended: Account disabled
+# - Deleted: Soft deleted
+#
+# Authorization:
+# - ALL ENDPOINTS ARE PUBLIC (No authentication required)
+# - This is for development/testing purposes only
+# - In production, add proper authorization to sensitive endpoints
+#
+###############################################################################

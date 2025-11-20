@@ -3,6 +3,7 @@ namespace Johodp.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Clients.Commands;
 using Johodp.Application.Clients.Queries;
 using Johodp.Application.Clients.DTOs;
@@ -10,33 +11,24 @@ using Johodp.Domain.Clients.ValueObjects;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous]
 public class ClientsController : ControllerBase
 {
+    private readonly ISender _sender;
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<ClientsController> _logger;
-    private readonly CreateClientCommandHandler _createClientHandler;
-    private readonly UpdateClientCommandHandler _updateClientHandler;
-    private readonly GetClientByIdQueryHandler _getClientByIdHandler;
-    private readonly GetClientByNameQueryHandler _getClientByNameHandler;
 
     public ClientsController(
+        ISender sender,
         IClientRepository clientRepository,
         IUnitOfWork unitOfWork,
-        ILogger<ClientsController> logger,
-        CreateClientCommandHandler createClientHandler,
-        UpdateClientCommandHandler updateClientHandler,
-        GetClientByIdQueryHandler getClientByIdHandler,
-        GetClientByNameQueryHandler getClientByNameHandler)
+        ILogger<ClientsController> logger)
     {
+        _sender = sender;
         _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
-        _createClientHandler = createClientHandler;
-        _updateClientHandler = updateClientHandler;
-        _getClientByIdHandler = getClientByIdHandler;
-        _getClientByNameHandler = getClientByNameHandler;
     }
 
     /// <summary>
@@ -50,7 +42,7 @@ public class ClientsController : ControllerBase
         try
         {
             var command = new CreateClientCommand { Data = dto };
-            var client = await _createClientHandler.Handle(command);
+            var client = await _sender.Send(command);
             
             _logger.LogInformation(
                 "Successfully created client {ClientId} with {UriCount} redirect URIs",
@@ -86,7 +78,7 @@ public class ClientsController : ControllerBase
         try
         {
             var command = new UpdateClientCommand { ClientId = clientId, Data = dto };
-            var client = await _updateClientHandler.Handle(command);
+            var client = await _sender.Send(command);
             
             _logger.LogInformation(
                 "Successfully updated client {ClientId}. Redirect URIs: {UriCount}, Active: {IsActive}",
@@ -118,7 +110,7 @@ public class ClientsController : ControllerBase
         
         try
         {
-            var client = await _getClientByIdHandler.Handle(new GetClientByIdQuery { ClientId = clientId });
+            var client = await _sender.Send(new GetClientByIdQuery { ClientId = clientId });
             
             if (client == null)
             {
@@ -146,7 +138,7 @@ public class ClientsController : ControllerBase
         
         try
         {
-            var client = await _getClientByNameHandler.Handle(new GetClientByNameQuery { ClientName = clientName });
+            var client = await _sender.Send(new GetClientByNameQuery { ClientName = clientName });
             
             if (client == null)
             {

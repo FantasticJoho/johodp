@@ -8,16 +8,20 @@ https://localhost:5001/api
 ## Users Endpoints
 
 ### 1. Register a New User
-**POST** `/users/register`
+**POST** `/api/users/register`
 
-Enregistre un nouvel utilisateur dans le système.
+Crée un nouvel utilisateur en statut **PendingActivation** (appelé par l'application tierce).
+
+**Authentification :** `[AllowAnonymous]` (TODO: Sécuriser avec API Key)
 
 #### Request Body
 ```json
 {
   "email": "john.doe@example.com",
   "firstName": "John",
-  "lastName": "Doe"
+  "lastName": "Doe",
+  "tenantId": "acme",
+  "createAsPending": true
 }
 ```
 
@@ -27,12 +31,16 @@ Enregistre un nouvel utilisateur dans le système.
 | email | string | ✅ | Adresse e-mail unique |
 | firstName | string | ✅ | Prénom (max 50 caractères) |
 | lastName | string | ✅ | Nom (max 50 caractères) |
+| tenantId | string | ✅ | Identifiant du tenant |
+| createAsPending | boolean | Auto | Forcé à `true` par le controller |
 
-#### Response 200 OK
+#### Response 201 Created
 ```json
 {
   "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "email": "john.doe@example.com"
+  "email": "john.doe@example.com",
+  "status": "PendingActivation",
+  "message": "User created successfully. Activation email will be sent."
 }
 ```
 
@@ -166,6 +174,77 @@ if (response.IsSuccessStatusCode)
 
 ---
 
+## Account Management Endpoints (NEW)
+
+### 3. Onboarding - Display Form
+**GET** `/account/onboarding`
+
+Affiche le formulaire d'onboarding avec le branding du tenant.
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| acr_values | string | ✅ | Format `tenant:{tenantId}` |
+| return_url | string | ❌ | URL de retour après activation |
+
+#### Example
+```
+GET /account/onboarding?acr_values=tenant:acme&return_url=https://app.acme.com/dashboard
+```
+
+---
+
+### 4. Onboarding - Submit Request
+**POST** `/account/onboarding`
+
+Traite la demande d'onboarding et notifie l'application tierce (fire-and-forget).
+
+#### Request Body (Form)
+```json
+{
+  "tenantId": "acme",
+  "email": "john.doe@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "returnUrl": "https://app.acme.com/dashboard"
+}
+```
+
+---
+
+### 5. Activate - Display Form
+**GET** `/account/activate`
+
+Affiche le formulaire d'activation avec validation du token.
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| token | string | ✅ | Token d'activation Identity |
+| userId | string | ✅ | GUID de l'utilisateur |
+| tenant | string | ✅ | Identifiant du tenant |
+
+---
+
+### 6. Activate - Set Password
+**POST** `/account/activate`
+
+Active le compte en définissant le mot de passe.
+
+#### Request Body (Form)
+```json
+{
+  "token": "CfDJ8N...",
+  "userId": "b8c4d9e5-f6a7-8901-b2c3-d4e5f6g7h8i9",
+  "tenantId": "acme",
+  "newPassword": "SecureP@ssw0rd!",
+  "confirmPassword": "SecureP@ssw0rd!",
+  "returnUrl": "https://app.acme.com/dashboard"
+}
+```
+
+---
+
 ## Response Status Codes
 
 | Code | Meaning | Description |
@@ -249,13 +328,20 @@ Non implémentée actuellement.
 
 ## Changelog des Endpoints
 
-### v1.0 (2025-11-17)
+### v2.0 (2025-11-20) - Onboarding Flow
+- ✅ GET /account/onboarding - Formulaire d'inscription avec branding tenant
+- ✅ POST /account/onboarding - Traitement demande + notification app tierce
+- ✅ GET /account/activate - Formulaire activation avec token
+- ✅ POST /account/activate - Définir mot de passe et activer compte
+- ✅ POST /api/users/register - Modifié pour créer en PendingActivation ([AllowAnonymous])
+- ✅ Migration database - Ajout Status, ActivatedAt, NotificationUrl, ApiKey
+
+### v1.0 (2025-11-17) - Initial Release
 - ✅ POST /api/users/register - Enregistrer un utilisateur
 - ✅ GET /api/users/{userId} - Récupérer un utilisateur
 - ⏳ GET /api/users - Lister tous les utilisateurs (à faire)
 - ⏳ PUT /api/users/{userId} - Mettre à jour un utilisateur (à faire)
 - ⏳ DELETE /api/users/{userId} - Supprimer un utilisateur (à faire)
-- ⏳ POST /api/users/{userId}/confirm-email - Confirmer l'email (à faire)
 
 ---
 

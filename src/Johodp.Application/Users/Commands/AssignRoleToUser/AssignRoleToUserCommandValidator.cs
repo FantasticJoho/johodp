@@ -1,6 +1,5 @@
 namespace Johodp.Application.Users.Commands.AssignRoleToUser;
 
-using MediatR;
 using FluentValidation;
 
 public class AssignRoleToUserCommandValidator : AbstractValidator<AssignRoleToUserCommand>

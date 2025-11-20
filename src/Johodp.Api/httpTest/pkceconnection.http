@@ -1,5 +1,5 @@
 ### PKCE Flow - Complete OAuth2 Authorization Code + PKCE Workflow
-### This file demonstrates the full PKCE flow for obtaining tokens
+### This file demonstrates user registration, activation, and the full PKCE flow for obtaining tokens
 
 ### Variables
 @baseUrl = http://localhost:5000
@@ -16,13 +16,63 @@
 @codeChallenge = E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
 
 # Tenant (optional - use tenant:your-tenant-id or omit for wildcard access)
-@acrValues = tenant:acme-corp
+@tenantId = acme-corp
+@acrValues = tenant:{{tenantId}}
+
+# User credentials (will be set after registration and activation)
+@userEmail = test.user@example1.com
+@userPassword = MySecureP@ssw0rd123!
 
 # Authorization code (will be obtained from Step 2)
-@authorizationCode = 8D4B4E49FCB7181397E05CE85124D48162FFEACF4E5604A897B27963FCE09571-1
+@authorizationCode = DFF80F7186B7E703BFF10D80CF18269F355182A11B2308C9F72B56889AF72AF0-1
 
 # Access token (will be obtained from Step 3)
-@accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAiLCJuYmYiOjE3NjM0NzM3MDYsImlhdCI6MTc2MzQ3MzcwNiwiZXhwIjoxNzYzNDc3MzA2LCJhdWQiOiJqb2hvZHAiLCJzY29wZSI6WyJvcGVuaWQiLCJwcm9maWxlIiwiZW1haWwiLCJqb2hvZHAuaWRlbnRpdHkiLCJqb2hvZHAuYXBpIl0sImFtciI6WyJwd2QiXSwiY2xpZW50X2lkIjoiam9ob2RwLXNwYSIsInN1YiI6IjFiYjcxYWZjLWU2MjItNDJmNC1iM2ZkLWRmNDk1NmViYjNlYiIsImF1dGhfdGltZSI6MTc2MzQ3MzY3MCwiaWRwIjoibG9jYWwiLCJlbWFpbCI6ImpvbmF0aGFuLmhvbm9yZUBnbWFpbC5jb20iLCJzaWQiOiI2NDU2MTgyQjNFNjNBQTFCQzQ0NkEyNzlDQkFCREE5MCIsImp0aSI6IjE3QjA3MjE1MTY0MTZGNjAxN0QzMDBFRTM3RDFDREM1In0.qCjZiPl6eD3udR51dkDExjMSOfEjqtZDChTZKylV7JUjOdcCChHPtCWN1fc2fi5-qVhdimFT-CvgKX4gIZs6alYLsmbCSDSBzq-N8rbdgGGOnyPNI9DDhj0V5ZDTVd1nixurB4kLCwDdr96e2pNxuFe59_OtmEf31FJtXu7WVLAkdSv3SuTBmBarLaRc_dVN-XhK3YqQYyW3h-yOugVSXwL8zW8djW-Aw9pocbSFIYgL4m7JTBzb4gTE8VKdEF58xHoeSi07uBlTUgaj8ZqGxHV4zlsdwimUutzH0yBkK5znfIRoabIF1aqgt9jQRT9qr8YpTQeJRQI0bV1bFtymuQ
+@accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwczovL2xvY2FsaG9zdDo1MDAxIiwibmJmIjoxNzYzNjU3MDc3LCJpYXQiOjE3NjM2NTcwNzcsImV4cCI6MTc2MzY2MDY3NywiYXVkIjoiam9ob2RwIiwic2NvcGUiOlsib3BlbmlkIiwicHJvZmlsZSIsImVtYWlsIiwiam9ob2RwLmlkZW50aXR5Iiwiam9ob2RwLmFwaSJdLCJhbXIiOlsicHdkIl0sImNsaWVudF9pZCI6ImpvaG9kcC1zcGEiLCJzdWIiOiJhNDBkZWUyYi1jZDI4LTRkYjYtYTNiMi04OWVjYmQyZmZkMDYiLCJhdXRoX3RpbWUiOjE3NjM2NTY5NTcsImlkcCI6ImxvY2FsIiwiZW1haWwiOiJ0ZXN0LnVzZXJAZXhhbXBsZTEuY29tIiwidGVuYW50X2lkIjoiYWNtZS1jb3JwIiwicm9sZSI6InJlYWRlciIsInBlcm1pc3Npb24iOiJyZWFkZXIiLCJzaWQiOiI1NzI5RUFDNkFBRjU3NjBEMjk1NDA4QTUxM0E3RDhFMiIsImp0aSI6IjAxMDJEQzAyODQyREEyMThDM0RFMEFCNzlGMDFENTAzIn0.lQMQdctTsPCRrXxG0_e_kzS-TfCjmOq-wvXqwxu8LZkIcEoYs0cRB5tiafFmGhSbt9PvqIJn-TUP7K0Wu1pml6oi8iPNQMq4DJ6CNHGUAtDgkbQJlMBwKNDcjzWT440kkTnQH9Mo36RopFEF3KM4zrh5dlX_kP4Kzs8nXmjQyFLNprgtzE-Wa5Hsfjhkyn1Oynq5vriBvlQc4coOTA_Ai9OZKuEmMCrfHAuaauHSk6hijB-uwu5-Aj2micVEO8ANVo8HaJie3Az0X9oTvOOxxMUujYP3JiSd-zO_OksBgDFCCnfng10-6wN1vV80FmvuVobJnZTkV1kOek0Kesmqrg
+
+###############################################################################
+### STEP 0: USER REGISTRATION & ACTIVATION (Before Login)
+###############################################################################
+
+### Register New User (Creates user with PendingActivation status)
+# @name registerUser
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "Test",
+  "lastName": "User",
+  "password": "TempP@ssw0rd123!",
+  "tenantId": "{{tenantId}}"
+}
+
+# Response includes:
+# - userId: GUID of created user
+# - email: User's email
+# - status: "PendingActivation"
+# NOTE: Activation token is NOT returned in response for security
+# In DEV mode, check console logs for activation token
+
+### Extract userId from registration response
+@registeredUserId = {{registerUser.response.body.userId}}
+
+### Activate User Account (Copy token from console logs)
+# IMPORTANT: Get the activation token from application console output (DEV mode only)
+# Replace YOUR_ACTIVATION_TOKEN_HERE with the actual token from console (without quotes)
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQGyUdHrHx1YBk8ZMdT9UsY8v4E8Ej71x6TTIc6GpEt/GTXqfLN4eJgTF8VTkLtO/jgs9EB9ToGSv9y9XQkD3ql7+uVpO0dp3xd6tTXa6yBCdcCsYW1Eyu2Sq0KBXWrIR2rYIntBQ8dEFOT96ss3ju8kS4+UkvTyFMAB31TtrSsRLHjg+aDKX3J1nxaCiKOTgJM=
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "{{activationToken}}",
+  "userId": "{{registeredUserId}}",
+  "tenantId": "{{tenantId}}",
+  "newPassword": "{{userPassword}}",
+  "confirmPassword": "{{userPassword}}"
+}
+
+# Response: User is activated and can now log in with {{userEmail}} / {{userPassword}}
+
 
 ###############################################################################
 ### STEP 1: Discover OpenID Connect Configuration
@@ -38,11 +88,11 @@ Accept: application/json
 
 ### Authorization Endpoint - WITHOUT TENANT (wildcard access)
 # Paste this URL in your browser to initiate the authorization flow
- GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}
+# GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}
 
 ### Authorization Endpoint - WITH SPECIFIC TENANT
 # Paste this URL in your browser to initiate the authorization flow with tenant
-# GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
+ GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
 
 # After successful login, you'll be redirected to:
 # {{redirectUri}}?code=AUTHORIZATION_CODE&state={{state}}
@@ -94,7 +144,8 @@ Authorization: Bearer {{accessToken}}
 ###############################################################################
 
 ### Refresh Access Token
-# @refreshToken = REPLACE_WITH_REFRESH_TOKEN_FROM_STEP_3
+# Replace with refresh_token from STEP 3 response
+@refreshToken = YOUR_REFRESH_TOKEN_HERE
 
 POST {{baseUrl}}/connect/token
 Content-Type: application/x-www-form-urlencoded
@@ -121,23 +172,54 @@ token={{accessToken}}
 ### ALTERNATIVE: Direct Login API (for testing without browser)
 ###############################################################################
 
+### Login via API - WITH SPECIFIC TENANT (recommended)
+# @name loginApi
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "tenantId": "{{tenantId}}"
+}
+
+### Authorization Request - Using Cookie from Login
+# This request uses the authentication cookie from the previous login
+GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
+Cookie: {{loginApi.response.headers.Set-Cookie}}
+
 ### Login via API - WITHOUT TENANT (creates user with wildcard access)
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "test.user@example.com",
-  "password": "P@ssw0rd!"
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
 }
 
-### Login via API - WITH SPECIFIC TENANT
-POST {{baseUrl}}/api/auth/login?acr_values=tenant:acme-corp
+GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
+
+
+###############################################################################
+### ADDITIONAL USER OPERATIONS
+###############################################################################
+
+### Get User Details
+GET {{baseUrl}}/api/users/{{registeredUserId}}
+
+### Get User's Tenants
+GET {{baseUrl}}/api/users/{{registeredUserId}}/tenants
+
+### Add User to Additional Tenant
+POST {{baseUrl}}/api/users/{{registeredUserId}}/tenants
 Content-Type: application/json
 
 {
-  "email": "test.user.tenant@example.com",
-  "password": "P@ssw0rd!"
+  "tenantId": "another-tenant"
 }
+
+### Remove User from Tenant
+DELETE {{baseUrl}}/api/users/{{registeredUserId}}/tenants/another-tenant
 
 
 ###############################################################################
@@ -156,6 +238,13 @@ token={{accessToken}}
 ### NOTES:
 ###############################################################################
 # 
+# Complete User Registration & Login Flow:
+# STEP 0: Register user → Get activation token from console → Activate account
+# STEP 1: Discover OIDC configuration
+# STEP 2: Start authorization flow (browser) with PKCE
+# STEP 3: Exchange authorization code for tokens
+# STEP 4-7: Use tokens, refresh, revoke
+#
 # PKCE Flow Steps:
 # 1. Generate code_verifier (random 43-128 char string)
 # 2. Generate code_challenge = base64url(SHA256(code_verifier))
@@ -163,6 +252,12 @@ token={{accessToken}}
 # 4. User authenticates and approves
 # 5. Receive authorization code
 # 6. Exchange code + code_verifier for tokens
+#
+# User Status Values:
+# - PendingActivation (0): Awaiting email activation
+# - Active (1): Can log in
+# - Suspended (2): Account disabled
+# - Deleted (3): Soft deleted
 #
 # Tenant Support:
 # - No acr_values: User gets wildcard access (TenantId = "*")
@@ -180,5 +275,9 @@ token={{accessToken}}
 # $sha256 = [System.Security.Cryptography.SHA256]::Create()
 # $hash = $sha256.ComputeHash([System.Text.Encoding]::ASCII.GetBytes($verifier))
 # $challenge = [Convert]::ToBase64String($hash).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+#
+# Authorization Note:
+# - ALL ENDPOINTS ARE PUBLIC (No authentication required) for development
+# - In production, add proper authorization to sensitive endpoints
 #
 ###############################################################################

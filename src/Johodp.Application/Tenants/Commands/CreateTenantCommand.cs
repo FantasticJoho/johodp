@@ -1,15 +1,16 @@
 namespace Johodp.Application.Tenants.Commands;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.Aggregates;
 
-public class CreateTenantCommand
+public class CreateTenantCommand : IRequest<TenantDto>
 {
     public CreateTenantDto Data { get; set; } = null!;
 }
 
-public class CreateTenantCommandHandler
+public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, TenantDto>
 {
     private readonly ITenantRepository _tenantRepository;
     private readonly IClientRepository _clientRepository;
@@ -25,7 +26,7 @@ public class CreateTenantCommandHandler
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<TenantDto> Handle(CreateTenantCommand command)
+    public async Task<TenantDto> Handle(CreateTenantCommand command, CancellationToken cancellationToken = default)
     {
         var dto = command.Data;
 

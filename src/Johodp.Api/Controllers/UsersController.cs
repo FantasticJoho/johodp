@@ -2,32 +2,37 @@ namespace Johodp.Api.Controllers;
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using MediatR;
+using Microsoft.AspNetCore.Identity;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Users.Commands;
 using Johodp.Application.Users.Queries;
+using Johodp.Application.Common.Mediator;
+using Johodp.Domain.Users.Aggregates;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[AllowAnonymous]
 public class UsersController : ControllerBase
 {
-    private readonly IMediator _mediator;
+    private readonly ISender _sender;
     private readonly ILogger<UsersController> _logger;
     private readonly IUserRepository _userRepository;
+    private readonly UserManager<User> _userManager;
     private readonly AddUserToTenantCommandHandler _addUserToTenantHandler;
     private readonly RemoveUserFromTenantCommandHandler _removeUserFromTenantHandler;
 
     public UsersController(
-        IMediator mediator, 
+        ISender sender,
         ILogger<UsersController> logger,
         IUserRepository userRepository,
+        UserManager<User> userManager,
         AddUserToTenantCommandHandler addUserToTenantHandler,
         RemoveUserFromTenantCommandHandler removeUserFromTenantHandler)
     {
-        _mediator = mediator;
+        _sender = sender;
         _logger = logger;
         _userRepository = userRepository;
+        _userManager = userManager;
         _addUserToTenantHandler = addUserToTenantHandler;
         _removeUserFromTenantHandler = removeUserFromTenantHandler;
     }
@@ -50,12 +55,37 @@ public class UsersController : ControllerBase
 
         try
         {
-            var result = await _mediator.Send(command);
+            var result = await _sender.Send(command);
+            
+            // Récupérer l'utilisateur pour générer le token d'activation
+            var user = await _userManager.FindByIdAsync(result.UserId.ToString());
+            if (user == null)
+            {
+                throw new InvalidOperationException("User was created but could not be retrieved");
+            }
+
+            // Générer le token d'activation
+            var activationToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
             
             _logger.LogInformation(
                 "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation", 
                 command.Email, 
                 result.UserId);
+
+#if DEBUG
+            // En développement uniquement : afficher le token dans les logs
+            _logger.LogWarning(
+                "[DEV ONLY] Activation token for {Email} (UserId: {UserId}): {Token}",
+                result.Email,
+                result.UserId,
+                activationToken);
+            Console.WriteLine($"\n=== ACTIVATION TOKEN (DEV ONLY) ===");
+            Console.WriteLine($"Email: {result.Email}");
+            Console.WriteLine($"UserId: {result.UserId}");
+            Console.WriteLine($"Token: {activationToken}");
+            Console.WriteLine($"Activation URL: {Request.Scheme}://{Request.Host}/account/activate?token={Uri.EscapeDataString(activationToken)}&userId={result.UserId}&tenant={command.TenantId}");
+            Console.WriteLine($"===================================\n");
+#endif
 
             return Created($"/api/users/{result.UserId}", new
             {
@@ -87,7 +117,7 @@ public class UsersController : ControllerBase
         try
         {
             var query = new GetUserByIdQuery(userId);
-            var result = await _mediator.Send(query);
+            var result = await _sender.Send(query);
             _logger.LogDebug("User found: {UserId}, Email: {Email}", userId, result.Email);
             return Ok(result);
         }

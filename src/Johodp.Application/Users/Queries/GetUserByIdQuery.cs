@@ -1,7 +1,7 @@
 namespace Johodp.Application.Users.Queries;
 
-using MediatR;
 using Johodp.Application.Users.DTOs;
+using Johodp.Application.Common.Mediator;
 
 public class GetUserByIdQuery : IRequest<UserDto>
 {

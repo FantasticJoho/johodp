@@ -1,6 +1,5 @@
 namespace Johodp.Application.Users.Commands;
 
-using MediatR;
 using FluentValidation;
 
 public class RegisterUserCommandValidator : AbstractValidator<RegisterUserCommand>

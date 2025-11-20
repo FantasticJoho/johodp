@@ -1,16 +1,17 @@
 namespace Johodp.Application.Clients.Commands;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.ValueObjects;
 
-public class UpdateClientCommand
+public class UpdateClientCommand : IRequest<ClientDto>
 {
     public Guid ClientId { get; set; }
     public UpdateClientDto Data { get; set; } = null!;
 }
 
-public class UpdateClientCommandHandler
+public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, ClientDto>
 {
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -23,7 +24,7 @@ public class UpdateClientCommandHandler
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ClientDto> Handle(UpdateClientCommand command)
+    public async Task<ClientDto> Handle(UpdateClientCommand command, CancellationToken cancellationToken = default)
     {
         var clientId = ClientId.From(command.ClientId);
         var client = await _clientRepository.GetByIdAsync(clientId);

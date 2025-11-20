@@ -36,13 +36,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.EmailConfirmed)
             .HasDefaultValue(false);
 
-        builder.Property(x => x.IsActive)
-            .HasDefaultValue(true);
-
         builder.Property(x => x.Status)
-            .HasConversion<int>()
-            .IsRequired()
-            .HasDefaultValue(UserStatus.Active); // Active by default
+            .HasConversion(
+                v => v.Value,
+                v => UserStatus.FromValue<UserStatus>(v))
+            .IsRequired();
 
         builder.Property(x => x.ActivatedAt)
             .HasColumnType("timestamp with time zone")
@@ -82,6 +80,8 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .WithMany()
             .UsingEntity("UserPermissions");
 
+        // Ignore computed property and domain events
+        builder.Ignore(x => x.IsActive);
         builder.Ignore(x => x.DomainEvents);
     }
 }

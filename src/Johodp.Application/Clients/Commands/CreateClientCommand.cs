@@ -1,15 +1,16 @@
 namespace Johodp.Application.Clients.Commands;
 
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.Aggregates;
 
-public class CreateClientCommand
+public class CreateClientCommand : IRequest<ClientDto>
 {
     public CreateClientDto Data { get; set; } = null!;
 }
 
-public class CreateClientCommandHandler
+public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, ClientDto>
 {
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -22,7 +23,7 @@ public class CreateClientCommandHandler
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ClientDto> Handle(CreateClientCommand command)
+    public async Task<ClientDto> Handle(CreateClientCommand command, CancellationToken cancellationToken = default)
     {
         var dto = command.Data;
 

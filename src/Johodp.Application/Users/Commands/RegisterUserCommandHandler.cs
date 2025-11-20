@@ -1,9 +1,9 @@
 namespace Johodp.Application.Users.Commands;
 
-using MediatR;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Mediator;
 
 public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, RegisterUserResponse>
 {
@@ -18,7 +18,7 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         _domainEventPublisher = domainEventPublisher;
     }
 
-    public async Task<RegisterUserResponse> Handle(RegisterUserCommand request, CancellationToken cancellationToken)
+    public async Task<RegisterUserResponse> Handle(RegisterUserCommand request, CancellationToken cancellationToken = default)
     {
         // Check if email already exists
         var existingUser = await _unitOfWork.Users.GetByEmailAsync(request.Email);

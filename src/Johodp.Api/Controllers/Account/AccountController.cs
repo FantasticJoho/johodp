@@ -5,8 +5,8 @@ using System.Security.Claims;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Api.Models.ViewModels;
-using MediatR;
 using Johodp.Application.Users.Commands;
+using Johodp.Application.Common.Mediator;
 
 namespace Johodp.Api.Controllers.Account;
 
@@ -18,7 +18,7 @@ public class AccountController : Controller
     private readonly ITenantRepository _tenantRepository;
     private readonly IUserRepository _userRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IMediator _mediator;
+    private readonly ISender _sender;
     private readonly INotificationService _notificationService;
 
     public AccountController(
@@ -28,7 +28,7 @@ public class AccountController : Controller
         ITenantRepository tenantRepository,
         IUserRepository userRepository,
         IUnitOfWork unitOfWork,
-        IMediator mediator,
+        ISender sender,
         INotificationService notificationService)
     {
         _userManager = userManager;
@@ -37,7 +37,7 @@ public class AccountController : Controller
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
-        _mediator = mediator;
+        _sender = sender;
         _notificationService = notificationService;
     }
 
@@ -653,6 +653,76 @@ public class AccountController : Controller
         return View("ActivateSuccess", successModel);
     }
 
+    /// <summary>
+    /// POST: /api/account/activate - API endpoint for user activation (no antiforgery token required)
+    /// </summary>
+    [HttpPost("api/account/activate")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ActivateApi([FromBody] ActivateApiRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new { error = "Invalid request", errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+        }
+
+        var user = await _userManager.FindByIdAsync(request.UserId);
+        if (user == null)
+        {
+            _logger.LogWarning("Activation failed: User not found {UserId}", request.UserId);
+            return BadRequest(new { error = "Invalid user" });
+        }
+
+        // Vérifier le token
+        var tokenValid = await _userManager.VerifyUserTokenAsync(
+            user,
+            _userManager.Options.Tokens.EmailConfirmationTokenProvider,
+            "EmailConfirmation",
+            request.Token);
+
+        if (!tokenValid)
+        {
+            _logger.LogWarning("Activation failed: Invalid token for user {UserId}", request.UserId);
+            return BadRequest(new { error = "Invalid or expired activation token" });
+        }
+
+        // Récupérer le domain user AVANT les modifications
+        var domainUser = await _userRepository.GetByIdAsync(Johodp.Domain.Users.ValueObjects.UserId.From(Guid.Parse(user.Id.Value.ToString())));
+        if (domainUser == null)
+        {
+            _logger.LogError("Activation failed: Domain user not found for {UserId}", request.UserId);
+            return BadRequest(new { error = "User not found" });
+        }
+
+        // Définir le mot de passe sur le domain user
+        var passwordHash = _userManager.PasswordHasher.HashPassword(user, request.NewPassword);
+        domainUser.SetPasswordHash(passwordHash);
+
+        // Activer le compte (domain logic) - ceci change le statut à Active
+        domainUser.Activate();
+        
+        // Sauvegarder les changements du domain
+        await _unitOfWork.SaveChangesAsync();
+
+        // Confirmer l'email avec ASP.NET Identity
+        var confirmResult = await _userManager.ConfirmEmailAsync(user, request.Token);
+        if (!confirmResult.Succeeded)
+        {
+            var errors = string.Join(", ", confirmResult.Errors.Select(e => e.Description));
+            _logger.LogError("Activation failed: Email confirmation error for user {UserId}: {Errors}", request.UserId, errors);
+            return BadRequest(new { error = "Activation failed", details = errors });
+        }
+
+        _logger.LogInformation("User {UserId} activated successfully via API", user.Id);
+
+        return Ok(new
+        {
+            message = "Account activated successfully",
+            userId = user.Id.Value,
+            email = user.Email.Value,
+            status = "Active"
+        });
+    }
+
     // ========== HELPER METHODS ==========
 
     private string ExtractTenantFromAcrValues(string? acrValues)
@@ -713,4 +783,13 @@ public class ResetPasswordViewModel
     public string Password { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
+}
+
+public class ActivateApiRequest
+{
+    public string Token { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
+    public string TenantId { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
 }
