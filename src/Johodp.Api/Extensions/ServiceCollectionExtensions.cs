@@ -30,11 +30,21 @@ public static class ServiceCollectionExtensions
         // Client Repository
         services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
 
+        // Tenant Repository
+        services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+
         // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Domain Event Publisher
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
+
+        // Command and Query Handlers
+        services.AddScoped<Johodp.Application.Tenants.Commands.CreateTenantCommandHandler>();
+        services.AddScoped<Johodp.Application.Tenants.Commands.UpdateTenantCommandHandler>();
+        services.AddScoped<Johodp.Application.Tenants.Queries.GetTenantByIdQueryHandler>();
+        services.AddScoped<Johodp.Application.Tenants.Queries.GetAllTenantsQueryHandler>();
+        services.AddScoped<Johodp.Application.Tenants.Queries.GetTenantByNameQueryHandler>();
 
         // MediatR
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly));
