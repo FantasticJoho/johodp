@@ -23,6 +23,9 @@ public class JohodpDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Use 'dbo' schema (SQL Server convention) instead of default 'public'
+        modelBuilder.HasDefaultSchema("dbo");
+
         // Ignore abstract base classes
         modelBuilder.Ignore<Johodp.Domain.Common.DomainEvent>();
 

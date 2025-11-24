@@ -20,7 +20,7 @@
 @acrValues = tenant:{{tenantId}}
 
 # User credentials (will be set after registration and activation)
-@userEmail = test.user@example1.com
+@userEmail = test.user@example2.com
 @userPassword = MySecureP@ssw0rd123!
 
 # Authorization code (will be obtained from Step 2)
@@ -29,12 +29,181 @@
 # Access token (will be obtained from Step 3)
 @accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwczovL2xvY2FsaG9zdDo1MDAxIiwibmJmIjoxNzYzNjU3MDc3LCJpYXQiOjE3NjM2NTcwNzcsImV4cCI6MTc2MzY2MDY3NywiYXVkIjoiam9ob2RwIiwic2NvcGUiOlsib3BlbmlkIiwicHJvZmlsZSIsImVtYWlsIiwiam9ob2RwLmlkZW50aXR5Iiwiam9ob2RwLmFwaSJdLCJhbXIiOlsicHdkIl0sImNsaWVudF9pZCI6ImpvaG9kcC1zcGEiLCJzdWIiOiJhNDBkZWUyYi1jZDI4LTRkYjYtYTNiMi04OWVjYmQyZmZkMDYiLCJhdXRoX3RpbWUiOjE3NjM2NTY5NTcsImlkcCI6ImxvY2FsIiwiZW1haWwiOiJ0ZXN0LnVzZXJAZXhhbXBsZTEuY29tIiwidGVuYW50X2lkIjoiYWNtZS1jb3JwIiwicm9sZSI6InJlYWRlciIsInBlcm1pc3Npb24iOiJyZWFkZXIiLCJzaWQiOiI1NzI5RUFDNkFBRjU3NjBEMjk1NDA4QTUxM0E3RDhFMiIsImp0aSI6IjAxMDJEQzAyODQyREEyMThDM0RFMEFCNzlGMDFENTAzIn0.lQMQdctTsPCRrXxG0_e_kzS-TfCjmOq-wvXqwxu8LZkIcEoYs0cRB5tiafFmGhSbt9PvqIJn-TUP7K0Wu1pml6oi8iPNQMq4DJ6CNHGUAtDgkbQJlMBwKNDcjzWT440kkTnQH9Mo36RopFEF3KM4zrh5dlX_kP4Kzs8nXmjQyFLNprgtzE-Wa5Hsfjhkyn1Oynq5vriBvlQc4coOTA_Ai9OZKuEmMCrfHAuaauHSk6hijB-uwu5-Aj2micVEO8ANVo8HaJie3Az0X9oTvOOxxMUujYP3JiSd-zO_OksBgDFCCnfng10-6wN1vV80FmvuVobJnZTkV1kOek0Kesmqrg
 
+
+
+
+###############################################################################
+### ADMIN OPERATIONS: CLIENT MANAGEMENT
+###############################################################################
+
+### Create OAuth2 Client (REQUIRED before creating tenants)
+# @name createClient
+POST {{baseUrl}}/api/clients
+Content-Type: application/json
+
+{
+  "clientName": "{{clientId}}",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api"
+  ],
+  "requireConsent": false,
+  "requireMfa": false
+}
+
+### Extract clientId from creation response
+@createdClientId = {{createClient.response.body.id}}
+
+### Get Client by Name
+GET {{baseUrl}}/api/clients/by-name/{{clientId}}
+
+### Get Client by ID
+GET {{baseUrl}}/api/clients/{{createdClientId}}
+
+### Update Client (add tenant associations, enable MFA, etc.)
+PUT {{baseUrl}}/api/clients/{{createdClientId}}
+Content-Type: application/json
+
+{
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access"
+  ],
+  "associatedTenantIds": [
+    "{{tenantId}}"
+  ],
+  "requireMfa": false,
+  "isActive": true
+}
+
+### Delete Client
+# DELETE {{baseUrl}}/api/clients/{{createdClientId}}
+
+
+###############################################################################
+### ADMIN OPERATIONS: TENANT MANAGEMENT
+###############################################################################
+
+### Create Tenant (REQUIRES existing client)
+# @name createTenant
+POST {{baseUrl}}/api/tenant
+Content-Type: application/json
+
+{
+  "name": "{{tenantId}}",
+  "displayName": "ACME Corporation",
+  "defaultLanguage": "en-US",
+  "supportedLanguages": [
+    "en-US",
+    "fr-FR"
+  ],
+  "timezone": "America/New_York",
+  "currency": "USD",
+  "primaryColor": "#0066CC",
+  "secondaryColor": "#003366",
+  "logoUrl": "https://example.com/acme-logo.png",
+  "allowedReturnUrls": [
+    "{{redirectUri}}",
+    "https://acme.example.com/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://acme.example.com"
+  ],
+  "clientId": "{{clientId}}"
+}
+
+### Extract tenantId from creation response
+@createdTenantId = {{createTenant.response.body.id}}
+
+### Get All Tenants
+GET {{baseUrl}}/api/tenant
+
+### Get Tenant by Name
+GET {{baseUrl}}/api/tenant/by-name/{{tenantId}}
+
+### Get Tenant by ID
+GET {{baseUrl}}/api/tenant/{{createdTenantId}}
+
+### Update Tenant (add redirect URIs, CORS origins, etc.)
+PUT {{baseUrl}}/api/tenant/{{createdTenantId}}
+Content-Type: application/json
+
+{
+  "displayName": "ACME Corporation International",
+  "supportedLanguages": [
+    "en-US",
+    "fr-FR",
+    "es-ES"
+  ],
+  "timezone": "America/New_York",
+  "currency": "USD",
+  "primaryColor": "#0066CC",
+  "secondaryColor": "#003366",
+  "logoUrl": "https://example.com/acme-logo-v2.png",
+  "allowedReturnUrls": [
+    "{{redirectUri}}",
+    "https://acme.example.com/callback",
+    "https://app.acme.com/auth/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://acme.example.com",
+    "https://app.acme.com"
+  ],
+  "associatedClientIds": [
+    "{{clientId}}"
+  ],
+  "isActive": true
+}
+
+### Get Tenant Branding CSS (Public endpoint)
+GET {{baseUrl}}/api/tenant/{{tenantId}}/branding.css
+
+### Get Tenant Language Settings (Public endpoint)
+GET {{baseUrl}}/api/tenant/{{tenantId}}/language
+
+### Delete Tenant
+# DELETE {{baseUrl}}/api/tenant/{{createdTenantId}}
+
+
+
+
 ###############################################################################
 ### STEP 0: USER REGISTRATION & ACTIVATION (Before Login)
 ###############################################################################
 
-### Register New User (Creates user with PendingActivation status)
+### Step 0.1: Register New User (WITHOUT password - sends notification to external app)
 # @name registerUser
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "Test",
+  "lastName": "User",
+  "tenantId": "{{tenantId}}"
+}
+
+# Response (202 Accepted):
+# - requestId: Unique request ID for tracking
+# - email: User's email
+# - tenantId: Associated tenant
+# - status: "pending" (awaiting external validation)
+# NOTE: User is NOT created yet - external app must validate and call /api/users/register
+
+### Step 0.2: External App Validates and Creates User (this endpoint is called by external app)
+# NOTE: This is typically done by your external application, not manually
+# The external app receives the notification from Step 0.1 and decides to approve/reject
+# If approved, it calls this endpoint to actually create the user
+# @name createUserByExternalApp
 POST {{baseUrl}}/api/users/register
 Content-Type: application/json
 
@@ -42,31 +211,86 @@ Content-Type: application/json
   "email": "{{userEmail}}",
   "firstName": "Test",
   "lastName": "User",
-  "password": "TempP@ssw0rd123!",
-  "tenantId": "{{tenantId}}"
+  "tenantId": "{{tenantId}}",
+  "requestId": "abc-123-from-notification"
 }
 
 # Response includes:
 # - userId: GUID of created user
 # - email: User's email
 # - status: "PendingActivation"
-# NOTE: Activation token is NOT returned in response for security
-# In DEV mode, check console logs for activation token
+# - activationToken: Token for email activation (DEV mode only)
+# NOTE: In production, activation token is sent via email, not in response
 
-### Extract userId from registration response
-@registeredUserId = {{registerUser.response.body.userId}}
+### Extract userId from external app creation response
+@registeredUserId = {{createUserByExternalApp.response.body.userId}}
 
-### Activate User Account (Copy token from console logs)
-# IMPORTANT: Get the activation token from application console output (DEV mode only)
+
+
+###############################################################################
+### ADMIN OPERATIONS: USER ROLE & PERMISSION MANAGEMENT
+###############################################################################
+
+### Assign Role to User
+POST {{baseUrl}}/api/users/assign-role
+Content-Type: application/json
+
+{
+  "userId": "{{registeredUserId}}",
+  "roleName": "User"
+}
+
+# Available roles: TenantAdmin, User, Reader, etc.
+
+### Assign Scope/Permission to User
+POST {{baseUrl}}/api/users/assign-scope
+Content-Type: application/json
+
+{
+  "userId": "{{registeredUserId}}",
+  "scopeName": "users.write"
+}
+
+# Scopes represent fine-grained permissions
+# Examples: users.read, users.write, tenants.manage, clients.manage
+
+### Add User to Additional Tenant
+POST {{baseUrl}}/api/users/{{registeredUserId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "another-tenant"
+}
+
+### Remove User from Tenant
+# DELETE {{baseUrl}}/api/users/{{registeredUserId}}/tenants/another-tenant
+
+### Get User Details
+GET {{baseUrl}}/api/users/{{registeredUserId}}
+
+# Response includes:
+# - id, email, firstName, lastName
+# - tenantIds (array of tenant access)
+# - roles (array of role names)
+# - scopes (array of permission scopes)
+# - status (Active, PendingActivation, etc.)
+
+
+
+
+
+
+### Step 0.3: Activate User Account (User clicks link in email)
+# IMPORTANT: Get the activation token from email or application console output (DEV mode)
 # Replace YOUR_ACTIVATION_TOKEN_HERE with the actual token from console (without quotes)
-@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQGyUdHrHx1YBk8ZMdT9UsY8v4E8Ej71x6TTIc6GpEt/GTXqfLN4eJgTF8VTkLtO/jgs9EB9ToGSv9y9XQkD3ql7+uVpO0dp3xd6tTXa6yBCdcCsYW1Eyu2Sq0KBXWrIR2rYIntBQ8dEFOT96ss3ju8kS4+UkvTyFMAB31TtrSsRLHjg+aDKX3J1nxaCiKOTgJM=
-POST {{baseUrl}}/api/account/activate
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQGOr7LD2uizpY9t6UkjBD6YMrt7TX/Hqusc7uj6IHkXfwETx9bq+l4SVe1YjxtInxASBsXvnKuVccv2I7gILXvyVYBM/ufcW9IIPPAI9obGigCdW0OC5SoeLfBv6pb0VVl2+zUjqLZ7EpWAU9GjwQXMHIWevVCyv7cNOhMzCc1wk+RBfSRsh7x4vligXDchSck=
+# @name activateUser
+POST {{baseUrl}}/api/auth/activate
 Content-Type: application/json
 
 {
   "token": "{{activationToken}}",
   "userId": "{{registeredUserId}}",
-  "tenantId": "{{tenantId}}",
   "newPassword": "{{userPassword}}",
   "confirmPassword": "{{userPassword}}"
 }
@@ -183,8 +407,14 @@ Content-Type: application/json
   "tenantId": "{{tenantId}}"
 }
 
-### Authorization Request - Using Cookie from Login
-# This request uses the authentication cookie from the previous login
+### Authorization Request - Using Cookie from Login (OPTION 1: Automatic)
+# This request automatically uses cookies from the previous login
+# Works with VS Code REST Client and most HTTP clients
+GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
+
+### Authorization Request - Using Cookie from Login (OPTION 2: Manual extraction)
+# If automatic cookies don't work, use this version with explicit Cookie header
+# @name authWithCookie
 GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values={{acrValues}}
 Cookie: {{loginApi.response.headers.Set-Cookie}}
 
@@ -234,22 +464,50 @@ token={{accessToken}}
 &client_id={{clientId}}
 
 
+
 ###############################################################################
 ### NOTES:
 ###############################################################################
 # 
-# Complete User Registration & Login Flow:
-# STEP 0: Register user → Get activation token from console → Activate account
+# Complete User Registration & Login Flow (NEW - API-only):
+# STEP 0.1: User submits registration (NO password) → POST /api/auth/register → 202 Accepted
+# STEP 0.2: External app validates → POST /api/users/register → User created (PendingActivation)
+# STEP 0.3: User receives email → Clicks activation link → POST /api/auth/activate (defines password)
 # STEP 1: Discover OIDC configuration
 # STEP 2: Start authorization flow (browser) with PKCE
 # STEP 3: Exchange authorization code for tokens
 # STEP 4-7: Use tokens, refresh, revoke
 #
+# Admin Setup Flow (Complete tenant setup from scratch):
+# ADMIN 1: Create Client → POST /api/clients (get clientId)
+# ADMIN 2: Create Tenant → POST /api/tenant (link to clientId, set redirect URIs)
+# ADMIN 3: Update Client → PUT /api/clients/{id} (associate with tenantId)
+# ADMIN 4: Create Users → POST /api/users/register (for tenant)
+# ADMIN 5: Assign Roles → POST /api/users/assign-role
+# ADMIN 6: Assign Permissions → POST /api/users/assign-scope
+#
+# Registration Flow Details:
+# 1. POST /api/auth/register (email, firstName, lastName, tenantId) → NO PASSWORD
+#    → Returns 202 Accepted with requestId
+#    → Sends notification to external app (fire-and-forget)
+# 
+# 2. External app validates the request (business logic, KYC, compliance)
+#    → If approved: POST /api/users/register (creates user with PendingActivation)
+#    → If rejected: No action (user never created)
+#
+# 3. User receives activation email with token (24h expiration)
+#    → POST /api/auth/activate (token, userId, newPassword)
+#    → Status changes to Active
+#    → User can now login
+#
 # Client/Tenant Architecture:
 # - Clients are associated with one or more tenants (via associatedTenantIds)
 # - Redirect URIs AND CORS Origins are defined at the Tenant level (allowedReturnUrls and allowedCorsOrigins)
 # - IdentityServer dynamically aggregates redirect URIs and CORS origins from all associated tenants
-# - The client 'johodp-spa' must be associated with tenant 'acme-corp' for this flow to work
+# - Workflow: Create Client → Create Tenant (with clientId) → Update Client (with tenantId)
+# - A client is VISIBLE to IdentityServer only if:
+#   1. It has at least one associated tenant, AND
+#   2. The associated tenant(s) have at least one allowedReturnUrl configured
 #
 # PKCE Flow Steps:
 # 1. Generate code_verifier (random 43-128 char string)
@@ -269,6 +527,7 @@ token={{accessToken}}
 # - No acr_values: User gets wildcard access (TenantId = "*")
 # - acr_values=tenant:xyz: User restricted to tenant "xyz"
 # - Users with TenantId="*" can access any tenant
+# - Users can belong to multiple tenants via POST /api/users/{id}/tenants
 #
 # JWT Token Claims:
 # - Access tokens and ID tokens include custom claims when 'johodp.identity' scope is requested:
@@ -285,5 +544,12 @@ token={{accessToken}}
 # Authorization Note:
 # - ALL ENDPOINTS ARE PUBLIC (No authentication required) for development
 # - In production, add proper authorization to sensitive endpoints
+#
+# Coherent Test Data Set:
+# - Client: johodp-spa (SPA application)
+# - Tenant: acme-corp (ACME Corporation)
+# - User: test.user@example2.com (linked to acme-corp)
+# - Redirect: http://localhost:4200/callback
+# - All entities are related and work together in PKCE flow
 #
 ###############################################################################

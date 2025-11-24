@@ -136,29 +136,34 @@ public class UsersController : ControllerBase
     /// <summary>
     /// Add user to a tenant
     /// </summary>
-    [HttpPost("{userId}/tenants/{tenantId}")]
-    public async Task<IActionResult> AddToTenant(Guid userId, string tenantId)
+    [HttpPost("{userId}/tenants")]
+    public async Task<IActionResult> AddToTenant(Guid userId, [FromBody] AddUserToTenantRequest request)
     {
-        _logger.LogInformation("Adding user {UserId} to tenant {TenantId}", userId, tenantId);
+        _logger.LogInformation("Adding user {UserId} to tenant {TenantId}", userId, request.TenantId);
         
         try
         {
-            var command = new AddUserToTenantCommand { UserId = userId, TenantId = tenantId };
+            var command = new AddUserToTenantCommand { UserId = userId, TenantId = request.TenantId };
             await _addUserToTenantHandler.Handle(command);
             
-            _logger.LogInformation("Successfully added user {UserId} to tenant {TenantId}", userId, tenantId);
+            _logger.LogInformation("Successfully added user {UserId} to tenant {TenantId}", userId, request.TenantId);
             return Ok(new { message = "User added to tenant successfully" });
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning(ex, "Failed to add user {UserId} to tenant {TenantId}: {Message}", userId, tenantId, ex.Message);
+            _logger.LogWarning(ex, "Failed to add user {UserId} to tenant {TenantId}: {Message}", userId, request.TenantId, ex.Message);
             return NotFound(ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding user {UserId} to tenant {TenantId}", userId, tenantId);
+            _logger.LogError(ex, "Error adding user {UserId} to tenant {TenantId}", userId, request.TenantId);
             return StatusCode(500, "An error occurred while adding user to tenant");
         }
+    }
+
+    public class AddUserToTenantRequest
+    {
+        public string TenantId { get; set; } = string.Empty;
     }
 
     /// <summary>

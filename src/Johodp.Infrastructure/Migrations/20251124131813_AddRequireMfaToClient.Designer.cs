@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,13 +13,14 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Johodp.Infrastructure.Migrations
 {
     [DbContext(typeof(JohodpDbContext))]
-    partial class JohodpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251124131813_AddRequireMfaToClient")]
+    partial class AddRequireMfaToClient
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasDefaultSchema("dbo")
                 .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
@@ -68,7 +70,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("clients", "dbo");
+                    b.ToTable("clients", (string)null);
                 });
 
             modelBuilder.Entity("Johodp.Domain.Tenants.Aggregates.Tenant", b =>
@@ -174,7 +176,7 @@ namespace Johodp.Infrastructure.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("tenants", "dbo");
+                    b.ToTable("tenants", (string)null);
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Permission", b =>
@@ -201,7 +203,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("permissions", "dbo");
+                    b.ToTable("permissions", (string)null);
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Role", b =>
@@ -234,7 +236,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("roles", "dbo");
+                    b.ToTable("roles", (string)null);
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Scope", b =>
@@ -270,7 +272,7 @@ namespace Johodp.Infrastructure.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("scopes", "dbo");
+                    b.ToTable("scopes", (string)null);
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
@@ -329,7 +331,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasIndex("ScopeId");
 
-                    b.ToTable("users", "dbo");
+                    b.ToTable("users", (string)null);
                 });
 
             modelBuilder.Entity("UserPermissions", b =>
@@ -344,7 +346,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserPermissions", "dbo");
+                    b.ToTable("UserPermissions");
                 });
 
             modelBuilder.Entity("UserRoles", b =>
@@ -359,7 +361,7 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserRoles", "dbo");
+                    b.ToTable("UserRoles");
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>

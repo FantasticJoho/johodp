@@ -70,6 +70,33 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
                 client.Deactivate();
         }
 
+        // Update MFA requirement
+        if (dto.RequireMfa.HasValue)
+        {
+            if (dto.RequireMfa.Value)
+                client.EnableMfa();
+            else
+                client.DisableMfa();
+        }
+
+        // Update client secret requirement
+        if (dto.RequireClientSecret.HasValue)
+        {
+            if (dto.RequireClientSecret.Value)
+                client.RequireSecret();
+            else
+                client.AllowPublicClient();
+        }
+
+        // Update consent requirement
+        if (dto.RequireConsent.HasValue)
+        {
+            if (dto.RequireConsent.Value)
+                client.EnableConsent();
+            else
+                client.DisableConsent();
+        }
+
         // Save client
         await _clientRepository.UpdateAsync(client);
         await _unitOfWork.SaveChangesAsync();
@@ -87,6 +114,7 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
             AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
+            RequireMfa = client.RequireMfa,
             IsActive = client.IsActive,
             CreatedAt = client.CreatedAt
         };

@@ -11,6 +11,7 @@ public class Client : AggregateRoot
     public string[] AllowedScopes { get; private set; } = Array.Empty<string>();
     public bool RequireClientSecret { get; private set; }
     public bool RequireConsent { get; private set; }
+    public bool RequireMfa { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
 
@@ -23,7 +24,8 @@ public class Client : AggregateRoot
     public static Client Create(
         string clientName,
         string[] allowedScopes,
-        bool requireConsent = true)
+        bool requireConsent = true,
+        bool requireMfa = false)
     {
         if (string.IsNullOrWhiteSpace(clientName))
             throw new ArgumentException("Client name cannot be empty", nameof(clientName));
@@ -35,6 +37,7 @@ public class Client : AggregateRoot
             AllowedScopes = allowedScopes ?? Array.Empty<string>(),
             RequireClientSecret = true,
             RequireConsent = requireConsent,
+            RequireMfa = requireMfa,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -98,5 +101,35 @@ public class Client : AggregateRoot
     public void UpdateAllowedScopes(string[] scopes)
     {
         AllowedScopes = scopes ?? Array.Empty<string>();
+    }
+
+    public void EnableMfa()
+    {
+        RequireMfa = true;
+    }
+
+    public void DisableMfa()
+    {
+        RequireMfa = false;
+    }
+
+    public void RequireSecret()
+    {
+        RequireClientSecret = true;
+    }
+
+    public void AllowPublicClient()
+    {
+        RequireClientSecret = false;
+    }
+
+    public void EnableConsent()
+    {
+        RequireConsent = true;
+    }
+
+    public void DisableConsent()
+    {
+        RequireConsent = false;
     }
 }

@@ -61,6 +61,9 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
+        // MFA Authentication Service (for client-specific MFA)
+        services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
+
         // Additional handlers not yet converted to IRequestHandler (will be auto-registered once converted)
         services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
         services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
@@ -78,6 +81,9 @@ public static class ServiceCollectionExtensions
                 options.ConfigureDbContext = b =>
                     b.UseNpgsql(connectionString,
                         sql => sql.MigrationsAssembly("Johodp.Infrastructure"));
+                
+                // Use 'dbo' schema for IdentityServer tables (consistent with JohodpDbContext)
+                options.DefaultSchema = "dbo";
                 
                 // Automatic cleanup of expired tokens
                 options.EnableTokenCleanup = true;

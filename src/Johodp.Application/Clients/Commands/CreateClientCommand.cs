@@ -38,7 +38,8 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
         var client = Client.Create(
             dto.ClientName,
             dto.AllowedScopes?.ToArray() ?? Array.Empty<string>(),
-            dto.RequireConsent);
+            dto.RequireConsent,
+            dto.RequireMfa);
 
         // Save client
         await _clientRepository.AddAsync(client);
@@ -57,6 +58,7 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
             AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
+            RequireMfa = client.RequireMfa,
             IsActive = client.IsActive,
             CreatedAt = client.CreatedAt
         };

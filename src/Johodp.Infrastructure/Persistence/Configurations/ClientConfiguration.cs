@@ -42,6 +42,9 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(x => x.RequireConsent)
             .HasDefaultValue(true);
 
+        builder.Property(x => x.RequireMfa)
+            .HasDefaultValue(false);
+
         builder.Property(x => x.IsActive)
             .HasDefaultValue(true);
 

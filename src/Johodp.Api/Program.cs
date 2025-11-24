@@ -3,6 +3,7 @@ using Johodp.Api.Middleware;
 using Serilog;
 using Scalar.AspNetCore;
 using Swashbuckle.AspNetCore.SwaggerGen;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +56,37 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 var app = builder.Build();
+app.UseStaticFiles();
+app.UseDefaultFiles();
+// Apply migrations automatically on startup (development/staging)
+// Comment out in production - use init-db.ps1 script instead
+if (app.Environment.IsDevelopment())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        
+        try
+        {
+            // Apply JohodpDbContext migrations (11 migrations)
+            var johodpDb = scope.ServiceProvider.GetRequiredService<Johodp.Infrastructure.Persistence.DbContext.JohodpDbContext>();
+            logger.LogInformation("Applying JohodpDbContext migrations...");
+            johodpDb.Database.Migrate();
+            logger.LogInformation("✅ JohodpDbContext migrations applied successfully");
+            
+            // Apply PersistedGrantDbContext migrations (1 migration for IdentityServer)
+            var persistedGrantDb = scope.ServiceProvider.GetRequiredService<Duende.IdentityServer.EntityFramework.DbContexts.PersistedGrantDbContext>();
+            logger.LogInformation("Applying PersistedGrantDbContext migrations...");
+            persistedGrantDb.Database.Migrate();
+            logger.LogInformation("✅ PersistedGrantDbContext migrations applied successfully");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "❌ An error occurred while migrating the database");
+            throw;
+        }
+    }
+}
 
 // Add request logging middleware for production monitoring
 app.UseSerilogRequestLogging(options =>

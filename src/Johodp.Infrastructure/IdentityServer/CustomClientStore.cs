@@ -62,12 +62,24 @@ public class CustomClientStore : IClientStore
     {
         // Récupérer tous les tenants associés
         var tenants = new List<Domain.Tenants.Aggregates.Tenant>();
-        foreach (var tenantId in domainClient.AssociatedTenantIds)
+        foreach (var tenantIdString in domainClient.AssociatedTenantIds)
         {
-            var tenant = await _tenantRepository.GetByNameAsync(tenantId);
-            if (tenant != null && tenant.IsActive)
+            // Parse tenant ID as GUID
+            if (Guid.TryParse(tenantIdString, out var tenantGuid))
             {
-                tenants.Add(tenant);
+                var tenantId = Domain.Tenants.ValueObjects.TenantId.From(tenantGuid);
+                var tenant = await _tenantRepository.GetByIdAsync(tenantId);
+                if (tenant != null && tenant.IsActive)
+                {
+                    tenants.Add(tenant);
+                }
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Invalid tenant ID format in client {ClientName}: {TenantId}",
+                    domainClient.ClientName,
+                    tenantIdString);
             }
         }
 

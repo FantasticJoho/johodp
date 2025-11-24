@@ -19,6 +19,8 @@
 #
 # Note: Redirect URIs and CORS Origins are managed at the Tenant level, not directly on clients
 # The client will inherit redirect URIs and CORS origins from all associated tenants
+#
+# RequireMfa: Set to true to enforce Multi-Factor Authentication (Microsoft Authenticator)
 POST {{baseUrl}}/api/clients
 Content-Type: application/json
 
@@ -31,7 +33,26 @@ Content-Type: application/json
     "johodp.identity",
     "johodp.api"
   ],
-  "requireConsent": false
+  "requireConsent": false,
+  "requireMfa": false
+}
+
+### Create a secure client WITH MFA (Microsoft Authenticator required)
+POST {{baseUrl}}/api/clients
+Content-Type: application/json
+
+{
+  "clientName": "secure-banking-app",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "banking.transactions"
+  ],
+  "requireConsent": true,
+  "requireMfa": true
 }
 
 ### Create another OAuth2 Client
@@ -60,6 +81,7 @@ GET {{baseUrl}}/api/clients/by-name/{{clientName}}
 # Note: Redirect URIs and CORS Origins are managed at the Tenant level
 # To change redirect URIs or CORS origins, update the associated Tenant's allowedReturnUrls and allowedCorsOrigins
 # You can change which tenants are associated with this client
+# RequireMfa can be toggled to enable/disable Multi-Factor Authentication
 PUT {{baseUrl}}/api/clients/{{clientId}}
 Content-Type: application/json
 
@@ -76,6 +98,7 @@ Content-Type: application/json
     "acme-corp",
     "another-tenant-id"
   ],
+  "requireMfa": true,
   "isActive": true
 }
 
@@ -99,7 +122,7 @@ POST {{baseUrl}}/api/tenant
 Content-Type: application/json
 
 {
-  "name": "acme-corp",
+  "name": "acme-corp1",
   "displayName": "ACME Corporation",
   "defaultLanguage": "en-US",
   "supportedLanguages": [
@@ -129,7 +152,7 @@ Content-Type: application/json
 GET {{baseUrl}}/api/tenant
 
 ### Get Tenant by ID
-@tenantId = f7f4649b-017d-46af-a264-c54cf55f21e8
+@tenantId = 672a0fc2-23e3-478c-90b7-40baa8a3aa21
 GET {{baseUrl}}/api/tenant/{{tenantId}}
 
 ### Get Tenant by Name
@@ -293,7 +316,7 @@ Content-Type: application/json
 
 ### Activate the registered user (Copy token from console logs)
 # IMPORTANT: Get the token from application console output (DEV mode only)
-@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQFFduQGDhVUre62GHbtirCSiG9ZJ0LERld0npSOsZHZYlrdR9yplHJVCHSB0YfGU3mW3EzFrczaZkcVU4WNebYyNCalxXWgrIe7qXuWbyBHjL0RwrEtG1DgZPtTZ0ILZtPnlLyF8eODlkHTDcNF592QfV+w0noIPsitC2h1zKBs+kKEWx68QCVnHcJb08eNb+U=
+@activationToken =  CfDJ8IISH9pSP0dDqu2Sb7sBxQGKcCwAdDuh5O3PuQWgttVALMVAi4RrFi/u5FF/7n/yn8ZhT7noz5IGPuQ/aAfFhzx0U1SYOgzCQS9TplPwVKDeb0bKWL/tEwQFL62g2Lq7+i+BS8h+CPxJx8sqdePUJV/a6xyqLn4kM9VINDiaBlefS9BTCG15ZUuSRVGcqEb4zf6ZYvFnKAxLQ5/mkODLaho=
 POST {{baseUrl}}/api/account/activate
 Content-Type: application/json
 
@@ -333,7 +356,7 @@ token={{activationToken2}}
 ###############################################################################
 
 ### Get User by ID
-@userId = 00000000-0000-0000-0000-000000000000
+@userId = 47c60cc4-16f0-4295-a62e-6cb7e167f541
 GET {{baseUrl}}/api/users/{{userId}}
 
 # Response includes:
@@ -370,7 +393,7 @@ Content-Type: application/json
 
 {
   "userId": "{{userId}}",
-  "roleName": "TenantAdmin"
+  "roleName": "User"
 }
 
 # Available roles: TenantAdmin, User, etc.

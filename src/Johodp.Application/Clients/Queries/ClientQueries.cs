@@ -40,6 +40,7 @@ public class GetClientByIdQueryHandler : IRequestHandler<GetClientByIdQuery, Cli
             AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
+            RequireMfa = client.RequireMfa,
             IsActive = client.IsActive,
             CreatedAt = client.CreatedAt
         };
@@ -80,6 +81,7 @@ public class GetClientByNameQueryHandler : IRequestHandler<GetClientByNameQuery,
             AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
+            RequireMfa = client.RequireMfa,
             IsActive = client.IsActive,
             CreatedAt = client.CreatedAt
         };
