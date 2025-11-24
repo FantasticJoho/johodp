@@ -77,7 +77,21 @@ public static class ServiceCollectionExtensions
         // IdentityServer with custom client store (loads from database)
         services.AddScoped<Duende.IdentityServer.Stores.IClientStore, Johodp.Infrastructure.IdentityServer.CustomClientStore>();
         
-        var idServerBuilder = services.AddIdentityServer()
+        var idServerBuilder = services.AddIdentityServer(options =>
+            {
+                // Configure where IdentityServer redirects for user interactions
+                options.UserInteraction.LoginUrl = "/api/auth/login";
+                options.UserInteraction.LoginReturnUrlParameter = "returnUrl";
+                options.UserInteraction.CreateAccountUrl = "/api/auth/register";
+                options.UserInteraction.LogoutUrl = "/api/auth/logout";
+                options.UserInteraction.DeviceVerificationUrl = "/api/auth/device";
+                
+                // Not needed since clients have RequireConsent = false
+                // options.UserInteraction.ConsentUrl = "/consent";
+                
+                // Error handling can be done via API responses (no error page needed)
+                options.UserInteraction.ErrorUrl = "/error";
+            })
             .AddInMemoryApiScopes(IdentityServerConfig.GetApiScopes())
             .AddInMemoryApiResources(IdentityServerConfig.GetApiResources())
             .AddInMemoryIdentityResources(IdentityServerConfig.GetIdentityResources())
