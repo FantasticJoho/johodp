@@ -61,6 +61,12 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
+        // Email Service (pour l'envoi d'emails d'activation, etc.)
+        services.AddScoped<IEmailService, Johodp.Infrastructure.Services.EmailService>();
+
+        // User Activation Service (génère les tokens d'activation et envoie les emails)
+        services.AddScoped<IUserActivationService, Johodp.Infrastructure.Services.UserActivationService>();
+
         // MFA Authentication Service (for client-specific MFA)
         services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
 

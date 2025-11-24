@@ -1,36 +1,56 @@
 namespace Johodp.Application.Users.EventHandlers;
 
 using Johodp.Application.Common.Events;
+using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.Events;
 using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Handles UserPendingActivationEvent by sending activation email
+/// Handles UserPendingActivationEvent by triggering activation email sending
 /// </summary>
 public class SendActivationEmailHandler : IEventHandler<UserPendingActivationEvent>
 {
-    // TODO: Inject IEmailService when implemented
+    private readonly IUserActivationService _userActivationService;
     private readonly ILogger<SendActivationEmailHandler> _logger;
 
-    public SendActivationEmailHandler(ILogger<SendActivationEmailHandler> logger)
+    public SendActivationEmailHandler(
+        IUserActivationService userActivationService,
+        ILogger<SendActivationEmailHandler> logger)
     {
+        _userActivationService = userActivationService;
         _logger = logger;
     }
 
     public async Task HandleAsync(UserPendingActivationEvent @event, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "Sending activation email to user {Email} (UserId: {UserId})",
+            "User pending activation event received for {Email} (UserId: {UserId}, Tenant: {TenantId})",
             @event.Email,
-            @event.UserId);
+            @event.UserId,
+            @event.TenantId ?? "wildcard");
 
-        // TODO: Implement email sending
-        // await _emailService.SendActivationEmailAsync(@event.Email, @event.FirstName, ...);
-        
-        _logger.LogInformation(
-            "Activation email sent successfully to {Email}",
-            @event.Email);
+        // Envoyer l'email d'activation via le service dédié
+        // Le service génère le token et envoie l'email
+        var sent = await _userActivationService.SendActivationEmailAsync(
+            @event.UserId,
+            @event.Email,
+            @event.FirstName,
+            @event.LastName,
+            @event.TenantId);
 
-        await Task.CompletedTask;
+        if (sent)
+        {
+            _logger.LogInformation(
+                "Activation email triggered successfully for {Email} (UserId: {UserId})",
+                @event.Email,
+                @event.UserId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Failed to trigger activation email for {Email} (UserId: {UserId})",
+                @event.Email,
+                @event.UserId);
+        }
     }
 }

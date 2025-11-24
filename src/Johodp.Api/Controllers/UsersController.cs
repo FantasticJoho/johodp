@@ -57,35 +57,13 @@ public class UsersController : ControllerBase
         {
             var result = await _sender.Send(command);
             
-            // Récupérer l'utilisateur pour générer le token d'activation
-            var user = await _userManager.FindByIdAsync(result.UserId.ToString());
-            if (user == null)
-            {
-                throw new InvalidOperationException("User was created but could not be retrieved");
-            }
-
-            // Générer le token d'activation
-            var activationToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
+            // L'email d'activation sera envoyé automatiquement via l'Event Handler
+            // (SendActivationEmailHandler) qui écoute UserPendingActivationEvent
             
             _logger.LogInformation(
                 "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation", 
                 command.Email, 
                 result.UserId);
-
-#if DEBUG
-            // En développement uniquement : afficher le token dans les logs
-            _logger.LogWarning(
-                "[DEV ONLY] Activation token for {Email} (UserId: {UserId}): {Token}",
-                result.Email,
-                result.UserId,
-                activationToken);
-            Console.WriteLine($"\n=== ACTIVATION TOKEN (DEV ONLY) ===");
-            Console.WriteLine($"Email: {result.Email}");
-            Console.WriteLine($"UserId: {result.UserId}");
-            Console.WriteLine($"Token: {activationToken}");
-            Console.WriteLine($"Activation URL: {Request.Scheme}://{Request.Host}/account/activate?token={Uri.EscapeDataString(activationToken)}&userId={result.UserId}&tenant={command.TenantId}");
-            Console.WriteLine($"===================================\n");
-#endif
 
             return Created($"/api/users/{result.UserId}", new
             {
