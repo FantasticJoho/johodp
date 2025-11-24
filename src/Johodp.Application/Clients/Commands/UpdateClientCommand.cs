@@ -42,27 +42,23 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
             client.UpdateAllowedScopes(dto.AllowedScopes.ToArray());
         }
 
-        // Update redirect URIs (replace all)
-        if (dto.AllowedRedirectUris != null)
+        // Update associated tenants (replace all)
+        if (dto.AssociatedTenantIds != null)
         {
-            // Remove all existing
-            var currentUris = client.AllowedRedirectUris.ToList();
-            foreach (var uri in currentUris)
+            // Remove tenants that are no longer associated
+            var currentTenants = client.AssociatedTenantIds.ToList();
+            var tenantsToRemove = currentTenants.Except(dto.AssociatedTenantIds).ToList();
+            foreach (var tenantId in tenantsToRemove)
             {
-                client.RemoveRedirectUri(uri);
+                client.DissociateTenant(tenantId);
             }
 
-            // Add new ones
-            foreach (var uri in dto.AllowedRedirectUris)
+            // Add new tenant associations
+            var tenantsToAdd = dto.AssociatedTenantIds.Except(currentTenants).ToList();
+            foreach (var tenantId in tenantsToAdd)
             {
-                client.AddRedirectUri(uri);
+                client.AssociateTenant(tenantId);
             }
-        }
-
-        // Update CORS origins
-        if (dto.AllowedCorsOrigins != null)
-        {
-            client.UpdateCorsOrigins(dto.AllowedCorsOrigins.ToArray());
         }
 
         // Update active status
@@ -88,8 +84,7 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
             Id = client.Id.Value,
             ClientName = client.ClientName,
             AllowedScopes = client.AllowedScopes.ToList(),
-            AllowedRedirectUris = client.AllowedRedirectUris.ToList(),
-            AllowedCorsOrigins = client.AllowedCorsOrigins.ToList(),
+            AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
             IsActive = client.IsActive,

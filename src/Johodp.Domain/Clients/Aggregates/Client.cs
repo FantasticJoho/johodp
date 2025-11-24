@@ -9,48 +9,77 @@ public class Client : AggregateRoot
     public ClientId Id { get; private set; } = null!;
     public string ClientName { get; private set; } = null!;
     public string[] AllowedScopes { get; private set; } = Array.Empty<string>();
-    public string[] AllowedRedirectUris { get; private set; } = Array.Empty<string>();
-    public string[] AllowedCorsOrigins { get; private set; } = Array.Empty<string>();
     public bool RequireClientSecret { get; private set; }
     public bool RequireConsent { get; private set; }
     public bool IsActive { get; private set; }
     public DateTime CreatedAt { get; private set; }
+
+    // Les tenant IDs associés à ce client
+    private readonly List<string> _associatedTenantIds = new();
+    public IReadOnlyList<string> AssociatedTenantIds => _associatedTenantIds.AsReadOnly();
 
     private Client() { }
 
     public static Client Create(
         string clientName,
         string[] allowedScopes,
-        string[] redirectUris,
-        string[] corsOrigins,
         bool requireConsent = true)
     {
         if (string.IsNullOrWhiteSpace(clientName))
             throw new ArgumentException("Client name cannot be empty", nameof(clientName));
-
-        if (redirectUris == null || redirectUris.Length == 0)
-            throw new ArgumentException("At least one redirect URI is required", nameof(redirectUris));
 
         var client = new Client
         {
             Id = ClientId.Create(),
             ClientName = clientName,
             AllowedScopes = allowedScopes ?? Array.Empty<string>(),
-            AllowedRedirectUris = redirectUris,
-            AllowedCorsOrigins = corsOrigins ?? Array.Empty<string>(),
             RequireClientSecret = true,
             RequireConsent = requireConsent,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
 
+        return client;
+
         client.AddDomainEvent(new ClientCreatedEvent(
             client.Id.Value,
             client.ClientName,
-            client.AllowedRedirectUris
+            Array.Empty<string>() // Les URLs seront calculées depuis les tenants
         ));
 
         return client;
+    }
+
+    /// <summary>
+    /// Calcule les returnUrls autorisées en agrégeant celles de tous les tenants associés
+    /// </summary>
+    public string[] GetAllowedRedirectUris(Func<string, string[]> getTenantReturnUrls)
+    {
+        var allUrls = _associatedTenantIds
+            .SelectMany(getTenantReturnUrls)
+            .Distinct()
+            .ToArray();
+
+        if (allUrls.Length == 0)
+            throw new InvalidOperationException($"Client {ClientName} has no redirect URIs from associated tenants");
+
+        return allUrls;
+    }
+
+    public void AssociateTenant(string tenantId)
+    {
+        if (string.IsNullOrWhiteSpace(tenantId))
+            throw new ArgumentException("Tenant ID cannot be empty", nameof(tenantId));
+
+        if (!_associatedTenantIds.Contains(tenantId))
+        {
+            _associatedTenantIds.Add(tenantId);
+        }
+    }
+
+    public void DissociateTenant(string tenantId)
+    {
+        _associatedTenantIds.Remove(tenantId);
     }
 
     public void Deactivate()
@@ -63,51 +92,11 @@ public class Client : AggregateRoot
         IsActive = true;
     }
 
-    public void AddRedirectUri(string redirectUri)
-    {
-        if (string.IsNullOrWhiteSpace(redirectUri))
-            throw new ArgumentException("Redirect URI cannot be empty", nameof(redirectUri));
-
-        if (AllowedRedirectUris.Contains(redirectUri))
-            return;
-
-        AllowedRedirectUris = AllowedRedirectUris.Append(redirectUri).ToArray();
-    }
-
-    public void RemoveRedirectUri(string redirectUri)
-    {
-        if (string.IsNullOrWhiteSpace(redirectUri))
-            throw new ArgumentException("Redirect URI cannot be empty", nameof(redirectUri));
-
-        AllowedRedirectUris = AllowedRedirectUris.Where(uri => uri != redirectUri).ToArray();
-    }
+    // Les redirect URIs sont maintenant gérées au niveau des Tenants
+    // Ces méthodes ne sont plus nécessaires car les URLs viennent des tenants associés
 
     public void UpdateAllowedScopes(string[] scopes)
     {
         AllowedScopes = scopes ?? Array.Empty<string>();
-    }
-
-    public void AddCorsOrigin(string origin)
-    {
-        if (string.IsNullOrWhiteSpace(origin))
-            throw new ArgumentException("CORS origin cannot be empty", nameof(origin));
-
-        if (AllowedCorsOrigins.Contains(origin))
-            return;
-
-        AllowedCorsOrigins = AllowedCorsOrigins.Append(origin).ToArray();
-    }
-
-    public void RemoveCorsOrigin(string origin)
-    {
-        if (string.IsNullOrWhiteSpace(origin))
-            throw new ArgumentException("CORS origin cannot be empty", nameof(origin));
-
-        AllowedCorsOrigins = AllowedCorsOrigins.Where(o => o != origin).ToArray();
-    }
-
-    public void UpdateCorsOrigins(string[] origins)
-    {
-        AllowedCorsOrigins = origins ?? Array.Empty<string>();
     }
 }

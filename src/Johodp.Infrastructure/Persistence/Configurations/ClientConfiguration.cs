@@ -28,15 +28,13 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
                 v => string.Join(";", v),
                 v => v.Split(";", StringSplitOptions.RemoveEmptyEntries));
 
-        builder.Property(x => x.AllowedRedirectUris)
+        // AssociatedTenantIds - liste des tenants associés au client
+        builder.Property<List<string>>("_associatedTenantIds")
+            .HasColumnName("associated_tenant_ids")
             .HasConversion(
                 v => string.Join(";", v),
-                v => v.Split(";", StringSplitOptions.RemoveEmptyEntries));
-
-        builder.Property(x => x.AllowedCorsOrigins)
-            .HasConversion(
-                v => string.Join(";", v),
-                v => v.Split(";", StringSplitOptions.RemoveEmptyEntries));
+                v => v.Split(";", StringSplitOptions.RemoveEmptyEntries).ToList())
+            .IsRequired();
 
         builder.Property(x => x.RequireClientSecret)
             .HasDefaultValue(true);

@@ -1,0 +1,403 @@
+### API Authentication Endpoints
+### This file demonstrates all JSON API endpoints for authentication and account management
+### These endpoints are designed for mobile apps, SPAs, and server-to-server integrations
+
+### Variables
+@baseUrl = http://localhost:5000
+@tenantId = acme-corp
+@userEmail = test.api.user@example.com
+@userPassword = MySecureP@ssw0rd123!
+
+###############################################################################
+### REGISTRATION FLOW (API)
+###############################################################################
+
+### Register New User via API
+# @name registerUserApi
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "John",
+  "lastName": "Doe",
+  "password": "TempP@ssw0rd123!",
+  "confirmPassword": "TempP@ssw0rd123!"
+}
+
+# Response:
+# - 201 Created with userId
+# - 409 Conflict if email already exists
+# NOTE: Activation token logged to console in DEV mode
+
+### Extract userId from registration response
+@registeredUserId = {{registerUserApi.response.body.userId}}
+
+
+###############################################################################
+### PASSWORD RESET FLOW (API)
+###############################################################################
+
+### Request Password Reset (Forgot Password)
+# @name forgotPasswordApi
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+# Response:
+# - 200 OK with generic message (PROD)
+# - DEV mode: includes token and resetUrl in response body
+# - Check console logs for token in DEV mode
+
+### Extract reset token from forgot password response (DEV mode only)
+@resetToken = {{forgotPasswordApi.response.body.token}}
+
+### Reset Password with Token
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "token": "{{resetToken}}",
+  "password": "{{userPassword}}",
+  "confirmPassword": "{{userPassword}}"
+}
+
+# Response:
+# - 200 OK with success message
+# - 400 Bad Request if token is invalid or expired
+
+
+###############################################################################
+### ACCOUNT ACTIVATION FLOW (API)
+###############################################################################
+
+### Activate User Account
+# IMPORTANT: Get activation token from console logs (DEV mode)
+# Replace with actual token from Step 1 registration
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQHktOuKbRGcPPV5NhosiFNJWbF9aTZohF_slash__slash_R6ArG0wtXQmZXULeXWqoS_plus_NwIu5ojrqMdomXTZIBsHohQJp6p5POoKQVu9zpG9Gi36NDtASqAk6ZbnroRNV_plus_zu61txt_slash_qUpayPJ_slash_IrAbI7tAHPGh05o8MXIVJiW_slash__plus_ekidupmEGOWiGBf1Z4YnHHjQ2ArGeay3M_equals
+
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "{{activationToken}}",
+  "userId": "{{registeredUserId}}",
+  "tenantId": "{{tenantId}}",
+  "newPassword": "{{userPassword}}",
+  "confirmPassword": "{{userPassword}}"
+}
+
+# Response:
+# - 200 OK with success message
+# - 400 Bad Request if token is invalid or user not found
+
+
+###############################################################################
+### LOGIN & LOGOUT FLOW (API)
+###############################################################################
+
+### Login via API
+# @name loginApi
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+# Response:
+# - 201 Created with userId and session cookie
+# - 401 Unauthorized if credentials are invalid
+# - Cookie: .AspNetCore.Identity.Application (used for subsequent requests)
+
+### Logout via API
+POST {{baseUrl}}/api/auth/logout
+Content-Type: application/json
+
+# Response:
+# - 200 OK with success message
+# - Clears authentication cookie
+
+
+###############################################################################
+### ONBOARDING FLOW (API)
+###############################################################################
+
+### Submit Onboarding Request
+# @name onboardingApi
+POST {{baseUrl}}/api/account/onboarding
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantId}}",
+  "email": "onboarding.user@example.com",
+  "firstName": "Jane",
+  "lastName": "Smith"
+}
+
+# Response:
+# - 202 Accepted with requestId and status
+# - 409 Conflict if email already exists
+# - 400 Bad Request if tenant doesn't exist or is inactive
+# NOTE: Sends notification to tenant's external application for approval
+
+### Extract requestId from onboarding response
+@onboardingRequestId = {{onboardingApi.response.body.requestId}}
+
+
+###############################################################################
+### COMPLETE REGISTRATION & LOGIN SCENARIO
+###############################################################################
+
+### Scenario 1: New user registration and activation flow
+# Step 1: Register user
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "new.user@example.com",
+  "firstName": "New",
+  "lastName": "User",
+  "password": "InitialP@ssw0rd123!",
+  "confirmPassword": "InitialP@ssw0rd123!"
+}
+
+# Step 2: Copy activation token from console logs
+
+# Step 3: Activate account (replace token and userId)
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "YOUR_ACTIVATION_TOKEN_HERE",
+  "userId": "YOUR_USER_ID_HERE",
+  "tenantId": "{{tenantId}}",
+  "newPassword": "FinalP@ssw0rd123!",
+  "confirmPassword": "FinalP@ssw0rd123!"
+}
+
+# Step 4: Login with new password
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "new.user@example.com",
+  "password": "FinalP@ssw0rd123!"
+}
+
+
+###############################################################################
+### Scenario 2: Forgot password flow
+# Step 1: Request password reset
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+# Step 2: Copy reset token from console logs (DEV) or email (PROD)
+
+# Step 3: Reset password with token
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "token": "YOUR_RESET_TOKEN_HERE",
+  "password": "NewP@ssw0rd123!",
+  "confirmPassword": "NewP@ssw0rd123!"
+}
+
+# Step 4: Login with new password
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "NewP@ssw0rd123!"
+}
+
+
+###############################################################################
+### Scenario 3: Onboarding flow with external approval
+# Step 1: User submits onboarding request
+POST {{baseUrl}}/api/account/onboarding
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantId}}",
+  "email": "approved.user@example.com",
+  "firstName": "Approved",
+  "lastName": "User"
+}
+
+# Step 2: Tenant's external application receives notification
+# (Check application logs for notification payload)
+
+# Step 3: External app validates and calls registration endpoint
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "approved.user@example.com",
+  "firstName": "Approved",
+  "lastName": "User",
+  "password": "TempP@ssw0rd123!",
+  "tenantId": "{{tenantId}}"
+}
+
+# Step 4: User receives activation email and activates account
+# (Same activation flow as Scenario 1, Step 3-4)
+
+
+###############################################################################
+### ERROR SCENARIOS
+###############################################################################
+
+### Test: Register with duplicate email (409 Conflict)
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "Duplicate",
+  "lastName": "User",
+  "password": "P@ssw0rd123!",
+  "confirmPassword": "P@ssw0rd123!"
+}
+
+### Test: Activate with invalid token (400 Bad Request)
+POST {{baseUrl}}/api/account/activate
+Content-Type: application/json
+
+{
+  "token": "INVALID_TOKEN",
+  "userId": "00000000-0000-0000-0000-000000000000",
+  "tenantId": "{{tenantId}}",
+  "newPassword": "P@ssw0rd123!",
+  "confirmPassword": "P@ssw0rd123!"
+}
+
+### Test: Reset password with invalid token (400 Bad Request)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "token": "INVALID_TOKEN",
+  "password": "NewP@ssw0rd123!",
+  "confirmPassword": "NewP@ssw0rd123!"
+}
+
+### Test: Login with wrong password (401 Unauthorized)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "WrongPassword123!"
+}
+
+### Test: Onboarding with invalid tenant (400 Bad Request)
+POST {{baseUrl}}/api/account/onboarding
+Content-Type: application/json
+
+{
+  "tenantId": "non-existent-tenant",
+  "email": "test@example.com",
+  "firstName": "Test",
+  "lastName": "User"
+}
+
+### Test: Forgot password for non-existent email (200 OK - generic message for security)
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "nonexistent@example.com"
+}
+
+
+###############################################################################
+### NOTES:
+###############################################################################
+#
+# API Endpoints Overview:
+# All endpoints return JSON responses (not HTML views)
+# Designed for mobile apps, SPAs, and server-to-server integrations
+#
+# Endpoint Categories:
+# 1. Registration & Activation:
+#    - POST /api/auth/register
+#    - POST /api/account/activate
+#
+# 2. Authentication:
+#    - POST /api/auth/login
+#    - POST /api/auth/logout
+#
+# 3. Password Management:
+#    - POST /api/auth/forgot-password
+#    - POST /api/auth/reset-password
+#
+# 4. Onboarding:
+#    - POST /api/account/onboarding
+#
+# Response Patterns:
+# - Success: 200 OK, 201 Created, 202 Accepted
+# - Client Errors: 400 Bad Request, 401 Unauthorized, 409 Conflict
+# - Server Errors: 500 Internal Server Error
+#
+# Security Notes:
+# - Activation/Reset tokens are NOT returned in PROD mode (only DEV)
+# - Forgot password returns generic message (no user enumeration)
+# - All endpoints use [AllowAnonymous] for public access
+# - Password validation enforced by ASP.NET Core Identity
+#
+# Token Handling (DEV vs PROD):
+# DEV Mode:
+#   - Tokens included in API responses for testing
+#   - Reset/Activation URLs logged to console
+#   - Easier integration testing
+#
+# PROD Mode:
+#   - Tokens sent ONLY via email
+#   - Generic error messages
+#   - No token exposure in logs or responses
+#
+# Session Management:
+# - Login creates authentication cookie (.AspNetCore.Identity.Application)
+# - Cookie must be sent with subsequent requests
+# - Logout clears the cookie
+# - For stateless scenarios, use OAuth2/OIDC tokens (see pkceconnection.http)
+#
+# Integration with Web Endpoints:
+# - Web endpoints: /Account/Login, /Account/Register, etc. (HTML forms)
+# - API endpoints: /api/auth/login, /api/auth/register, etc. (JSON)
+# - Both use the same business logic (SignInManager, UserManager)
+# - Choose API endpoints for programmatic access, web endpoints for browser flows
+#
+# Onboarding Flow Details:
+# 1. User submits onboarding request via /api/account/onboarding
+# 2. System validates email uniqueness and tenant existence
+# 3. Notification sent to tenant's external application (webhook/queue)
+# 4. External app validates request (business rules, domain verification, etc.)
+# 5. If approved, external app calls /api/users/register to create account
+# 6. User receives activation email
+# 7. User activates via /api/account/activate and sets password
+#
+# Testing Workflow:
+# 1. Start application (dotnet run)
+# 2. Ensure tenant exists (see admin-operations.http)
+# 3. Register user via API
+# 4. Check console logs for activation token
+# 5. Activate user with token
+# 6. Login with credentials
+# 7. Test other flows (password reset, logout, etc.)
+#
+###############################################################################

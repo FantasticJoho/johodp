@@ -265,6 +265,17 @@ public class AccountController : Controller
         return SignOut("Cookies", "oidc");
     }
 
+    [HttpPost("api/auth/logout")]
+    [Produces("application/json")]
+    public async Task<IActionResult> LogoutApi()
+    {
+        _logger.LogInformation("API logout for user: {UserEmail}", User?.Identity?.Name);
+        
+        await _signInManager.SignOutAsync();
+        
+        return Ok(new { message = "Logout successful" });
+    }
+
     [HttpGet]
     public IActionResult Register()
     {
@@ -319,6 +330,55 @@ public class AccountController : Controller
         return Redirect("/");
     }
 
+    [HttpPost("api/auth/register")]
+    [Produces("application/json")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RegisterApi([FromBody] RegisterApiRequest request)
+    {
+        _logger.LogInformation("API registration attempt for email: {Email}", request.Email);
+        
+        if (!ModelState.IsValid)
+        {
+            _logger.LogWarning("API registration failed - invalid model state for email: {Email}", request.Email);
+            return BadRequest(new { error = "Invalid request", errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+        }
+
+        if (request.Password != request.ConfirmPassword)
+        {
+            _logger.LogWarning("API registration failed - password mismatch for email: {Email}", request.Email);
+            return BadRequest(new { error = "Passwords do not match" });
+        }
+
+        // Check if user already exists
+        var existingUser = await _userManager.FindByEmailAsync(request.Email);
+        if (existingUser != null)
+        {
+            _logger.LogWarning("API registration failed - user already exists: {Email}", request.Email);
+            return Conflict(new { error = "An account with this email already exists" });
+        }
+
+        // Create domain user
+        var user = Johodp.Domain.Users.Aggregates.User.Create(request.Email, request.FirstName, request.LastName);
+
+        // Create user with password
+        var createResult = await _userManager.CreateAsync(user, request.Password);
+        if (!createResult.Succeeded)
+        {
+            var errors = string.Join(", ", createResult.Errors.Select(e => e.Description));
+            _logger.LogError("API registration failed for {Email}: {Errors}", request.Email, errors);
+            return BadRequest(new { error = "Registration failed", details = errors });
+        }
+
+        _logger.LogInformation("User successfully registered via API: {Email}", request.Email);
+        
+        return Created($"/api/users/{user.Id}", new
+        {
+            userId = user.Id.Value,
+            email = user.Email.Value,
+            message = "Registration successful"
+        });
+    }
+
     [HttpGet]
     public IActionResult AccessDenied()
     {
@@ -370,6 +430,48 @@ public class AccountController : Controller
         System.Console.WriteLine($"Password reset token for {user.Email}: {token}");
 
         return RedirectToAction("ForgotPasswordConfirmation");
+    }
+
+    [HttpPost("api/auth/forgot-password")]
+    [Produces("application/json")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ForgotPasswordApi([FromBody] ForgotPasswordApiRequest request)
+    {
+        _logger.LogInformation("API password reset requested for email: {Email}", request.Email);
+        
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new { error = "Invalid request" });
+        }
+
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null)
+        {
+            _logger.LogWarning("API password reset requested for non-existent user: {Email}", request.Email);
+            // Don't reveal if user exists for security reasons
+            return Ok(new { message = "If the email exists, a password reset link has been sent" });
+        }
+
+        // Generate password reset token
+        var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+        // For development: log the token
+        _logger.LogWarning("[DEV ONLY] API password reset token for {Email}: {Token}", user.Email, token);
+        System.Console.WriteLine($"[API] Password reset token for {user.Email}: {token}");
+
+#if DEBUG
+        // In development, return the token for testing purposes
+        return Ok(new 
+        { 
+            message = "Password reset token generated",
+            email = request.Email,
+            token = token,
+            resetUrl = $"{Request.Scheme}://{Request.Host}/account/reset-password?token={Uri.EscapeDataString(token)}"
+        });
+#else
+        // TODO: Send email with reset link in production
+        return Ok(new { message = "If the email exists, a password reset link has been sent" });
+#endif
     }
 
     [HttpGet]
@@ -427,6 +529,47 @@ public class AccountController : Controller
 
         _logger.LogInformation("Password successfully reset for user: {Email}", model.Email);
         return RedirectToAction("ResetPasswordConfirmation");
+    }
+
+    [HttpPost("api/auth/reset-password")]
+    [Produces("application/json")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPasswordApi([FromBody] ResetPasswordApiRequest request)
+    {
+        _logger.LogInformation("API password reset attempt for email: {Email}", request.Email);
+        
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new { error = "Invalid request", errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+        }
+
+        if (request.Password != request.ConfirmPassword)
+        {
+            _logger.LogWarning("API password reset failed - password mismatch for email: {Email}", request.Email);
+            return BadRequest(new { error = "Passwords do not match" });
+        }
+
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null)
+        {
+            _logger.LogWarning("API password reset attempted for non-existent user: {Email}", request.Email);
+            return BadRequest(new { error = "Invalid reset token or email" });
+        }
+
+        var resetResult = await _userManager.ResetPasswordAsync(user, request.Token, request.Password);
+        if (!resetResult.Succeeded)
+        {
+            var errors = string.Join(", ", resetResult.Errors.Select(e => e.Description));
+            _logger.LogError("API password reset failed for user {Email}: {Errors}", request.Email, errors);
+            return BadRequest(new { error = "Password reset failed", details = errors });
+        }
+
+        _logger.LogInformation("Password successfully reset via API for user: {Email}", request.Email);
+        return Ok(new 
+        { 
+            message = "Password reset successful",
+            email = request.Email 
+        });
     }
 
     [HttpGet]
@@ -538,6 +681,68 @@ public class AccountController : Controller
             model.TenantDisplayName = tenant?.DisplayName ?? model.TenantId;
             model.LogoUrl = tenant?.LogoUrl;
             return View(model);
+        }
+    }
+
+    [HttpPost("api/account/onboarding")]
+    [Produces("application/json")]
+    [AllowAnonymous]
+    public async Task<IActionResult> OnboardingApi([FromBody] OnboardingApiRequest request)
+    {
+        _logger.LogInformation("API onboarding request for email: {Email}, tenant: {TenantId}", request.Email, request.TenantId);
+        
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(new { error = "Invalid request", errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
+        }
+
+        // Vérifier que l'email n'existe pas déjà
+        var existingUser = await _userManager.FindByEmailAsync(request.Email);
+        if (existingUser != null)
+        {
+            _logger.LogWarning("API onboarding failed - user already exists: {Email}", request.Email);
+            return Conflict(new { error = "An account with this email already exists" });
+        }
+
+        // Vérifier que le tenant existe et est actif
+        var tenant = await _tenantRepository.GetByNameAsync(request.TenantId);
+        if (tenant == null || !tenant.IsActive)
+        {
+            _logger.LogWarning("API onboarding failed - invalid or inactive tenant: {TenantId}", request.TenantId);
+            return BadRequest(new { error = "Invalid or inactive tenant" });
+        }
+
+        try
+        {
+            var requestId = Guid.NewGuid().ToString();
+
+            // Envoyer notification à l'application tierce (fire-and-forget)
+            await _notificationService.NotifyAccountRequestAsync(
+                tenantId: request.TenantId,
+                email: request.Email,
+                firstName: request.FirstName,
+                lastName: request.LastName,
+                requestId: requestId);
+
+            _logger.LogInformation(
+                "API onboarding notification sent for {Email} on tenant {TenantId}, RequestId: {RequestId}",
+                request.Email,
+                request.TenantId,
+                requestId);
+
+            return Accepted(new
+            {
+                message = "Onboarding request submitted. Awaiting validation.",
+                requestId = requestId,
+                email = request.Email,
+                tenantId = request.TenantId,
+                status = "pending"
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "API onboarding error for {Email}", request.Email);
+            return StatusCode(500, new { error = "An error occurred during onboarding" });
         }
     }
 
@@ -792,4 +997,34 @@ public class ActivateApiRequest
     public string TenantId { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class RegisterApiRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class ForgotPasswordApiRequest
+{
+    public string Email { get; set; } = string.Empty;
+}
+
+public class ResetPasswordApiRequest
+{
+    public string Email { get; set; } = string.Empty;
+    public string Token { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
+public class OnboardingApiRequest
+{
+    public string TenantId { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
 }

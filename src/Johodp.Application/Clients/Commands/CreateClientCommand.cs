@@ -34,18 +34,10 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
             throw new InvalidOperationException($"A client with name '{dto.ClientName}' already exists");
         }
 
-        // Validate at least one redirect URI
-        if (dto.AllowedRedirectUris == null || dto.AllowedRedirectUris.Count == 0)
-        {
-            throw new ArgumentException("At least one redirect URI is required", nameof(dto.AllowedRedirectUris));
-        }
-
         // Create client aggregate
         var client = Client.Create(
             dto.ClientName,
             dto.AllowedScopes?.ToArray() ?? Array.Empty<string>(),
-            dto.AllowedRedirectUris.ToArray(),
-            dto.AllowedCorsOrigins?.ToArray() ?? Array.Empty<string>(),
             dto.RequireConsent);
 
         // Save client
@@ -62,8 +54,7 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
             Id = client.Id.Value,
             ClientName = client.ClientName,
             AllowedScopes = client.AllowedScopes.ToList(),
-            AllowedRedirectUris = client.AllowedRedirectUris.ToList(),
-            AllowedCorsOrigins = client.AllowedCorsOrigins.ToList(),
+            AssociatedTenantIds = client.AssociatedTenantIds.ToList(),
             RequireClientSecret = client.RequireClientSecret,
             RequireConsent = client.RequireConsent,
             IsActive = client.IsActive,

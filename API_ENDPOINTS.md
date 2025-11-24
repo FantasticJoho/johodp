@@ -326,7 +326,230 @@ Non implémentée actuellement.
 
 ---
 
+## Authentication API Endpoints (NEW)
+
+### 7. Register User via API
+**POST** `/api/auth/register`
+
+Enregistre un nouvel utilisateur via JSON (pour mobile/SPA).
+
+#### Request Body
+```json
+{
+  "email": "user@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "password": "SecureP@ssw0rd123!",
+  "confirmPassword": "SecureP@ssw0rd123!"
+}
+```
+
+#### Response 201 Created
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "User registered successfully. Please check your email for activation."
+}
+```
+
+---
+
+### 8. Login via API
+**POST** `/api/auth/login`
+
+Authentifie un utilisateur et crée une session.
+
+#### Request Body
+```json
+{
+  "email": "user@example.com",
+  "password": "SecureP@ssw0rd123!"
+}
+```
+
+#### Response 201 Created
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Login successful"
+}
+```
+
+---
+
+### 9. Logout via API
+**POST** `/api/auth/logout`
+
+Déconnecte l'utilisateur et invalide la session.
+
+#### Response 200 OK
+```json
+{
+  "message": "Logout successful"
+}
+```
+
+---
+
+### 10. Forgot Password
+**POST** `/api/auth/forgot-password`
+
+Demande un token de réinitialisation de mot de passe.
+
+#### Request Body
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+#### Response 200 OK (DEV mode)
+```json
+{
+  "message": "Password reset email sent",
+  "token": "CfDJ8N...",
+  "resetUrl": "https://localhost:5001/account/reset-password?token=..."
+}
+```
+
+⚠️ **PROD mode**: Token NOT returned (sent via email only)
+
+---
+
+### 11. Reset Password
+**POST** `/api/auth/reset-password`
+
+Réinitialise le mot de passe avec le token.
+
+#### Request Body
+```json
+{
+  "email": "user@example.com",
+  "token": "CfDJ8N...",
+  "password": "NewP@ssw0rd123!",
+  "confirmPassword": "NewP@ssw0rd123!"
+}
+```
+
+#### Response 200 OK
+```json
+{
+  "message": "Password reset successful"
+}
+```
+
+---
+
+### 12. Onboarding via API
+**POST** `/api/account/onboarding`
+
+Soumet une demande d'onboarding (notification envoyée à l'app tierce).
+
+#### Request Body
+```json
+{
+  "tenantId": "acme",
+  "email": "user@example.com",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+```
+
+#### Response 202 Accepted
+```json
+{
+  "requestId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending",
+  "message": "Onboarding request submitted. You will receive an email if approved."
+}
+```
+
+---
+
+## CORS Configuration
+
+### ⚠️ IMPORTANT: CORS Security Limitations
+
+**CORS protège UNIQUEMENT les navigateurs web !**
+
+```
+┌────────────────────────────────────────────────┐
+│  ✅ CORS protège:                              │
+│     - Navigateurs web (Chrome, Firefox, etc.)  │
+│     - JavaScript (fetch, axios, XMLHttpRequest)│
+│     - Applications SPA (React, Angular, Vue)   │
+│                                                │
+│  ❌ CORS NE protège PAS:                       │
+│     - curl / wget / Postman / Insomnia         │
+│     - Applications serveur (Node.js, Python)   │
+│     - Applications mobile natives              │
+│     - Scripts backend / API-to-API calls       │
+└────────────────────────────────────────────────┘
+```
+
+### Architecture CORS
+
+- **AllowedCorsOrigins** est géré au niveau **Tenant** (pas Client)
+- Chaque tenant définit ses origines CORS autorisées
+- IdentityServer agrège dynamiquement les CORS de tous les tenants associés
+
+#### Exemple Configuration Tenant
+```json
+{
+  "name": "acme",
+  "allowedReturnUrls": [
+    "http://localhost:4200/callback",
+    "https://app.acme.com/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://app.acme.com"
+  ]
+}
+```
+
+### Contournement CORS (exemple)
+
+```bash
+# ❌ Bloqué dans un navigateur (origine non autorisée)
+fetch('https://api.johodp.com/api/auth/login', {
+  method: 'POST',
+  body: JSON.stringify({ email: 'test@example.com', password: 'pass' })
+})
+// ERROR: CORS policy: No 'Access-Control-Allow-Origin' header
+
+# ✅ Fonctionne avec curl (pas de vérification CORS)
+curl -X POST https://api.johodp.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"pass"}'
+# SUCCESS: Retourne le userId sans vérification CORS
+```
+
+### Vraie Sécurité
+
+**CORS est une commodité UX, PAS une sécurité !**
+
+Protection réelle:
+1. **Authentication** - OAuth2/OIDC tokens
+2. **Authorization** - Claims & Policies
+3. **Rate Limiting** - Limite les abus
+4. **API Keys** - Identification client (optionnel)
+5. **IP Whitelist** - Restriction géographique (optionnel)
+
+---
+
 ## Changelog des Endpoints
+
+### v3.0 (2025-11-24) - API Authentication Endpoints + CORS Migration
+- ✅ POST /api/auth/register - Enregistrement via JSON API
+- ✅ POST /api/auth/login - Login via JSON API
+- ✅ POST /api/auth/logout - Logout via JSON API
+- ✅ POST /api/auth/forgot-password - Demande reset password via API
+- ✅ POST /api/auth/reset-password - Reset password via API
+- ✅ POST /api/account/onboarding - Onboarding via JSON API
+- ✅ Migration CORS - AllowedCorsOrigins déplacé de Client vers Tenant
+- ✅ CustomClientStore - Agrégation CORS depuis tenants
+- ✅ Documentation - Avertissements sécurité CORS
 
 ### v2.0 (2025-11-20) - Onboarding Flow
 - ✅ GET /account/onboarding - Formulaire d'inscription avec branding tenant

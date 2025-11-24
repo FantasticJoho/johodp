@@ -65,12 +65,25 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
         services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
 
-        // IdentityServer (in-memory for dev) and integrate with ASP.NET Identity
+        // IdentityServer with custom client store (loads from database)
+        services.AddScoped<Duende.IdentityServer.Stores.IClientStore, Johodp.Infrastructure.IdentityServer.CustomClientStore>();
+        
         var idServerBuilder = services.AddIdentityServer()
             .AddInMemoryApiScopes(IdentityServerConfig.GetApiScopes())
             .AddInMemoryApiResources(IdentityServerConfig.GetApiResources())
             .AddInMemoryIdentityResources(IdentityServerConfig.GetIdentityResources())
-            .AddInMemoryClients(IdentityServerConfig.GetClients());
+            // Store authorization codes, refresh tokens, and consents in PostgreSQL
+            .AddOperationalStore(options =>
+            {
+                options.ConfigureDbContext = b =>
+                    b.UseNpgsql(connectionString,
+                        sql => sql.MigrationsAssembly("Johodp.Infrastructure"));
+                
+                // Automatic cleanup of expired tokens
+                options.EnableTokenCleanup = true;
+                options.TokenCleanupInterval = 3600; // 1 hour
+            });
+            // Clients are now loaded from database via CustomClientStore
 
         // Register a minimal IUserClaimsPrincipalFactory for the domain User so
         // IdentityServer can decorate it when wiring up ASP.NET Identity.

@@ -95,9 +95,14 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .HasColumnType("jsonb")
             .IsRequired();
 
-        builder.Property<List<string>>("_associatedClientIds")
-            .HasColumnName("AssociatedClientIds")
+        builder.Property<List<string>>("_allowedCorsOrigins")
+            .HasColumnName("AllowedCorsOrigins")
             .HasColumnType("jsonb")
             .IsRequired();
+
+        // Associated client (a tenant can only have one client)
+        builder.Property(t => t.ClientId)
+            .HasMaxLength(200)
+            .IsRequired(false);
     }
 }

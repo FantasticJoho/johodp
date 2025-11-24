@@ -194,6 +194,186 @@ GetUserByIdQueryHandler
 └─────────────────────────────────────────────────┘
 ```
 
+## Gestion CORS et Sécurité
+
+### Architecture CORS
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Client Aggregate                      │
+│  - ClientId, ClientName                                  │
+│  - AllowedScopes                                        │
+│  - RequireConsent                                       │
+│  ❌ AllowedCorsOrigins (DÉPLACÉ vers Tenant)           │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         │ 1:N (via associatedTenantIds)
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│                    Tenant Aggregate                      │
+│  - TenantId, DisplayName                                │
+│  - AllowedReturnUrls (Redirect URIs)                    │
+│  ✅ AllowedCorsOrigins (Liste des origines CORS)       │
+│  - Branding (colors, logo, CSS)                         │
+│  - Localization (languages, timezone, currency)         │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         │ Agrégation dynamique
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│              CustomClientStore (IdentityServer)         │
+│  MapToIdentityServerClient():                           │
+│  - AllowedRedirectUris = tenants.SelectMany(           │
+│      t => t.AllowedReturnUrls).Distinct()              │
+│  - AllowedCorsOrigins = tenants.SelectMany(            │
+│      t => t.AllowedCorsOrigins).Distinct()             │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Pourquoi CORS est géré au niveau Tenant ?
+
+✅ **Cohérence** - AllowedReturnUrls et AllowedCorsOrigins au même endroit
+✅ **Multi-tenant** - Chaque tenant peut avoir ses propres origines CORS
+✅ **Flexibilité** - Un client peut hériter des CORS de plusieurs tenants
+✅ **Maintenabilité** - Configuration centralisée par tenant
+
+### ⚠️ IMPORTANT: Limites de sécurité CORS
+
+**CORS ne protège QUE les navigateurs web !**
+
+```
+┌──────────────────────────────────────────────────────┐
+│         CORS = Protection NAVIGATEUR uniquement       │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  ✅ Protège:                                          │
+│     - Requêtes depuis un navigateur web               │
+│     - JavaScript (fetch, XMLHttpRequest, axios)       │
+│     - Applications SPA (React, Angular, Vue)          │
+│                                                       │
+│  ❌ NE protège PAS:                                   │
+│     - Requêtes curl / wget / Postman                  │
+│     - Applications serveur (Node.js, C#, Python)      │
+│     - Applications mobile natives (iOS, Android)      │
+│     - Scripts backend / API-to-API calls              │
+│                                                       │
+└──────────────────────────────────────────────────────┘
+```
+
+### Exemple de contournement CORS
+
+```bash
+# ❌ BLOQUÉ dans un navigateur (Origin: http://evil.com)
+fetch('https://api.johodp.com/connect/token', {
+  method: 'POST',
+  body: 'grant_type=client_credentials&client_id=xyz'
+})
+// ERROR: CORS policy: No 'Access-Control-Allow-Origin' header
+
+# ✅ FONCTIONNE avec curl (pas de vérification CORS)
+curl -X POST https://api.johodp.com/connect/token \
+  -d "grant_type=client_credentials&client_id=xyz"
+# SUCCESS: Retourne les tokens sans vérification d'origine
+```
+
+### Sécurité réelle : Authentication + Authorization
+
+**CORS est une COMMODITÉ, pas une SÉCURITÉ**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│              Protection en couches (Defense in Depth)    │
+├─────────────────────────────────────────────────────────┤
+│ 1. CORS (navigateur)       → Commodité UX               │
+│ 2. Authentication (OAuth2) → Qui êtes-vous ?            │
+│ 3. Authorization (Claims)  → Que pouvez-vous faire ?    │
+│ 4. Rate Limiting           → Limite abus                │
+│ 5. API Keys / Client Auth  → Identification client      │
+│ 6. IP Whitelist (optionnel)→ Restriction géographique  │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Configuration CORS dans Johodp
+
+```csharp
+// Infrastructure/IdentityServer/CustomClientStore.cs
+public Duende.IdentityServer.Models.Client MapToIdentityServerClient(
+    Client client, 
+    IEnumerable<Tenant> tenants)
+{
+    // Agrégation dynamique des CORS origins depuis les tenants
+    var corsOrigins = tenants
+        .SelectMany(t => t.AllowedCorsOrigins)
+        .Distinct()
+        .ToList();
+
+    return new Duende.IdentityServer.Models.Client
+    {
+        ClientId = client.ClientName.Value,
+        AllowedCorsOrigins = corsOrigins,  // ⚠️ Protège UNIQUEMENT les navigateurs
+        // ... autres propriétés
+    };
+}
+```
+
+### Validation des CORS Origins
+
+```csharp
+// Domain/Tenants/Aggregates/Tenant.cs
+public void AddAllowedCorsOrigin(string origin)
+{
+    if (string.IsNullOrWhiteSpace(origin))
+        throw new ArgumentException("CORS origin cannot be empty");
+
+    // Validation: Autorité uniquement (pas de path)
+    if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+        throw new ArgumentException($"Invalid CORS origin format: {origin}");
+
+    if (!string.IsNullOrEmpty(uri.PathAndQuery) && uri.PathAndQuery != "/")
+        throw new ArgumentException(
+            $"CORS origin must be authority only (no path): {origin}");
+
+    // Format normalisé: https://example.com (pas de trailing slash)
+    var normalizedOrigin = $"{uri.Scheme}://{uri.Authority}";
+    
+    if (!_allowedCorsOrigins.Contains(normalizedOrigin))
+        _allowedCorsOrigins.Add(normalizedOrigin);
+}
+```
+
+### Migration CORS (Client → Tenant)
+
+**Base de données**
+```sql
+-- Migration: MoveCorsOriginsFromClientToTenant
+
+-- Étape 1: Ajouter colonne nullable
+ALTER TABLE tenants 
+ADD COLUMN "AllowedCorsOrigins" jsonb NULL;
+
+-- Étape 2: Définir valeur par défaut
+UPDATE tenants 
+SET "AllowedCorsOrigins" = '[]'::jsonb 
+WHERE "AllowedCorsOrigins" IS NULL;
+
+-- Étape 3: Rendre NOT NULL
+ALTER TABLE tenants 
+ALTER COLUMN "AllowedCorsOrigins" SET NOT NULL;
+
+-- Étape 4: Supprimer ancienne colonne
+ALTER TABLE clients 
+DROP COLUMN IF EXISTS "AllowedCorsOrigins";
+```
+
+**Code impacté**
+- ✅ `Domain/Clients/Aggregates/Client.cs` - AllowedCorsOrigins supprimé
+- ✅ `Domain/Tenants/Aggregates/Tenant.cs` - AllowedCorsOrigins ajouté
+- ✅ `Application/Clients/DTOs/*` - AllowedCorsOrigins supprimé
+- ✅ `Application/Tenants/DTOs/*` - AllowedCorsOrigins ajouté
+- ✅ `Application/Tenants/Commands/*` - Gestion AllowedCorsOrigins
+- ✅ `Infrastructure/IdentityServer/CustomClientStore.cs` - Agrégation depuis tenants
+- ✅ `Infrastructure/Persistence/Configurations/*` - Mapping jsonb
+
 ## Avantages de cette architecture
 
 ✅ **Séparation des préoccupations** - Chaque couche a une responsabilité unique
@@ -203,6 +383,7 @@ GetUserByIdQueryHandler
 ✅ **Domain-Driven** - La logique métier est au cœur de l'application
 ✅ **Event Sourcing ready** - Les domain events peuvent être persisted
 ✅ **CQRS friendly** - Séparation naturelle read/write
+✅ **Multi-tenant CORS** - Gestion CORS flexible par tenant
 
 ## Pattern DDD Enumeration
 

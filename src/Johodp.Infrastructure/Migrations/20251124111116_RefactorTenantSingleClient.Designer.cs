@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Johodp.Infrastructure.Migrations
 {
     [DbContext(typeof(JohodpDbContext))]
-    partial class JohodpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251124111116_RefactorTenantSingleClient")]
+    partial class RefactorTenantSingleClient
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -27,6 +30,10 @@ namespace Johodp.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("AllowedCorsOrigins")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("AllowedScopes")
                         .IsRequired()
@@ -147,11 +154,6 @@ namespace Johodp.Infrastructure.Migrations
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<List<string>>("_allowedCorsOrigins")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("AllowedCorsOrigins");
 
                     b.Property<List<string>>("_allowedReturnUrls")
                         .IsRequired()

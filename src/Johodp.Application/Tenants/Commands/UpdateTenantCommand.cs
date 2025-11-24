@@ -38,7 +38,6 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         }
 
         var dto = command.Data;
-        var returnUrlsChanged = false;
 
         // Update display name
         if (dto.DisplayName != null)
@@ -93,8 +92,6 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         // Update return URLs (replace all)
         if (dto.AllowedReturnUrls != null)
         {
-            returnUrlsChanged = true;
-            
             // Remove all existing return URLs
             var currentUrls = tenant.AllowedReturnUrls.ToList();
             foreach (var url in currentUrls)
@@ -109,23 +106,65 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             }
         }
 
-        // Update associated clients (replace all)
-        if (dto.AssociatedClientIds != null)
+        // Update CORS origins (replace all)
+        if (dto.AllowedCorsOrigins != null)
         {
-            // Remove all existing client associations
-            var currentClients = tenant.AssociatedClientIds.ToList();
-            foreach (var clientId in currentClients)
+            // Remove all existing CORS origins
+            var currentOrigins = tenant.AllowedCorsOrigins.ToList();
+            foreach (var origin in currentOrigins)
             {
-                tenant.RemoveAssociatedClient(clientId);
+                tenant.RemoveAllowedCorsOrigin(origin);
             }
 
-            // Add new client associations
-            foreach (var clientId in dto.AssociatedClientIds)
+            // Add new CORS origins
+            foreach (var origin in dto.AllowedCorsOrigins)
             {
-                tenant.AddAssociatedClient(clientId);
+                tenant.AddAllowedCorsOrigin(origin);
+            }
+        }
+
+        // Update associated client (replace)
+        if (dto.ClientId != null)
+        {
+            // Validate that the client exists if not empty
+            if (!string.IsNullOrWhiteSpace(dto.ClientId))
+            {
+                var client = await _clientRepository.GetByNameAsync(dto.ClientId);
+                if (client == null)
+                {
+                    throw new InvalidOperationException($"Client '{dto.ClientId}' does not exist. Please create the client first.");
+                }
             }
 
-            returnUrlsChanged = true; // Need to update clients
+            // Update the client association
+            var oldClientId = tenant.ClientId;
+            tenant.SetClient(string.IsNullOrWhiteSpace(dto.ClientId) ? null : dto.ClientId);
+
+            // If client changed, update bidirectional associations
+            if (oldClientId != tenant.ClientId)
+            {
+                // Remove tenant from old client
+                if (!string.IsNullOrWhiteSpace(oldClientId))
+                {
+                    var oldClient = await _clientRepository.GetByNameAsync(oldClientId);
+                    if (oldClient != null)
+                    {
+                        oldClient.DissociateTenant(tenant.Id.Value.ToString());
+                        await _clientRepository.UpdateAsync(oldClient);
+                    }
+                }
+
+                // Add tenant to new client
+                if (!string.IsNullOrWhiteSpace(tenant.ClientId))
+                {
+                    var newClient = await _clientRepository.GetByNameAsync(tenant.ClientId);
+                    if (newClient != null && !newClient.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
+                    {
+                        newClient.AssociateTenant(tenant.Id.Value.ToString());
+                        await _clientRepository.UpdateAsync(newClient);
+                    }
+                }
+            }
         }
 
         // Update active status
@@ -141,39 +180,19 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         await _tenantRepository.UpdateAsync(tenant);
         await _unitOfWork.SaveChangesAsync();
 
-        // Update associated clients if return URLs or client associations changed
-        if (returnUrlsChanged)
-        {
-            await UpdateAssociatedClientsAsync(tenant);
-        }
+        // Note: Client redirect URIs are now automatically aggregated from all associated tenants
+        // via the CustomClientStore. No need to manually sync returnUrls to clients when they change.
+        // The dynamic aggregation happens at runtime when IdentityServer loads the client.
 
         return MapToDto(tenant);
     }
 
     private async Task UpdateAssociatedClientsAsync(Domain.Tenants.Aggregates.Tenant tenant)
     {
-        foreach (var clientId in tenant.AssociatedClientIds)
-        {
-            var client = await _clientRepository.GetByNameAsync(clientId);
-            if (client != null)
-            {
-                // Remove all redirect URIs and add tenant's return URLs
-                var currentUris = client.AllowedRedirectUris.ToList();
-                foreach (var uri in currentUris)
-                {
-                    client.RemoveRedirectUri(uri);
-                }
-
-                // Add tenant's return URLs
-                foreach (var url in tenant.AllowedReturnUrls)
-                {
-                    client.AddRedirectUri(url);
-                }
-
-                await _clientRepository.UpdateAsync(client);
-            }
-        }
-        await _unitOfWork.SaveChangesAsync();
+        // This method is no longer needed since CustomClientStore handles dynamic aggregation.
+        // Keeping for backward compatibility but it's now a no-op.
+        // Consider removing this method and the returnUrlsChanged logic in future refactoring.
+        await Task.CompletedTask;
     }
 
     private static TenantDto MapToDto(Domain.Tenants.Aggregates.Tenant tenant)
@@ -196,7 +215,8 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             Timezone = tenant.Timezone,
             Currency = tenant.Currency,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
-            AssociatedClientIds = tenant.AssociatedClientIds.ToList()
+            AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
+            ClientId = tenant.ClientId
         };
     }
 }

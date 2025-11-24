@@ -9,6 +9,16 @@
 ###############################################################################
 
 ### Create a new OAuth2 Client
+# IMPORTANT: Clients CANNOT be created with a tenant association
+# - Clients are created first, independently
+# - Tenants are then created and must reference an existing client
+# 
+# A client is visible to IdentityServer only if:
+#   1. It has at least one associated tenant
+#   2. The associated tenant(s) have at least one allowedReturnUrl configured
+#
+# Note: Redirect URIs and CORS Origins are managed at the Tenant level, not directly on clients
+# The client will inherit redirect URIs and CORS origins from all associated tenants
 POST {{baseUrl}}/api/clients
 Content-Type: application/json
 
@@ -21,25 +31,35 @@ Content-Type: application/json
     "johodp.identity",
     "johodp.api"
   ],
-  "allowedRedirectUris": [
-    "http://localhost:4200/callback",
-    "http://localhost:4200/silent-renew"
-  ],
-  "allowedCorsOrigins": [
-    "http://localhost:4200"
+  "requireConsent": false
+}
+
+### Create another OAuth2 Client
+POST {{baseUrl}}/api/clients
+Content-Type: application/json
+
+{
+  "clientName": "my-other-app",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email"
   ],
   "requireConsent": false
 }
 
 ### Get Client by ID
-@clientId = 27ee710b-8455-4bf7-ae35-2e6e8a2560d1
+@clientId = 61651e87-0194-4340-a574-da64271abef1
 GET {{baseUrl}}/api/clients/{{clientId}}
 
 ### Get Client by Name
-@clientName = my-spa-app
+@clientName = my-other-app2
 GET {{baseUrl}}/api/clients/by-name/{{clientName}}
 
 ### Update Client
+# Note: Redirect URIs and CORS Origins are managed at the Tenant level
+# To change redirect URIs or CORS origins, update the associated Tenant's allowedReturnUrls and allowedCorsOrigins
+# You can change which tenants are associated with this client
 PUT {{baseUrl}}/api/clients/{{clientId}}
 Content-Type: application/json
 
@@ -52,35 +72,16 @@ Content-Type: application/json
     "johodp.api",
     "offline_access"
   ],
-  "allowedRedirectUris": [
-    "http://localhost:4200/callback",
-    "http://localhost:4200/silent-renew",
-    "https://myapp.com/callback"
-  ],
-  "allowedCorsOrigins": [
-    "http://localhost:4200",
-    "https://myapp.com"
+  "associatedTenantIds": [
+    "acme-corp",
+    "another-tenant-id"
   ],
   "isActive": true
 }
 
-### Add Redirect URI to Client
-POST {{baseUrl}}/api/clients/{{clientId}}/redirect-uris
-Content-Type: application/json
-
-{
-  "redirectUri": "https://myapp.com/auth/callback"
-}
-
-### Remove Redirect URI from Client
-DELETE {{baseUrl}}/api/clients/{{clientId}}/redirect-uris
-Content-Type: application/json
-
-{
-  "redirectUri": "http://localhost:4200/silent-renew"
-}
-
 ### Delete Client
+# Note: Redirect URIs and CORS Origins are now managed at the Tenant level
+# To add/modify redirect URIs or CORS origins, update the Tenant's allowedReturnUrls and allowedCorsOrigins properties
 DELETE {{baseUrl}}/api/clients/{{clientId}}
 
 
@@ -89,6 +90,11 @@ DELETE {{baseUrl}}/api/clients/{{clientId}}
 ###############################################################################
 
 ### Create a new Tenant
+# IMPORTANT CONSTRAINTS:
+# 1. A tenant MUST be associated with ONE client (clientId is required)
+# 2. The client MUST already exist in the database before creating the tenant
+# 3. Workflow: Create the client first, then create the tenant referencing that client
+# 4. AllowedReturnUrls AND AllowedCorsOrigins are managed at the Tenant level
 POST {{baseUrl}}/api/tenant
 Content-Type: application/json
 
@@ -112,9 +118,11 @@ Content-Type: application/json
     "http://localhost:4200/callback",
     "https://acme.example.com/callback"
   ],
-  "associatedClientIds": [
-    "my-spa-app"
-  ]
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://acme.example.com"
+  ],
+  "clientId": "my-spa-app"
 }
 
 ### Get All Tenants
@@ -149,6 +157,11 @@ Content-Type: application/json
     "http://localhost:4200/callback",
     "https://acme.example.com/callback",
     "https://app.acme.com/auth/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://acme.example.com",
+    "https://app.acme.com"
   ],
   "associatedClientIds": [
     "my-spa-app",
@@ -384,6 +397,45 @@ Content-Type: application/json
 ### NOTES:
 ###############################################################################
 #
+# Client/Tenant Architecture:
+# - Clients no longer store redirect URIs or CORS origins directly
+# - Each client is associated with zero or more tenants (via associatedTenantIds)
+# - Redirect URIs AND CORS Origins are defined at the Tenant level (allowedReturnUrls and allowedCorsOrigins)
+# - IdentityServer dynamically aggregates all redirect URIs and CORS origins from associated tenants
+# - To add/modify redirect URIs or CORS origins: update the Tenant's allowedReturnUrls and allowedCorsOrigins properties
+# 
+# Client Visibility to IdentityServer:
+# - A client is VISIBLE to IdentityServer only if:
+#   1. It has at least one associated tenant, AND
+#   2. The associated tenant(s) have at least one allowedReturnUrl configured
+# - Clients without tenants or without returnUrls exist in the database but are invisible to OAuth2/OIDC flows
+# - This allows flexible setup: you can create clients first, then tenants, then associate them
+#
+# Possible Workflows:
+# Workflow A (Tenant First):
+#   1. Create Tenant with allowedReturnUrls
+#   2. Create Client with initialTenantId referencing the tenant
+#   3. Client is immediately visible to IdentityServer
+#
+# Workflow B (Client First):
+#   1. Create Client without initialTenantId (invisible to IdentityServer)
+#   2. Create Tenant with allowedReturnUrls
+#   3. Update Client to associate with tenant (PUT /api/clients/{id})
+#   4. Client becomes visible to IdentityServer
+#
+# Workflow C (Parallel):
+#   1. Create Client without tenant
+#   2. Create Tenant without clients
+#   3. Associate them via Update operations
+#   4. Client becomes visible when both conditions are met
+#
+# Token Storage:
+# - Authorization codes, refresh tokens, and user consents are stored in PostgreSQL
+# - Tables: PersistedGrants, DeviceCodes, Keys
+# - Automatic cleanup of expired tokens every hour
+# - Tokens survive application restarts
+# - Supports multiple application instances (scale-out)
+#
 # Onboarding Flow (User-initiated):
 # 1. User visits /account/onboarding with tenant parameter
 # 2. User fills form and submits
@@ -405,11 +457,12 @@ Content-Type: application/json
 # - tenantId="specific": Access only to that tenant
 # - Users can be added to multiple tenants via /api/users/{id}/tenants
 #
-# User Status Values:
+# User Status Values (DDD Enumeration Pattern):
 # - PendingActivation: Awaiting email activation
 # - Active: Can log in
 # - Suspended: Account disabled
 # - Deleted: Soft deleted
+# - IsActive is a computed property (not stored in database)
 #
 # Authorization:
 # - ALL ENDPOINTS ARE PUBLIC (No authentication required)

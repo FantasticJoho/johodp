@@ -245,6 +245,12 @@ token={{accessToken}}
 # STEP 3: Exchange authorization code for tokens
 # STEP 4-7: Use tokens, refresh, revoke
 #
+# Client/Tenant Architecture:
+# - Clients are associated with one or more tenants (via associatedTenantIds)
+# - Redirect URIs AND CORS Origins are defined at the Tenant level (allowedReturnUrls and allowedCorsOrigins)
+# - IdentityServer dynamically aggregates redirect URIs and CORS origins from all associated tenants
+# - The client 'johodp-spa' must be associated with tenant 'acme-corp' for this flow to work
+#
 # PKCE Flow Steps:
 # 1. Generate code_verifier (random 43-128 char string)
 # 2. Generate code_challenge = base64url(SHA256(code_verifier))

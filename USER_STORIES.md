@@ -1,0 +1,1170 @@
+# 📖 User Stories - Johodp Identity Provider
+
+## Vue d'ensemble
+
+Ce document liste toutes les User Stories nécessaires pour construire le système Johodp Identity Provider, organisées par epic et priorité.
+
+---
+
+## 🎯 Epic 1: Gestion des Clients OAuth2
+
+### US-1.1: Créer un Client OAuth2 (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** créer un nouveau client OAuth2  
+**Afin que** les applications tierces puissent s'intégrer avec Johodp
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/clients` avec clientName et allowedScopes
+- [ ] Le système génère un ClientId unique (GUID)
+- [ ] Le client est créé avec RequirePkce=true et RequireClientSecret=true
+- [ ] Le client est dans l'état IsActive=true
+- [ ] Le client n'a aucun tenant associé initialement
+- [ ] Le système refuse si le clientName existe déjà (409 Conflict)
+- [ ] Le système valide que les scopes sont valides (openid, profile, email, api)
+
+**Tests d'acceptation:**
+```http
+POST /api/clients
+{
+  "clientName": "my-spa-app",
+  "allowedScopes": ["openid", "profile", "email"],
+  "requireConsent": true
+}
+→ 201 Created avec ClientDto
+```
+
+**DoD (Definition of Done):**
+- Code implémenté dans ClientsController.Create()
+- Tests unitaires pour CreateClientCommand
+- Tests d'intégration avec base de données
+- Documentation API mise à jour
+
+---
+
+### US-1.2: Consulter un Client par ID (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer les détails d'un client par son ID  
+**Afin de** vérifier sa configuration
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/clients/{clientId}`
+- [ ] Le système retourne le ClientDto avec tous les détails
+- [ ] Le système retourne 404 si le client n'existe pas
+- [ ] Les tenants associés sont inclus (AssociatedTenantIds)
+
+**Tests d'acceptation:**
+```http
+GET /api/clients/550e8400-e29b-41d4-a716-446655440000
+→ 200 OK avec ClientDto
+```
+
+---
+
+### US-1.3: Consulter un Client par Nom (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer un client par son nom  
+**Afin de** vérifier rapidement sa configuration sans connaître son GUID
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/clients/by-name/{clientName}`
+- [ ] Le système retourne le ClientDto correspondant
+- [ ] Le système retourne 404 si le clientName n'existe pas
+
+**Tests d'acceptation:**
+```http
+GET /api/clients/by-name/my-spa-app
+→ 200 OK avec ClientDto
+```
+
+---
+
+### US-1.4: Mettre à Jour un Client (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** modifier les scopes et paramètres d'un client  
+**Afin de** ajuster sa configuration sans le recréer
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer PUT `/api/clients/{clientId}` avec UpdateClientDto
+- [ ] Le système met à jour allowedScopes si fourni
+- [ ] Le système met à jour requireConsent si fourni
+- [ ] Le système met à jour associatedTenantIds si fourni
+- [ ] Le système retourne 404 si le client n'existe pas
+- [ ] Le système refuse les associations à des tenants inexistants
+
+**Tests d'acceptation:**
+```http
+PUT /api/clients/550e8400-e29b-41d4-a716-446655440000
+{
+  "allowedScopes": ["openid", "profile", "email", "api"],
+  "requireConsent": false
+}
+→ 200 OK avec ClientDto mis à jour
+```
+
+---
+
+### US-1.5: Supprimer un Client (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** supprimer un client obsolète  
+**Afin de** nettoyer le système
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler DELETE `/api/clients/{clientId}`
+- [ ] Le système supprime le client de la base de données
+- [ ] Le système retourne 204 No Content en cas de succès
+- [ ] Le système retourne 404 si le client n'existe pas
+- [ ] Les tenants associés sont également dissociés
+
+**Tests d'acceptation:**
+```http
+DELETE /api/clients/550e8400-e29b-41d4-a716-446655440000
+→ 204 No Content
+```
+
+---
+
+## 🏢 Epic 2: Gestion des Tenants
+
+### US-2.1: Créer un Tenant avec Client Obligatoire (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** créer un tenant associé à un client existant  
+**Afin de** configurer les redirections et le branding pour une organisation
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/tenant` avec CreateTenantDto
+- [ ] Le champ clientId est OBLIGATOIRE
+- [ ] Le système vérifie que le client existe avant création
+- [ ] Le système refuse si le client n'existe pas (400 Bad Request)
+- [ ] Le système crée l'association bidirectionnelle (Tenant ↔ Client)
+- [ ] Le système valide les AllowedReturnUrls (format URI absolu)
+- [ ] Le système valide les AllowedCorsOrigins (format autorité uniquement)
+- [ ] Le tenant doit avoir au moins une URL de redirection
+- [ ] Le système refuse si le nom de tenant existe déjà (409 Conflict)
+
+**Tests d'acceptation:**
+```http
+POST /api/tenant
+{
+  "name": "acme-corp",
+  "displayName": "ACME Corporation",
+  "clientId": "my-spa-app",
+  "allowedReturnUrls": ["http://localhost:4200/callback"],
+  "allowedCorsOrigins": ["http://localhost:4200"],
+  "primaryColor": "#ff0000",
+  "logoUrl": "https://acme.com/logo.png"
+}
+→ 201 Created avec TenantDto
+```
+
+**DoD:**
+- Code implémenté dans TenantController.Create()
+- Tests unitaires pour CreateTenantCommand
+- Validation des URLs avec regex
+- Tests d'intégration avec client existant
+- Documentation API mise à jour
+
+---
+
+### US-2.2: Consulter Tous les Tenants (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** lister tous les tenants  
+**Afin de** avoir une vue d'ensemble du système
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/tenant`
+- [ ] Le système retourne une liste de TenantDto
+- [ ] Les tenants inactifs sont inclus
+- [ ] La liste peut être vide si aucun tenant existe
+
+**Tests d'acceptation:**
+```http
+GET /api/tenant
+→ 200 OK avec liste de TenantDto
+```
+
+---
+
+### US-2.3: Consulter un Tenant par ID (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer les détails d'un tenant par son ID  
+**Afin de** vérifier sa configuration complète
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/tenant/{id}`
+- [ ] Le système retourne le TenantDto avec tous les détails
+- [ ] Les informations de branding sont incluses
+- [ ] Les AllowedReturnUrls et AllowedCorsOrigins sont inclus
+- [ ] Le ClientId associé est inclus
+- [ ] Le système retourne 404 si le tenant n'existe pas
+
+**Tests d'acceptation:**
+```http
+GET /api/tenant/550e8400-e29b-41d4-a716-446655440000
+→ 200 OK avec TenantDto complet
+```
+
+---
+
+### US-2.4: Consulter un Tenant par Nom (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** récupérer un tenant par son nom  
+**Afin de** charger sa configuration de branding
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/tenant/by-name/{name}`
+- [ ] Le système retourne le TenantDto correspondant
+- [ ] Le système retourne 404 si le nom n'existe pas
+- [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+
+**Tests d'acceptation:**
+```http
+GET /api/tenant/by-name/acme-corp
+→ 200 OK avec TenantDto
+```
+
+---
+
+### US-2.5: Mettre à Jour un Tenant (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** modifier la configuration d'un tenant  
+**Afin de** ajuster le branding ou les URLs de redirection
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer PUT `/api/tenant/{id}` avec UpdateTenantDto
+- [ ] Le système met à jour displayName si fourni
+- [ ] Le système met à jour le branding (couleurs, logo, CSS) si fourni
+- [ ] Le système remplace AllowedReturnUrls si fourni
+- [ ] Le système remplace AllowedCorsOrigins si fourni
+- [ ] Le système met à jour clientId si fourni (avec validation)
+- [ ] Le système gère la dissociation/association du client si clientId change
+- [ ] Le système retourne 404 si le tenant n'existe pas
+- [ ] Le système valide que le nouveau client existe
+
+**Tests d'acceptation:**
+```http
+PUT /api/tenant/550e8400-e29b-41d4-a716-446655440000
+{
+  "displayName": "ACME Corp (Updated)",
+  "allowedReturnUrls": ["http://localhost:4200/callback", "https://app.acme.com/callback"],
+  "primaryColor": "#0000ff"
+}
+→ 200 OK avec TenantDto mis à jour
+```
+
+---
+
+### US-2.6: Supprimer un Tenant (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** supprimer un tenant obsolète  
+**Afin de** nettoyer le système
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler DELETE `/api/tenant/{id}`
+- [ ] Le système supprime le tenant de la base de données
+- [ ] Le système dissocie le tenant du client associé
+- [ ] Le système retourne 204 No Content en cas de succès
+- [ ] Le système retourne 404 si le tenant n'existe pas
+
+**Tests d'acceptation:**
+```http
+DELETE /api/tenant/550e8400-e29b-41d4-a716-446655440000
+→ 204 No Content
+```
+
+---
+
+### US-2.7: Récupérer le CSS de Branding d'un Tenant (DOIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** récupérer le CSS de branding d'un tenant  
+**Afin de** personnaliser l'apparence de ma page de connexion
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/tenant/{tenantId}/branding.css`
+- [ ] Le système génère un fichier CSS avec des variables CSS
+- [ ] Les variables incluent: --primary-color, --secondary-color, --logo-base64, --image-base64
+- [ ] Le customCss du tenant est inclus dans le fichier
+- [ ] Le Content-Type de la réponse est "text/css"
+- [ ] Le système retourne 404 si le tenant n'existe pas
+- [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+
+**Tests d'acceptation:**
+```http
+GET /api/tenant/acme-corp/branding.css
+→ 200 OK avec Content-Type: text/css
+```
+
+---
+
+### US-2.8: Récupérer les Paramètres de Localisation d'un Tenant (DEVRAIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** récupérer les paramètres de langue et localisation  
+**Afin de** configurer mon système i18n
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/tenant/{tenantId}/language`
+- [ ] Le système retourne defaultLanguage, supportedLanguages, timezone, currency
+- [ ] Le système retourne également dateFormat et timeFormat
+- [ ] Le système retourne 404 si le tenant n'existe pas
+- [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+
+**Tests d'acceptation:**
+```http
+GET /api/tenant/acme-corp/language
+→ 200 OK avec objet JSON de localisation
+```
+
+---
+
+## 👤 Epic 3: Gestion des Utilisateurs
+
+### US-3.1: Créer un Utilisateur en Attente d'Activation (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** créer un utilisateur en statut PendingActivation  
+**Afin que** l'utilisateur puisse activer son compte plus tard
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/users/register` avec RegisterUserCommand
+- [ ] Le champ createAsPending est forcé à true pour les appels API
+- [ ] Le système crée l'utilisateur avec Status = PendingActivation
+- [ ] Le système génère un token d'activation via UserManager
+- [ ] Le système retourne userId, email, status et message
+- [ ] Le système refuse si l'email existe déjà (409 Conflict)
+- [ ] Le tenantId est obligatoire
+- [ ] L'utilisateur est ajouté au tenant spécifié
+
+**Tests d'acceptation:**
+```http
+POST /api/users/register
+{
+  "email": "john.doe@acme.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "tenantId": "acme-corp",
+  "createAsPending": true
+}
+→ 201 Created avec { userId, email, status: "PendingActivation" }
+```
+
+**DoD:**
+- Code implémenté dans UsersController.Register()
+- Tests unitaires pour RegisterUserCommand
+- Génération du token d'activation
+- Tests d'intégration avec tenant existant
+- Log du token en mode développement
+- Documentation API mise à jour
+
+---
+
+### US-3.2: Consulter un Utilisateur par ID (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer les détails d'un utilisateur  
+**Afin de** vérifier son statut et ses informations
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/users/{userId}`
+- [ ] Le système retourne le UserDto avec tous les détails
+- [ ] Les tenants de l'utilisateur sont inclus (TenantIds)
+- [ ] Le statut de l'utilisateur est visible (Status)
+- [ ] Le système retourne 404 si l'utilisateur n'existe pas
+
+**Tests d'acceptation:**
+```http
+GET /api/users/550e8400-e29b-41d4-a716-446655440000
+→ 200 OK avec UserDto
+```
+
+---
+
+### US-3.3: Ajouter un Utilisateur à un Tenant (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** ajouter un utilisateur existant à un tenant  
+**Afin de** lui donner accès à une nouvelle organisation
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/users/{userId}/tenants/{tenantId}`
+- [ ] Le système vérifie que l'utilisateur existe
+- [ ] Le système vérifie que le tenant existe
+- [ ] Le système appelle user.AddTenantId(tenantId)
+- [ ] Le système retourne 200 OK avec message de succès
+- [ ] Le système retourne 404 si utilisateur ou tenant inexistant
+- [ ] Le système refuse si l'utilisateur a déjà accès au tenant
+
+**Tests d'acceptation:**
+```http
+POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
+→ 200 OK avec { message: "User added to tenant successfully" }
+```
+
+---
+
+### US-3.4: Retirer un Utilisateur d'un Tenant (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** retirer l'accès d'un utilisateur à un tenant  
+**Afin de** révoquer ses permissions
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler DELETE `/api/users/{userId}/tenants/{tenantId}`
+- [ ] Le système vérifie que l'utilisateur existe
+- [ ] Le système appelle user.RemoveTenantId(tenantId)
+- [ ] Le système retourne 204 No Content en cas de succès
+- [ ] Le système retourne 404 si utilisateur ou tenant inexistant
+- [ ] L'utilisateur ne peut plus se connecter avec ce tenant
+
+**Tests d'acceptation:**
+```http
+DELETE /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
+→ 204 No Content
+```
+
+---
+
+### US-3.5: Consulter les Tenants d'un Utilisateur (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** voir la liste des tenants d'un utilisateur  
+**Afin de** connaître ses accès
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/users/{userId}/tenants`
+- [ ] Le système retourne la liste des TenantIds
+- [ ] Le système retourne une liste vide si aucun tenant
+- [ ] Le système retourne 404 si l'utilisateur n'existe pas
+
+**Tests d'acceptation:**
+```http
+GET /api/users/550e8400-e29b-41d4-a716-446655440000/tenants
+→ 200 OK avec { userId, tenants: ["acme-corp", "contoso"] }
+```
+
+---
+
+## 🔐 Epic 4: Onboarding et Activation
+
+### US-4.1: Afficher le Formulaire d'Onboarding avec Branding (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** voir un formulaire d'inscription personnalisé  
+**Afin de** créer un compte dans l'organisation
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/onboarding?acr_values=tenant:acme-corp`
+- [ ] Le système extrait le tenantId depuis acr_values
+- [ ] Le système charge les informations du tenant
+- [ ] Le système affiche le formulaire avec le branding (logo, couleurs)
+- [ ] Le formulaire contient: email, firstName, lastName
+- [ ] Le système retourne 400 Bad Request si aucun tenant spécifié
+- [ ] Le système retourne 400 Bad Request si le tenant n'existe pas ou inactif
+
+**Tests d'acceptation:**
+```
+GET /account/onboarding?acr_values=tenant:acme-corp
+→ 200 OK avec vue HTML brandée
+```
+
+**DoD:**
+- Vue Razor créée avec OnboardingViewModel
+- Branding CSS appliqué dynamiquement
+- Validation des paramètres acr_values
+- Tests E2E avec Playwright ou Selenium
+
+---
+
+### US-4.2: Soumettre une Demande d'Onboarding (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** soumettre ma demande de création de compte  
+**Afin que** l'application tierce valide ma demande
+
+**Critères d'acceptation:**
+- [ ] Je peux soumettre POST `/account/onboarding` avec OnboardingViewModel
+- [ ] Le système valide que l'email n'existe pas déjà
+- [ ] Le système génère un requestId unique
+- [ ] Le système envoie une notification HTTP POST à l'app tierce
+- [ ] La notification contient: requestId, tenantId, email, firstName, lastName
+- [ ] Le système affiche la page "En attente de validation"
+- [ ] Le système retourne une erreur si l'email existe déjà
+- [ ] Le système ne crée PAS l'utilisateur (c'est l'app tierce qui le fera)
+
+**Tests d'acceptation:**
+```http
+POST /account/onboarding
+{
+  "tenantId": "acme-corp",
+  "email": "john.doe@acme.com",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+→ 200 OK avec vue "OnboardingPending"
+```
+
+**DoD:**
+- AccountController.Onboarding() POST implémenté
+- NotificationService.NotifyAccountRequestAsync() créé
+- Tests unitaires avec mock de INotificationService
+- Tests d'intégration avec webhook simulé
+- Documentation du format de notification
+
+---
+
+### US-4.3: Afficher le Formulaire d'Activation (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** activer mon compte via le lien reçu par email  
+**Afin de** définir mon mot de passe et accéder au système
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/activate?token=<token>&userId=<guid>&tenant=acme-corp`
+- [ ] Le système vérifie que l'utilisateur existe
+- [ ] Le système vérifie que l'utilisateur est en statut PendingActivation
+- [ ] Le système charge le branding du tenant
+- [ ] Le système affiche l'email masqué (ex: j***n@example.com)
+- [ ] Le formulaire contient: password, confirmPassword
+- [ ] Le système retourne 400 Bad Request si token ou userId manquant
+- [ ] Le système retourne 400 Bad Request si l'utilisateur n'est pas en PendingActivation
+
+**Tests d'acceptation:**
+```
+GET /account/activate?token=ABC123&userId=550e8400-e29b-41d4-a716-446655440000&tenant=acme-corp
+→ 200 OK avec vue d'activation brandée
+```
+
+---
+
+### US-4.4: Activer un Compte Utilisateur (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** définir mon mot de passe et activer mon compte  
+**Afin de** pouvoir me connecter
+
+**Critères d'acceptation:**
+- [ ] Je peux soumettre POST `/account/activate` avec ActivateViewModel
+- [ ] Le système vérifie le token via UserManager.VerifyUserTokenAsync
+- [ ] Le système hache le mot de passe avec IPasswordHasher
+- [ ] Le système appelle user.SetPasswordHash(hash)
+- [ ] Le système appelle user.Activate() (déclenche UserActivatedEvent)
+- [ ] Le système confirme l'email via UserManager.ConfirmEmailAsync
+- [ ] Le système change Status de PendingActivation à Active
+- [ ] Le système connecte automatiquement l'utilisateur
+- [ ] Le système affiche la page de succès
+- [ ] Le système retourne une erreur si le token est invalide ou expiré
+- [ ] Le système retourne une erreur si les mots de passe ne correspondent pas
+
+**Tests d'acceptation:**
+```http
+POST /account/activate
+{
+  "token": "ABC123",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "tenantId": "acme-corp",
+  "newPassword": "SecureP@ss123",
+  "confirmPassword": "SecureP@ss123"
+}
+→ 200 OK avec vue "ActivateSuccess" + cookie de session
+```
+
+**DoD:**
+- AccountController.Activate() POST implémenté
+- User.Activate() dans domain avec événement
+- Tests unitaires pour validation token
+- Tests d'intégration E2E complets
+- Vérification que l'utilisateur est connecté après activation
+
+---
+
+### US-4.5: Activer un Compte via API (DEVRAIT AVOIR)
+**En tant qu'** application mobile  
+**Je veux** activer un compte via API  
+**Afin de** permettre l'activation sans navigateur web
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/account/activate` avec ActivateApiRequest
+- [ ] L'endpoint ne requiert pas de token anti-forgery (AllowAnonymous)
+- [ ] Le système effectue les mêmes validations que la version web
+- [ ] Le système retourne un objet JSON avec userId, email, status
+- [ ] Le système NE connecte PAS l'utilisateur (pas de cookie)
+- [ ] Le système retourne 400 Bad Request avec détails d'erreur
+
+**Tests d'acceptation:**
+```http
+POST /api/account/activate
+{
+  "token": "ABC123",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "tenantId": "acme-corp",
+  "newPassword": "SecureP@ss123",
+  "confirmPassword": "SecureP@ss123"
+}
+→ 200 OK avec { userId, email, status: "Active" }
+```
+
+---
+
+## 🔑 Epic 5: Authentification et Session
+
+### US-5.1: Afficher le Formulaire de Connexion (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** voir un formulaire de connexion  
+**Afin de** m'authentifier dans le système
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/login?returnUrl=<url>`
+- [ ] Le système extrait le tenantId depuis acr_values dans returnUrl
+- [ ] Le système affiche le formulaire avec email et password
+- [ ] Le formulaire inclut le branding si un tenant est détecté
+- [ ] Le returnUrl est préservé dans ViewData
+
+**Tests d'acceptation:**
+```
+GET /account/login?returnUrl=/connect/authorize?acr_values=tenant:acme-corp
+→ 200 OK avec formulaire de login
+```
+
+---
+
+### US-5.2: Se Connecter avec Email et Mot de Passe (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** me connecter avec mon email et mot de passe  
+**Afin d'** accéder à mes ressources
+
+**Critères d'acceptation:**
+- [ ] Je peux soumettre POST `/account/login` avec LoginViewModel
+- [ ] Le système extrait le tenantId depuis acr_values dans returnUrl
+- [ ] Le système vérifie les credentials via UserManager.CheckPasswordAsync
+- [ ] Le système vérifie que l'utilisateur a accès au tenant demandé
+- [ ] Le système crée une session avec cookie "Cookies" (7 jours)
+- [ ] Le système redirige vers returnUrl en cas de succès
+- [ ] Le système retourne une erreur si credentials invalides
+- [ ] Le système retourne une erreur si l'utilisateur n'a pas accès au tenant
+- [ ] Le système détecte si MFA est requis (user.RequiresMFA())
+
+**Tests d'acceptation:**
+```http
+POST /account/login
+{
+  "email": "john.doe@acme.com",
+  "password": "SecureP@ss123"
+}
+→ 302 Redirect vers returnUrl + cookie de session
+```
+
+**DoD:**
+- AccountController.Login() POST implémenté
+- CustomSignInManager vérifie MFA
+- Validation de l'accès tenant
+- Tests E2E avec différents scénarios
+- Log des tentatives de connexion
+
+---
+
+### US-5.3: Se Connecter via API (DEVRAIT AVOIR)
+**En tant qu'** application mobile  
+**Je veux** me connecter via API  
+**Afin d'** obtenir une session pour les appels suivants
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/auth/login` avec LoginApiRequest
+- [ ] Le système extrait le tenantId depuis query param acr_values
+- [ ] Le système valide les credentials
+- [ ] Le système vérifie l'accès au tenant
+- [ ] Le système crée un cookie de session
+- [ ] Le système retourne JSON { message, email }
+- [ ] Le système retourne 401 Unauthorized si credentials invalides
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/login?acr_values=tenant:acme-corp
+{
+  "email": "john.doe@acme.com",
+  "password": "SecureP@ss123"
+}
+→ 200 OK avec { message: "Login successful", email: "..." }
+```
+
+---
+
+### US-5.4: Se Déconnecter (DOIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** me déconnecter  
+**Afin de** terminer ma session de manière sécurisée
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/logout`
+- [ ] Le système efface le cookie "Cookies"
+- [ ] Le système efface le cookie "oidc" (IdentityServer)
+- [ ] Le système redirige vers la page de login
+- [ ] Les tokens IdentityServer sont révoqués
+
+**Tests d'acceptation:**
+```
+GET /account/logout
+→ 302 Redirect vers /account/login + cookies effacés
+```
+
+---
+
+### US-5.5: Demander une Réinitialisation de Mot de Passe (DEVRAIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** demander un lien de réinitialisation  
+**Afin de** récupérer l'accès à mon compte
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/forgot-password`
+- [ ] Je peux soumettre POST `/account/forgot-password` avec ForgotPasswordViewModel
+- [ ] Le système génère un token via UserManager.GeneratePasswordResetTokenAsync
+- [ ] En DEV: Le token est affiché dans la console
+- [ ] En PROD: Un email est envoyé avec le lien de reset
+- [ ] Le système affiche la page de confirmation
+- [ ] Le système ne révèle pas si l'email existe (sécurité)
+
+**Tests d'acceptation:**
+```http
+POST /account/forgot-password
+{
+  "email": "john.doe@acme.com"
+}
+→ 302 Redirect vers /account/forgot-password-confirmation
+```
+
+---
+
+### US-5.6: Réinitialiser un Mot de Passe (DEVRAIT AVOIR)
+**En tant qu'** utilisateur final  
+**Je veux** définir un nouveau mot de passe  
+**Afin de** récupérer l'accès à mon compte
+
+**Critères d'acceptation:**
+- [ ] Je peux accéder à GET `/account/reset-password?token=<token>`
+- [ ] Le formulaire contient: email, password, confirmPassword
+- [ ] Je peux soumettre POST `/account/reset-password` avec ResetPasswordViewModel
+- [ ] Le système valide le token
+- [ ] Le système réinitialise le mot de passe via UserManager.ResetPasswordAsync
+- [ ] Le système affiche la page de confirmation
+- [ ] Le système retourne une erreur si le token est invalide ou expiré
+- [ ] Le système retourne une erreur si les mots de passe ne correspondent pas
+
+**Tests d'acceptation:**
+```http
+POST /account/reset-password
+{
+  "email": "john.doe@acme.com",
+  "token": "ABC123",
+  "password": "NewSecureP@ss123",
+  "confirmPassword": "NewSecureP@ss123"
+}
+→ 302 Redirect vers /account/reset-password-confirmation
+```
+
+---
+
+## 🔗 Epic 6: Intégration IdentityServer
+
+### US-6.1: Charger un Client Dynamiquement depuis la Base (DOIT AVOIR)
+**En tant qu'** IdentityServer  
+**Je veux** charger un client depuis CustomClientStore  
+**Afin d'** utiliser la configuration dynamique
+
+**Critères d'acceptation:**
+- [ ] IdentityServer appelle CustomClientStore.FindClientByIdAsync(clientName)
+- [ ] Le système récupère le Client depuis la base de données
+- [ ] Le système récupère TOUS les tenants associés
+- [ ] Le système agrège RedirectUris depuis tous les AllowedReturnUrls des tenants
+- [ ] Le système agrège AllowedCorsOrigins depuis tous les AllowedCorsOrigins des tenants
+- [ ] **⚠️ CORS protège UNIQUEMENT les navigateurs (pas curl/Postman/applications serveur)**
+- [ ] Les CORS origins sont normalisées (schéma + autorité, pas de path)
+- [ ] Le système déduplique les URLs
+- [ ] Le système retourne null si le client n'a aucun tenant
+- [ ] Le système retourne null si aucun tenant n'a de redirect URIs
+- [ ] Le système mappe vers Duende.IdentityServer.Models.Client
+
+**Tests d'acceptation:**
+```csharp
+var client = await customClientStore.FindClientByIdAsync("my-spa-app");
+Assert.NotNull(client);
+Assert.Contains("http://localhost:4200/callback", client.RedirectUris);
+Assert.Equal(GrantTypes.Code, client.AllowedGrantTypes);
+Assert.True(client.RequirePkce);
+```
+
+**DoD:**
+- CustomClientStore.FindClientByIdAsync() implémenté
+- Agrégation des redirect URIs et CORS origins
+- Tests unitaires avec plusieurs tenants
+- Tests d'intégration avec base de données
+- Logging des clients null (sécurité)
+
+---
+
+### US-6.2: Valider une Redirect URI OAuth2 (DOIT AVOIR)
+**En tant qu'** IdentityServer  
+**Je veux** valider les redirect URIs  
+**Afin de** prévenir les attaques Open Redirect
+
+**Critères d'acceptation:**
+- [ ] IdentityServer reçoit une redirect_uri dans la requête /authorize
+- [ ] Le système charge le client via CustomClientStore
+- [ ] Le système vérifie que redirect_uri est dans client.RedirectUris
+- [ ] Le système refuse la requête si redirect_uri n'est pas autorisée
+- [ ] Le système retourne une erreur OAuth2 "invalid_request"
+
+**Tests d'acceptation:**
+```http
+GET /connect/authorize?redirect_uri=http://evil.com/callback
+→ 400 Bad Request avec error=invalid_request
+```
+
+---
+
+### US-6.3: Générer un Authorization Code avec PKCE (DOIT AVOIR)
+**En tant qu'** IdentityServer  
+**Je veux** générer un code d'autorisation après authentification  
+**Afin de** permettre le flux Authorization Code
+
+**Critères d'acceptation:**
+- [ ] L'utilisateur est authentifié (cookie de session valide)
+- [ ] IdentityServer reçoit une requête /authorize avec code_challenge
+- [ ] Le système valide le client et la redirect_uri
+- [ ] Le système génère un authorization_code unique
+- [ ] Le système stocke code_challenge associé au code
+- [ ] Le système redirige vers redirect_uri?code=<code>
+- [ ] Le code expire après 5 minutes
+
+**Tests d'acceptation:**
+```http
+GET /connect/authorize?client_id=my-spa-app&response_type=code&code_challenge=xyz&redirect_uri=...
+→ 302 Redirect vers http://localhost:4200/callback?code=ABC123
+```
+
+---
+
+### US-6.4: Échanger un Code contre des Tokens (DOIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** échanger mon authorization code contre des tokens  
+**Afin d'** obtenir un access_token et refresh_token
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/connect/token` avec grant_type=authorization_code
+- [ ] Le body contient: code, redirect_uri, client_id, code_verifier
+- [ ] Le système vérifie que le code est valide et non expiré
+- [ ] Le système valide PKCE: SHA256(code_verifier) == code_challenge
+- [ ] Le système génère un access_token JWT signé
+- [ ] Le système génère un refresh_token
+- [ ] Le système génère un id_token JWT (OIDC)
+- [ ] Le système retourne JSON avec tokens et expires_in
+- [ ] Le système révoque le code (usage unique)
+
+**Tests d'acceptation:**
+```http
+POST /connect/token
+{
+  "grant_type": "authorization_code",
+  "code": "ABC123",
+  "redirect_uri": "http://localhost:4200/callback",
+  "client_id": "my-spa-app",
+  "code_verifier": "original_verifier"
+}
+→ 200 OK avec { access_token, refresh_token, id_token, expires_in }
+```
+
+**DoD:**
+- Validation PKCE implémentée
+- Génération de tokens JWT
+- Signature avec clé RSA
+- Claims inclus dans tokens (sub, email, role, scope)
+- Tests unitaires pour validation PKCE
+- Tests d'intégration E2E complets
+
+---
+
+### US-6.5: Valider un Access Token JWT (DOIT AVOIR)
+**En tant qu'** API Johodp  
+**Je veux** valider les access tokens JWT  
+**Afin de** protéger mes endpoints
+
+**Critères d'acceptation:**
+- [ ] Le middleware JWT vérifie la signature du token
+- [ ] Le middleware vérifie que le token n'est pas expiré (exp claim)
+- [ ] Le middleware vérifie l'issuer (iss = IdentityServer URL)
+- [ ] Le middleware vérifie l'audience (aud = API)
+- [ ] Le middleware extrait les claims (sub, email, role, scope)
+- [ ] Le middleware peuple HttpContext.User avec les claims
+- [ ] Le middleware retourne 401 Unauthorized si validation échoue
+
+**Tests d'acceptation:**
+```http
+GET /api/users/me
+Authorization: Bearer eyJ...
+→ 200 OK avec données utilisateur (si token valide)
+→ 401 Unauthorized (si token invalide/expiré)
+```
+
+---
+
+### US-6.6: Renouveler un Access Token avec Refresh Token (DOIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** renouveler mon access token  
+**Afin de** maintenir ma session sans redemander credentials
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/connect/token` avec grant_type=refresh_token
+- [ ] Le body contient: refresh_token, client_id
+- [ ] Le système vérifie que le refresh_token est valide et non révoqué
+- [ ] Le système génère un NOUVEAU access_token
+- [ ] Le système génère un NOUVEAU refresh_token
+- [ ] Le système révoque l'ancien refresh_token (one-time use)
+- [ ] Le système retourne JSON avec nouveaux tokens
+- [ ] Le système retourne 400 Bad Request si refresh_token invalide
+
+**Tests d'acceptation:**
+```http
+POST /connect/token
+{
+  "grant_type": "refresh_token",
+  "refresh_token": "old_token",
+  "client_id": "my-spa-app"
+}
+→ 200 OK avec { access_token: "new", refresh_token: "new", expires_in: 3600 }
+```
+
+**DoD:**
+- RefreshTokenUsage = OneTimeOnly configuré
+- Tests de renouvellement multiples
+- Tests de révocation de refresh_tokens
+- Vérification sliding expiration (15 jours)
+
+---
+
+### US-6.7: Stocker les Tokens de manière Persistante (DOIT AVOIR)
+**En tant qu'** IdentityServer  
+**Je veux** stocker les tokens dans PostgreSQL  
+**Afin de** supporter la scalabilité et le clustering
+
+**Critères d'acceptation:**
+- [ ] Les authorization codes sont stockés dans PersistedGrants
+- [ ] Les refresh tokens sont stockés dans PersistedGrants
+- [ ] Les device codes sont stockés dans DeviceCodes
+- [ ] Les clés de signature sont stockées dans Keys
+- [ ] Le cleanup automatique s'exécute toutes les heures (3600s)
+- [ ] Les tokens expirés sont supprimés automatiquement
+- [ ] Les tokens révoqués sont supprimés de la base
+
+**Tests d'acceptation:**
+```sql
+SELECT * FROM "PersistedGrants" WHERE "Type" = 'refresh_token';
+→ Refresh tokens présents
+```
+
+**DoD:**
+- Duende.IdentityServer.EntityFramework.Storage configuré
+- Migration AddIdentityServerOperationalStore appliquée
+- Tests de cleanup automatique
+- Tests de révocation de tokens
+- Configuration CleanupOptions
+
+---
+
+## 🔔 Epic 7: Notifications
+
+### US-7.1: Envoyer une Notification à l'Application Tierce (DOIT AVOIR)
+**En tant que** système Johodp  
+**Je veux** notifier l'application tierce lors d'une demande d'onboarding  
+**Afin que** l'app puisse valider et créer l'utilisateur
+
+**Critères d'acceptation:**
+- [ ] Le système appelle INotificationService.NotifyAccountRequestAsync
+- [ ] Le service envoie POST vers tenant.NotificationUrl
+- [ ] Le body contient: requestId, tenantId, email, firstName, lastName
+- [ ] L'appel est asynchrone (fire-and-forget)
+- [ ] Le système log les erreurs de notification sans bloquer l'onboarding
+- [ ] Le système utilise tenant.ApiKey comme header Authorization si configuré
+
+**Tests d'acceptation:**
+```http
+POST https://app.acme.com/api/account-requests
+Authorization: Bearer <tenant.ApiKey>
+{
+  "requestId": "uuid",
+  "tenantId": "acme-corp",
+  "email": "john.doe@acme.com",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+→ App tierce reçoit la notification
+```
+
+**DoD:**
+- INotificationService interface créée
+- NotificationService implémentation avec HttpClient
+- Tests unitaires avec mock HttpClient
+- Tests d'intégration avec webhook simulé
+- Configuration retry policy (Polly)
+- Logging des succès/erreurs
+
+---
+
+## 📊 Epic 8: Administration et Monitoring
+
+### US-8.1: Logger les Tentatives de Connexion (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** voir les logs de connexion  
+**Afin de** détecter les tentatives d'intrusion
+
+**Critères d'acceptation:**
+- [ ] Chaque tentative de login est loggée avec: email, tenantId, timestamp, résultat
+- [ ] Les échecs sont loggés en Warning
+- [ ] Les succès sont loggés en Information
+- [ ] Les logs incluent l'IP source (HttpContext.Connection.RemoteIpAddress)
+
+**Tests d'acceptation:**
+```
+[2025-11-24 12:00:00] [INF] Successful login for user: john.doe@acme.com, tenant: acme-corp
+[2025-11-24 12:05:00] [WRN] Failed login attempt for user: hacker@evil.com
+```
+
+---
+
+### US-8.2: Logger les Créations d'Utilisateurs (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** voir les logs de création d'utilisateurs  
+**Afin de** tracer les inscriptions
+
+**Critères d'acceptation:**
+- [ ] Chaque création d'utilisateur est loggée avec: email, tenantId, status, timestamp
+- [ ] Les notifications envoyées sont loggées
+- [ ] Les activations réussies sont loggées
+- [ ] Les échecs d'activation sont loggés en Error
+
+---
+
+### US-8.3: Logger les Appels CustomClientStore (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** voir les logs des requêtes IdentityServer  
+**Afin de** comprendre les flux OAuth2
+
+**Critères d'acceptation:**
+- [ ] Chaque appel FindClientByIdAsync est loggé avec clientName
+- [ ] Les clients null (sans tenant ou sans URIs) sont loggés en Warning
+- [ ] Les agrégations de redirect URIs sont loggées en Debug
+
+---
+
+## 🧪 Epic 9: Tests et Qualité
+
+### US-9.1: Tests Unitaires Domain (DOIT AVOIR)
+**En tant que** développeur  
+**Je veux** tester la logique domain  
+**Afin de** garantir la qualité du code
+
+**Critères d'acceptation:**
+- [ ] Tests pour User.Create()
+- [ ] Tests pour User.Activate()
+- [ ] Tests pour User.AddTenantId() / RemoveTenantId()
+- [ ] Tests pour UserStatus.CanActivate(), CanLogin()
+- [ ] Tests pour Client.Create()
+- [ ] Tests pour Tenant.Create()
+- [ ] Tests pour Tenant.AddAllowedReturnUrl() avec validation
+- [ ] Tests pour Tenant.AddAllowedCorsOrigin() avec validation
+- [ ] Couverture de code > 80% sur domain
+
+---
+
+### US-9.2: Tests d'Intégration Commands (DOIT AVOIR)
+**En tant que** développeur  
+**Je veux** tester les commands avec base de données  
+**Afin de** vérifier les transactions
+
+**Critères d'acceptation:**
+- [ ] Tests pour CreateClientCommand avec transaction
+- [ ] Tests pour CreateTenantCommand avec association bidirectionnelle
+- [ ] Tests pour RegisterUserCommand avec génération token
+- [ ] Tests pour UpdateTenantCommand avec changement de client
+- [ ] Tests avec base de données in-memory ou Testcontainers
+
+---
+
+### US-9.3: Tests E2E OAuth2 Flow (DOIT AVOIR)
+**En tant que** développeur  
+**Je veux** tester le flux OAuth2 complet  
+**Afin de** valider l'intégration IdentityServer
+
+**Critères d'acceptation:**
+- [ ] Test: Créer client → créer tenant → créer utilisateur → activer → login → authorize → token → API call
+- [ ] Test: Renouvellement avec refresh_token
+- [ ] Test: Révocation de refresh_token
+- [ ] Test: Expiration de access_token
+- [ ] Tests avec Playwright ou Selenium
+
+---
+
+## 📈 Priorisation et Sprints Suggérés
+
+### Sprint 1 (2 semaines) - Fondations
+- **Objectif:** API CRUD clients/tenants + base DDD
+- US-1.1, US-1.2, US-1.3
+- US-2.1, US-2.2, US-2.3, US-2.4
+- US-9.1 (tests domain)
+
+### Sprint 2 (2 semaines) - Gestion Utilisateurs
+- **Objectif:** CRUD utilisateurs + multi-tenant
+- US-3.1, US-3.2, US-3.3, US-3.4, US-3.5
+- US-9.2 (tests commands)
+
+### Sprint 3 (3 semaines) - Onboarding & Activation
+- **Objectif:** Flux onboarding complet
+- US-4.1, US-4.2, US-4.3, US-4.4, US-4.5
+- US-7.1 (notifications)
+- US-2.7, US-2.8 (branding)
+
+### Sprint 4 (3 semaines) - Authentification
+- **Objectif:** Login/logout + password reset
+- US-5.1, US-5.2, US-5.3, US-5.4
+- US-5.5, US-5.6 (password reset)
+
+### Sprint 5 (4 semaines) - IdentityServer
+- **Objectif:** OAuth2/OIDC complet
+- US-6.1, US-6.2, US-6.3, US-6.4
+- US-6.5, US-6.6, US-6.7
+- US-9.3 (tests E2E)
+
+### Sprint 6 (1 semaine) - Administration & Monitoring
+- **Objectif:** Logs et observabilité
+- US-8.1, US-8.2, US-8.3
+- US-1.4, US-1.5, US-2.5, US-2.6 (CRUD complet)
+
+---
+
+## 📋 Estimation Globale
+
+| Epic | User Stories | Story Points | Priorité |
+|------|--------------|--------------|----------|
+| Epic 1 - Clients | 5 US | 13 | DOIT AVOIR |
+| Epic 2 - Tenants | 8 US | 21 | DOIT AVOIR |
+| Epic 3 - Utilisateurs | 5 US | 13 | DOIT AVOIR |
+| Epic 4 - Onboarding | 5 US | 21 | DOIT AVOIR |
+| Epic 5 - Authentification | 6 US | 21 | DOIT AVOIR |
+| Epic 6 - IdentityServer | 7 US | 34 | DOIT AVOIR |
+| Epic 7 - Notifications | 1 US | 5 | DOIT AVOIR |
+| Epic 8 - Administration | 3 US | 8 | DEVRAIT AVOIR |
+| Epic 9 - Tests | 3 US | 21 | DOIT AVOIR |
+| **TOTAL** | **43 US** | **157 SP** | **~6 sprints** |
+
+---
+
+## 🎯 Critères d'Acceptation Globaux
+
+Pour que le projet soit considéré comme "Done":
+
+1. ✅ Tous les endpoints API documentés dans `API_ENDPOINTS.md` sont implémentés
+2. ✅ Le flux OAuth2 Authorization Code + PKCE fonctionne E2E
+3. ✅ Le flux d'onboarding complet fonctionne (notification → activation)
+4. ✅ Le branding par tenant est fonctionnel
+5. ✅ Les tokens sont stockés de manière persistante (PostgreSQL)
+6. ✅ CustomClientStore agrège dynamiquement les redirect URIs et CORS
+7. ✅ Les logs sont configurés (Serilog + PostgreSQL ou ELK)
+8. ✅ Tests unitaires + intégration + E2E couvrent > 70% du code
+9. ✅ Documentation technique complète (`README.md`, `ARCHITECTURE.md`, etc.)
+10. ✅ L'application peut être déployée en production (Docker + PostgreSQL)
+
+---
+
+## 📚 Références
+
+- [Cas d'Usage Détaillés](USE_CASES.md)
+- [Architecture DDD](ARCHITECTURE.md)
+- [Flux de Compte](ACCOUNT_FLOWS.md)
+- [Endpoints API](API_ENDPOINTS.md)
+- [Flux d'Onboarding](ONBOARDING_FLOW.md)

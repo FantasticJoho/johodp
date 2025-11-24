@@ -50,7 +50,8 @@ public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Ten
             Timezone = tenant.Timezone,
             Currency = tenant.Currency,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
-            AssociatedClientIds = tenant.AssociatedClientIds.ToList()
+            AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
+            ClientId = tenant.ClientId
         };
     }
 }
@@ -92,7 +93,8 @@ public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, IEn
             Timezone = tenant.Timezone,
             Currency = tenant.Currency,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
-            AssociatedClientIds = tenant.AssociatedClientIds.ToList()
+            AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
+            ClientId = tenant.ClientId
         };
     }
 }
@@ -141,7 +143,8 @@ public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery,
             Timezone = tenant.Timezone,
             Currency = tenant.Currency,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
-            AssociatedClientIds = tenant.AssociatedClientIds.ToList()
+            AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
+            ClientId = tenant.ClientId
         };
     }
 }

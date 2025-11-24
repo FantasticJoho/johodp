@@ -121,8 +121,8 @@ public class TenantController : ControllerBase
             var tenant = await _sender.Send(command);
             
             _logger.LogInformation(
-                "Successfully created tenant {TenantId} with {ClientCount} associated clients and {UrlCount} return URLs",
-                tenant.Id, tenant.AssociatedClientIds.Count, tenant.AllowedReturnUrls.Count);
+                "Successfully created tenant {TenantId} with client '{ClientId}' and {UrlCount} return URLs",
+                tenant.Id, tenant.ClientId ?? "(none)", tenant.AllowedReturnUrls.Count);
 
             return CreatedAtAction(nameof(GetById), new { id = tenant.Id }, tenant);
         }
@@ -152,8 +152,8 @@ public class TenantController : ControllerBase
             var tenant = await _sender.Send(command);
             
             _logger.LogInformation(
-                "Successfully updated tenant {TenantId}. Associated clients: {ClientCount}, Return URLs: {UrlCount}",
-                tenant.Id, tenant.AssociatedClientIds.Count, tenant.AllowedReturnUrls.Count);
+                "Successfully updated tenant {TenantId}. Client: '{ClientId}', Return URLs: {UrlCount}",
+                tenant.Id, tenant.ClientId ?? "(none)", tenant.AllowedReturnUrls.Count);
 
             return Ok(tenant);
         }

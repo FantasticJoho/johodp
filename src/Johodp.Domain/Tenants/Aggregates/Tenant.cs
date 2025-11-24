@@ -38,9 +38,12 @@ public class Tenant : AggregateRoot
     private readonly List<string> _allowedReturnUrls = new();
     public IReadOnlyList<string> AllowedReturnUrls => _allowedReturnUrls.AsReadOnly();
 
-    // Associated client IDs for automatic updates
-    private readonly List<string> _associatedClientIds = new();
-    public IReadOnlyList<string> AssociatedClientIds => _associatedClientIds.AsReadOnly();
+    // Allowed CORS origins for this tenant's frontend application
+    private readonly List<string> _allowedCorsOrigins = new();
+    public IReadOnlyList<string> AllowedCorsOrigins => _allowedCorsOrigins.AsReadOnly();
+
+    // Associated client (a tenant can only be associated with one client)
+    public string? ClientId { get; private set; }
 
     private Tenant() { }
 
@@ -162,21 +165,44 @@ public class Tenant : AggregateRoot
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddAssociatedClient(string clientId)
+    public void AddAllowedCorsOrigin(string origin)
     {
-        if (string.IsNullOrWhiteSpace(clientId))
-            throw new ArgumentException("Client ID cannot be empty", nameof(clientId));
+        if (string.IsNullOrWhiteSpace(origin))
+            throw new ArgumentException("CORS origin cannot be empty", nameof(origin));
 
-        if (!_associatedClientIds.Contains(clientId))
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+            throw new ArgumentException("CORS origin must be a valid absolute URI", nameof(origin));
+
+        // Validate that it's just origin (no path)
+        if (!string.IsNullOrEmpty(uri.PathAndQuery) && uri.PathAndQuery != "/")
+            throw new ArgumentException("CORS origin should not contain a path", nameof(origin));
+
+        var normalizedOrigin = uri.GetLeftPart(UriPartial.Authority);
+        if (!_allowedCorsOrigins.Contains(normalizedOrigin))
         {
-            _associatedClientIds.Add(clientId);
+            _allowedCorsOrigins.Add(normalizedOrigin);
             UpdatedAt = DateTime.UtcNow;
         }
     }
 
-    public void RemoveAssociatedClient(string clientId)
+    public void RemoveAllowedCorsOrigin(string origin)
     {
-        _associatedClientIds.Remove(clientId);
+        _allowedCorsOrigins.Remove(origin);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetClient(string? clientId)
+    {
+        if (clientId != null && string.IsNullOrWhiteSpace(clientId))
+            throw new ArgumentException("Client ID cannot be empty", nameof(clientId));
+
+        ClientId = clientId;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void RemoveClient()
+    {
+        ClientId = null;
         UpdatedAt = DateTime.UtcNow;
     }
 

@@ -45,8 +45,8 @@ public class ClientsController : ControllerBase
             var client = await _sender.Send(command);
             
             _logger.LogInformation(
-                "Successfully created client {ClientId} with {UriCount} redirect URIs",
-                client.Id, client.AllowedRedirectUris.Count);
+                "Successfully created client {ClientId} with {TenantCount} associated tenant(s)",
+                client.Id, client.AssociatedTenantIds.Count);
 
             return CreatedAtAction(nameof(GetClient), new { clientId = client.Id }, client);
         }
@@ -81,8 +81,8 @@ public class ClientsController : ControllerBase
             var client = await _sender.Send(command);
             
             _logger.LogInformation(
-                "Successfully updated client {ClientId}. Redirect URIs: {UriCount}, Active: {IsActive}",
-                client.Id, client.AllowedRedirectUris.Count, client.IsActive);
+                "Successfully updated client {ClientId}. Associated tenants: {TenantCount}, Active: {IsActive}",
+                client.Id, client.AssociatedTenantIds.Count, client.IsActive);
 
             return Ok(client);
         }
@@ -185,81 +185,4 @@ public class ClientsController : ControllerBase
             return StatusCode(500, "An error occurred while deleting the client");
         }
     }
-
-    /// <summary>
-    /// Add a redirect URI to a client
-    /// </summary>
-    [HttpPost("{clientId}/redirect-uris")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> AddRedirectUri(Guid clientId, [FromBody] AddRedirectUriRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.RedirectUri))
-            return BadRequest(new { error = "RedirectUri is required" });
-
-        var client = await _clientRepository.GetByIdAsync(ClientId.From(clientId));
-        
-        if (client == null)
-            return NotFound(new { error = "Client not found" });
-
-        try
-        {
-            client.AddRedirectUri(request.RedirectUri);
-            await _clientRepository.UpdateAsync(client);
-            await _unitOfWork.SaveChangesAsync();
-
-            _logger.LogInformation("Added redirect URI {Uri} to client {ClientId}", request.RedirectUri, clientId);
-
-            return Ok(new
-            {
-                message = "Redirect URI added successfully",
-                allowedRedirectUris = client.AllowedRedirectUris
-            });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
-
-    /// <summary>
-    /// Remove a redirect URI from a client
-    /// </summary>
-    [HttpDelete("{clientId}/redirect-uris")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RemoveRedirectUri(Guid clientId, [FromBody] RemoveRedirectUriRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.RedirectUri))
-            return BadRequest(new { error = "RedirectUri is required" });
-
-        var client = await _clientRepository.GetByIdAsync(ClientId.From(clientId));
-        
-        if (client == null)
-            return NotFound(new { error = "Client not found" });
-
-        try
-        {
-            client.RemoveRedirectUri(request.RedirectUri);
-            await _clientRepository.UpdateAsync(client);
-            await _unitOfWork.SaveChangesAsync();
-
-            _logger.LogInformation("Removed redirect URI {Uri} from client {ClientId}", request.RedirectUri, clientId);
-
-            return Ok(new
-            {
-                message = "Redirect URI removed successfully",
-                allowedRedirectUris = client.AllowedRedirectUris
-            });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
-    }
 }
-
-public record AddRedirectUriRequest(string RedirectUri);
-public record RemoveRedirectUriRequest(string RedirectUri);

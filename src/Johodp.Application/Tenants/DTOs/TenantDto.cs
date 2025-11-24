@@ -24,7 +24,8 @@ public class TenantDto
 
     // OAuth2/OIDC
     public List<string> AllowedReturnUrls { get; set; } = new();
-    public List<string> AssociatedClientIds { get; set; } = new();
+    public List<string> AllowedCorsOrigins { get; set; } = new();
+    public string? ClientId { get; set; }
 }
 
 public class CreateTenantDto
@@ -41,7 +42,8 @@ public class CreateTenantDto
     public string? Timezone { get; set; }
     public string? Currency { get; set; }
     public List<string>? AllowedReturnUrls { get; set; }
-    public List<string>? AssociatedClientIds { get; set; }
+    public List<string>? AllowedCorsOrigins { get; set; }
+    public string ClientId { get; set; } = string.Empty;
 }
 
 public class UpdateTenantDto
@@ -57,6 +59,7 @@ public class UpdateTenantDto
     public string? Timezone { get; set; }
     public string? Currency { get; set; }
     public List<string>? AllowedReturnUrls { get; set; }
-    public List<string>? AssociatedClientIds { get; set; }
+    public List<string>? AllowedCorsOrigins { get; set; }
+    public string? ClientId { get; set; }
     public bool? IsActive { get; set; }
 }

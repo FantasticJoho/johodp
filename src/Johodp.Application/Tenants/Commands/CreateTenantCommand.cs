@@ -36,6 +36,19 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, T
             throw new InvalidOperationException($"A tenant with name '{dto.Name}' already exists");
         }
 
+        // Validate associated client (required)
+        if (string.IsNullOrWhiteSpace(dto.ClientId))
+        {
+            throw new InvalidOperationException("ClientId is required. A tenant must be associated with an existing client.");
+        }
+
+        // Verify that the client exists
+        var client = await _clientRepository.GetByNameAsync(dto.ClientId);
+        if (client == null)
+        {
+            throw new InvalidOperationException($"Client '{dto.ClientId}' does not exist. Please create the client first.");
+        }
+
         // Create tenant aggregate
         var tenant = Tenant.Create(
             dto.Name,
@@ -81,45 +94,42 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, T
             }
         }
 
-        // Add associated clients
-        if (dto.AssociatedClientIds != null)
+        // Add CORS origins
+        if (dto.AllowedCorsOrigins != null)
         {
-            foreach (var clientId in dto.AssociatedClientIds)
+            foreach (var origin in dto.AllowedCorsOrigins)
             {
-                tenant.AddAssociatedClient(clientId);
+                tenant.AddAllowedCorsOrigin(origin);
             }
         }
+
+        // Set associated client (required)
+        tenant.SetClient(dto.ClientId);
 
         // Save tenant
         await _tenantRepository.AddAsync(tenant);
         await _unitOfWork.SaveChangesAsync();
 
-        // Update associated clients with return URLs
-        await UpdateAssociatedClientsAsync(tenant);
+        // Update associated client with this tenant ID
+        await UpdateAssociatedClientAsync(tenant);
 
         return MapToDto(tenant);
     }
 
-    private async Task UpdateAssociatedClientsAsync(Tenant tenant)
+    private async Task UpdateAssociatedClientAsync(Tenant tenant)
     {
-        foreach (var clientId in tenant.AssociatedClientIds)
+        // Associate the tenant with the client (bidirectional relationship)
+        var client = await _clientRepository.GetByNameAsync(tenant.ClientId!);
+        if (client != null)
         {
-            var client = await _clientRepository.GetByNameAsync(clientId);
-            if (client != null)
+            // Associate tenant with client if not already associated
+            if (!client.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
             {
-                // Clear existing redirect URIs and add tenant's return URLs
-                foreach (var url in tenant.AllowedReturnUrls)
-                {
-                    // Check if redirect URI already exists
-                    if (!client.AllowedRedirectUris.Contains(url))
-                    {
-                        client.AddRedirectUri(url);
-                    }
-                }
+                client.AssociateTenant(tenant.Id.Value.ToString());
                 await _clientRepository.UpdateAsync(client);
+                await _unitOfWork.SaveChangesAsync();
             }
         }
-        await _unitOfWork.SaveChangesAsync();
     }
 
     private static TenantDto MapToDto(Tenant tenant)
@@ -142,7 +152,8 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, T
             Timezone = tenant.Timezone,
             Currency = tenant.Currency,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
-            AssociatedClientIds = tenant.AssociatedClientIds.ToList()
+            AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
+            ClientId = tenant.ClientId
         };
     }
 }

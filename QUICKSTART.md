@@ -93,22 +93,157 @@ L'application démarrera sur `https://localhost:5001`
 
 ## 📚 Points d'entrée API
 
-### Utilisateurs
+### Endpoints Web (HTML)
+- GET/POST `/Account/Login` - Formulaire de connexion
+- GET/POST `/Account/Register` - Formulaire d'inscription
+- POST `/Account/Logout` - Déconnexion
+- GET/POST `/Account/ForgotPassword` - Réinitialisation mot de passe
+- GET/POST `/Account/ResetPassword` - Nouveau mot de passe
+- GET/POST `/Account/Onboarding` - Demande d'onboarding
+- GET/POST `/Account/Activate` - Activation compte
 
-**Enregistrer un utilisateur**
+### Endpoints API (JSON)
+
+**Authentication**
 ```bash
-POST /api/users/register
+# Enregistrement
+POST /api/auth/register
 {
+  "email": "user@example.com",
+  "firstName": "Jean",
+  "lastName": "Dupont",
+  "password": "SecureP@ssw0rd123!",
+  "confirmPassword": "SecureP@ssw0rd123!"
+}
+
+# Login
+POST /api/auth/login
+{
+  "email": "user@example.com",
+  "password": "SecureP@ssw0rd123!"
+}
+
+# Logout
+POST /api/auth/logout
+
+# Mot de passe oublié
+POST /api/auth/forgot-password
+{
+  "email": "user@example.com"
+}
+
+# Réinitialiser mot de passe
+POST /api/auth/reset-password
+{
+  "email": "user@example.com",
+  "token": "CfDJ8N...",
+  "password": "NewP@ssw0rd123!",
+  "confirmPassword": "NewP@ssw0rd123!"
+}
+```
+
+**Account Management**
+```bash
+# Activation compte
+POST /api/account/activate
+{
+  "token": "CfDJ8N...",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "tenantId": "acme",
+  "newPassword": "SecureP@ssw0rd123!",
+  "confirmPassword": "SecureP@ssw0rd123!"
+}
+
+# Onboarding
+POST /api/account/onboarding
+{
+  "tenantId": "acme",
   "email": "user@example.com",
   "firstName": "Jean",
   "lastName": "Dupont"
 }
 ```
 
-**Récupérer un utilisateur**
+**Users Management**
 ```bash
+# Créer utilisateur (appelé par app tierce après approbation)
+POST /api/users/register
+{
+  "email": "user@example.com",
+  "firstName": "Jean",
+  "lastName": "Dupont",
+  "password": "TempP@ssw0rd123!",
+  "tenantId": "acme"
+}
+
+# Récupérer un utilisateur
 GET /api/users/{userId}
+
+# Récupérer les tenants d'un utilisateur
+GET /api/users/{userId}/tenants
 ```
+
+## 🌐 Configuration CORS
+
+### ⚠️ IMPORTANT: Limites de CORS
+
+**CORS protège UNIQUEMENT les navigateurs web !**
+
+```
+✅ CORS protège:
+   - Navigateurs (Chrome, Firefox, Safari, Edge)
+   - JavaScript (fetch, axios, XMLHttpRequest)
+   - Applications SPA (React, Angular, Vue)
+
+❌ CORS NE protège PAS:
+   - curl / wget / Postman / Insomnia
+   - Applications serveur (Node.js, Python, C#)
+   - Applications mobile natives (iOS, Android)
+   - Scripts backend / API-to-API calls
+```
+
+### Architecture CORS
+
+- **AllowedCorsOrigins** géré au niveau **Tenant** (pas Client)
+- Un Client hérite des CORS de tous ses tenants associés
+- IdentityServer agrège dynamiquement les origines autorisées
+
+**Exemple:**
+```json
+// Tenant "acme"
+{
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "https://app.acme.com"
+  ]
+}
+
+// Client "acme-spa" (associé au tenant "acme")
+// Hérite automatiquement: ["http://localhost:4200", "https://app.acme.com"]
+```
+
+### Contournement CORS
+
+```bash
+# ❌ Bloqué dans un navigateur
+fetch('https://api.johodp.com/api/auth/login', { method: 'POST' })
+// ERROR: CORS policy blocked
+
+# ✅ Fonctionne avec curl (pas de CORS)
+curl -X POST https://api.johodp.com/api/auth/login
+# SUCCESS: Retourne la réponse
+```
+
+### Vraie Sécurité
+
+**CORS = Commodité UX, PAS Sécurité !**
+
+Protection réelle:
+1. **Authentication** - OAuth2/OIDC tokens requis
+2. **Authorization** - Claims-based policies
+3. **Rate Limiting** - Limite tentatives abusives
+4. **API Keys** - Identification client (optionnel)
+5. **IP Whitelist** - Restriction géographique (optionnel)
 
 ## 🧪 Tests
 

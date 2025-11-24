@@ -64,7 +64,7 @@ app.UseSerilogRequestLogging(options =>
     {
         diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
         diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
-        diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+        diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
         if (httpContext.User?.Identity?.IsAuthenticated == true)
         {
             diagnosticContext.Set("UserEmail", httpContext.User.FindFirst("email")?.Value);
