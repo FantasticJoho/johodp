@@ -16,7 +16,8 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
         // Database - Configure Npgsql for dynamic JSON serialization
         var connectionString = configuration.GetConnectionString("DefaultConnection");
@@ -116,8 +117,87 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<Johodp.Domain.Users.Aggregates.User>, Johodp.Infrastructure.Identity.DomainUserClaimsPrincipalFactory>();
 
         // Wire IdentityServer to use ASP.NET Identity for user authentication
-        idServerBuilder.AddAspNetIdentity<Johodp.Domain.Users.Aggregates.User>()
-                   .AddDeveloperSigningCredential();
+        idServerBuilder.AddAspNetIdentity<Johodp.Domain.Users.Aggregates.User>();
+        
+        // Signing credential configuration based on environment
+        if (environment.IsDevelopment())
+        {
+            // Development: Use temporary signing credential (regenerated on each restart)
+            idServerBuilder.AddDeveloperSigningCredential();
+        }
+        else
+        {
+            // Production: Use persistent signing credential
+            var signingMethod = configuration["IdentityServer:SigningMethod"] ?? "Certificate";
+            
+            if (signingMethod == "Certificate")
+            {
+                // Option A: X.509 Certificate
+                var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
+                
+                if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
+                {
+                    throw new InvalidOperationException(
+                        "IdentityServer:SigningKeyPath must be configured in production. " +
+                        "Generate a key with: dotnet dev-certs https -ep path/to/key.pfx -p YourPassword");
+                }
+                
+                var keyPassword = configuration["IdentityServer:SigningKeyPassword"];
+                idServerBuilder.AddSigningCredential(
+                    new System.Security.Cryptography.X509Certificates.X509Certificate2(
+                        signingKeyPath, 
+                        keyPassword));
+            }
+            else if (signingMethod == "JWK")
+            {
+                // Option B: JSON Web Key (RFC 7517)
+                // Load from Vault JSON or file
+                var currentKeyJson = configuration["IdentityServer:CurrentKeyJson"];
+                
+                if (!string.IsNullOrEmpty(currentKeyJson))
+                {
+                    // Load from Vault (injected via Program.cs)
+                    var currentKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromJson(currentKeyJson);
+                    idServerBuilder.AddSigningCredential(currentKey, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
+                    
+                    // Support rotation: load previous key for validation
+                    var previousKeyJson = configuration["IdentityServer:PreviousKeyJson"];
+                    if (!string.IsNullOrEmpty(previousKeyJson))
+                    {
+                        var previousKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromJson(previousKeyJson);
+                        idServerBuilder.AddValidationKey(previousKey);
+                    }
+                }
+                else
+                {
+                    // Fallback: load from file
+                    var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
+                    
+                    if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
+                    {
+                        throw new InvalidOperationException(
+                            "IdentityServer:SigningKeyPath must be configured in production. " +
+                            "Generate a JWK with: dotnet run --project tools/KeyGenerator");
+                    }
+                    
+                    var jwkKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(signingKeyPath);
+                    idServerBuilder.AddSigningCredential(jwkKey, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
+                    
+                    // Support rotation: load previous key if configured
+                    var previousKeyPath = configuration["IdentityServer:PreviousSigningKeyPath"];
+                    if (!string.IsNullOrEmpty(previousKeyPath) && File.Exists(previousKeyPath))
+                    {
+                        var previousKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(previousKeyPath);
+                        idServerBuilder.AddValidationKey(previousKey);
+                    }
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Unknown signing method: {signingMethod}. Valid values: Certificate, JWK");
+            }
+        }
 
         // Profile service: map domain user -> token/userinfo claims
         services.AddScoped<IProfileService, IdentityServerProfileService>();

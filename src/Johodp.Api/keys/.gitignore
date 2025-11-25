@@ -1,0 +1,6 @@
+# Ignore signing keys (production secrets)
+signing-key.pfx
+*.pfx
+*.p12
+*.key
+*.pem
