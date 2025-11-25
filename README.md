@@ -9,10 +9,13 @@ Fournisseur d'identité (IDP) moderne basé sur .NET 8, Duende IdentityServer 7,
 - [Installation rapide](#installation-rapide)
 - [Architecture](#architecture)
 - [Fonctionnalités](#fonctionnalités)
+  - [Logging enrichi](#logging-enrichi)
+  - [OAuth2 Client Credentials](#oauth2-client-credentials)
 - [Authentification et autorisation](#authentification-et-autorisation)
 - [Multi-tenancy](#multi-tenancy)
 - [Tests et développement](#tests-et-développement)
 - [Structure du projet](#structure-du-projet)
+- [Documentation](#documentation)
 - [Ressources](#ressources)
 
 ## 🎯 Vue d'ensemble
@@ -20,11 +23,15 @@ Fournisseur d'identité (IDP) moderne basé sur .NET 8, Duende IdentityServer 7,
 Johodp est un serveur d'identité complet offrant :
 
 - **Authentification OAuth2/OIDC** avec support PKCE pour applications SPA
-- **Multi-tenancy** avec isolation des utilisateurs par tenant
+- **Multi-tenancy** avec isolation des utilisateurs par tenant via URLs
+- **Logging enrichi** avec extraction automatique de `tenant_id` et `client_id` (Serilog)
+- **OAuth2 Client Credentials** pour authentification machine-to-machine
+- **IdP externe** pour protection des webhooks
 - **Gestion des rôles et permissions** avec valeurs par défaut
 - **Architecture DDD** pour une logique métier claire et maintenable
-- **ASP.NET Core Identity** intégré avec support MFA
 - **API REST** pour la gestion des utilisateurs et clients
+
+📖 **[Guide d'installation complet →](INSTALL.md)**
 
 ## 📦 Prérequis
 
@@ -34,52 +41,30 @@ Johodp est un serveur d'identité complet offrant :
 
 ## 🚀 Installation rapide
 
-### 1. Configuration de PostgreSQL avec Docker
+**Pour une installation complète avec toutes les configurations, voir [INSTALL.md](INSTALL.md)**
+
+### Démarrage rapide (5 minutes)
 
 ```bash
-docker run --name johodp-postgres \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=johodp \
-  -p 5432:5432 \
-  -d postgres:15
-```
+# 1. Démarrer PostgreSQL
+docker-compose up -d
 
-### 2. Restaurer les dépendances
-
-```bash
+# 2. Restaurer les packages
 dotnet restore
-```
 
-### 3. Appliquer les migrations
+# 3. Appliquer les migrations
+.\init-db.ps1  # Windows
+./init-db.sh   # Linux/Mac
 
-**Bash/Shell:**
-```bash
-dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
-```
-
-**PowerShell:**
-```powershell
-dotnet ef database update --project src/Johodp.Infrastructure --startup-project src/Johodp.Api
-```
-
-**Ou utiliser les scripts fournis:**
-```bash
-# Bash/Shell
-./init-db.sh
-
-# PowerShell
-.\init-db.ps1
-```
-
-### 4. Lancer l'application
-
-```bash
+# 4. Lancer l'application
 dotnet run --project src/Johodp.Api
 ```
 
 L'API sera disponible sur :
 - HTTP : `http://localhost:5000`
 - HTTPS : `https://localhost:5001`
+
+Vérifier l'installation : `https://localhost:5001/.well-known/openid-configuration`
 
 ## 🏗️ Architecture
 
@@ -240,6 +225,8 @@ Configuration et personnalisation par tenant (branding, langue, format).
 | `POST /connect/introspect` | Inspecte et valide un token |
 | `GET /connect/endsession` | Déconnexion OIDC (logout) |
 
+📖 **[Documentation OAuth2/OIDC complète →](API_ENDPOINTS.md)**
+
 ### Authentification et autorisation
 
 #### Pages de gestion de compte
@@ -377,23 +364,59 @@ grant_type=authorization_code&client_id=johodp-spa&code=AUTHORIZATION_CODE&redir
 
 **Voir le fichier `src/Johodp.Api/httpTest/pkceconnection.http` pour des exemples complets.**
 
+## 📊 Logging enrichi
+
+Les logs Serilog sont automatiquement enrichis avec `tenant_id` et `client_id` extraits depuis :
+
+1. **acr_values** : `acr_values=tenant:xxx` (priorité 1)
+2. **Claims JWT** : `tenant_id` et `client_id` dans le token
+3. **Query params** : `?tenant=xxx&client_id=xxx`
+4. **Headers** : `X-Tenant-Id` et `X-Client-Id`
+
+**Exemple de log enrichi :**
+```
+[15:42:31 INF] acme-corp-example-com johodp-spa User authenticated successfully
+[15:42:32 INF] client-app-io johodp-api MFA provisioned for user guid
+```
+
+📖 **[Documentation Logging →](LOGGING_ENRICHERS.md)**
+
+## 🔗 OAuth2 Client Credentials
+
+Support complet du flux **Client Credentials** pour l'authentification machine-to-machine :
+
+- Obtention de tokens d'accès pour services backend
+- Caching automatique des tokens (Redis/IMemoryCache)
+- Retry policies avec Polly (3 tentatives + circuit breaker)
+- Dead-letter queue pour webhooks échoués
+- Support IdP externe pour protection des webhooks
+
+📖 **[Configuration OAuth2 Client Credentials →](INSTALL.md#configuration-oauth2-client-credentials)**  
+📖 **[Configuration IdP externe →](INSTALL.md#configuration-idp-externe)**
+
 ## 🏢 Multi-tenancy
 
 ### Isolation par tenant
 
-Johodp supporte le multi-tenancy via le paramètre OIDC standard `acr_values` :
+Johodp supporte le multi-tenancy via le paramètre OIDC standard `acr_values` avec **URL complète du tenant** :
 
-**Format:** `acr_values=tenant:TENANT_ID`
+**Format:** `acr_values=tenant:<URL_NETTOYEE>`
+
+Où `<URL_NETTOYEE>` est dérivé de l'URL du tenant (ex: `https://acme-corp.example.com` → `acme-corp-example-com`)
+
+📖 **[Format URL tenant (ASCII uniquement) →](TENANT_URL_FORMAT.md)**
 
 ### Comportement
 
 | Scénario | TenantId utilisateur | Accès autorisé |
 |----------|---------------------|----------------|
 | Aucun `acr_values` spécifié | `*` (wildcard) | Tous les tenants |
-| `acr_values=tenant:acme` | `*` (wildcard) | Tenant `acme` autorisé |
-| `acr_values=tenant:acme` | `acme` | Tenant `acme` autorisé |
-| `acr_values=tenant:acme` | `contoso` | ❌ Accès refusé |
-| Aucun `acr_values` | `acme` | Tous les tenants autorisés |
+| `acr_values=tenant:acme-corp-example-com` | `*` (wildcard) | Tenant autorisé |
+| `acr_values=tenant:acme-corp-example-com` | `acme-corp-example-com` | Tenant autorisé |
+| `acr_values=tenant:acme-corp-example-com` | `other-tenant` | ❌ Accès refusé |
+| Aucun `acr_values` | `acme-corp-example-com` | Tous les tenants autorisés |
+
+**Note :** Le tenant est dérivé de l'URL complète (ex: `https://acme-corp.example.com` → `acme-corp-example-com`)
 
 ### Exemples d'authentification
 
@@ -415,8 +438,8 @@ GET http://localhost:5000/connect/authorize?response_type=code&client_id=johodp-
 
 **Avec tenant spécifique :**
 ```bash
-# Via API
-POST http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp
+# Via API (URL tenant: https://acme-corp.example.com)
+POST http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp-example-com
 Content-Type: application/json
 
 {
@@ -425,9 +448,9 @@ Content-Type: application/json
 }
 
 # Via OIDC
-GET http://localhost:5000/connect/authorize?...&acr_values=tenant:acme-corp
+GET http://localhost:5000/connect/authorize?...&acr_values=tenant:acme-corp-example-com
 ```
-→ Utilisateur créé avec `TenantId = "acme-corp"`
+→ Utilisateur créé avec `TenantId = "acme-corp-example-com"`
 
 ### Claims JWT personnalisés
 
@@ -446,12 +469,15 @@ Les tokens JWT incluent les claims suivants (scope `johodp.identity` requis) :
   "email": "user@example.com",
   "given_name": "John",
   "family_name": "Doe",
-  "tenant_id": "acme-corp",
+  "tenant_id": "acme-corp-example-com",
+  "tenant_url": "https://acme-corp.example.com",
   "role": ["admin", "user"],
   "permission": ["users:read", "users:write"],
   "scope": ["openid", "profile", "email", "johodp.identity", "johodp.api"]
 }
 ```
+
+📖 **[Gestion multi-tenant →](TENANT_MANAGEMENT.md)**
 
 ## 🧪 Tests et développement
 
@@ -465,8 +491,8 @@ $resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login' `
 $resp.StatusCode
 $resp.Headers['Set-Cookie']
 
-# Connexion avec tenant
-$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login?acr_values=tenant:acme' `
+# Connexion avec tenant (URL: https://acme-corp.example.com)
+$resp = Invoke-WebRequest -Uri 'http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp-example-com' `
   -Method POST -Body $body -ContentType 'application/json' -UseBasicParsing
 ```
 
@@ -478,8 +504,8 @@ curl -i -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"P@ssw0rd!"}'
 
-# Connexion avec tenant
-curl -i -X POST "http://localhost:5000/api/auth/login?acr_values=tenant:acme" \
+# Connexion avec tenant (URL: https://acme-corp.example.com)
+curl -i -X POST "http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp-example-com" \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"P@ssw0rd!"}'
 ```
@@ -495,8 +521,8 @@ fetch('http://localhost:5000/api/auth/login', {
   body: JSON.stringify({ email: 'test@example.com', password: 'P@ssw0rd!' })
 });
 
-// Connexion avec tenant
-fetch('http://localhost:5000/api/auth/login?acr_values=tenant:acme', {
+// Connexion avec tenant (URL: https://acme-corp.example.com)
+fetch('http://localhost:5000/api/auth/login?acr_values=tenant:acme-corp-example-com', {
   method: 'POST',
   credentials: 'include',
   headers: { 'Content-Type': 'application/json' },
@@ -589,11 +615,65 @@ johodp/
 │       └── appsettings.json
 ├── tests/
 │   └── Johodp.Tests/
+├── tools/
+│   ├── rotate-certificate.ps1      # Rotation des certificats IdentityServer
+│   └── KeyGenerator/               # Génération de clés de signature
 ├── init-db.sh                      # Script d'initialisation DB (Bash)
 ├── init-db.ps1                     # Script d'initialisation DB (PowerShell)
 ├── docker-compose.yml              # Configuration Docker
 └── README.md
 ```
+
+## 📚 Documentation
+
+### Guides d'installation et configuration
+
+- **[INSTALL.md](INSTALL.md)** - Guide d'installation complet (PostgreSQL, IdentityServer, MFA, Enrichers, OAuth2, IdP externe)
+- **[QUICKSTART.md](QUICKSTART.md)** - Démarrage rapide en 5 minutes
+
+### Architecture et conception
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Architecture DDD complète, diagrammes, patterns
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Structure détaillée du projet
+
+### Fonctionnalités
+
+- **[USE_CASES.md](USE_CASES.md)** - Cas d'usage techniques détaillés (UC-00 à UC-11)
+- **[USER_STORIES.md](USER_STORIES.md)** - User stories complètes (10 épics)
+- **[ACCOUNT_FLOWS.md](ACCOUNT_FLOWS.md)** - Flux de gestion de compte (inscription, activation, reset password)
+- **[ONBOARDING_FLOW.md](ONBOARDING_FLOW.md)** - Flux d'onboarding avec validation tierce
+
+### API et endpoints
+
+- **[API_ENDPOINTS.md](API_ENDPOINTS.md)** - Documentation complète des endpoints REST
+- **[API_LOGIN.md](API_LOGIN.md)** - Endpoints de connexion et authentification
+- **[API_COMPLETE.md](API_COMPLETE.md)** - API complète avec exemples
+
+### Multi-tenancy
+
+- **[TENANT_MANAGEMENT.md](TENANT_MANAGEMENT.md)** - Gestion des tenants
+- **[TENANT_URL_FORMAT.md](TENANT_URL_FORMAT.md)** - Format URL tenant (ASCII uniquement, transformation, Punycode)
+- **[CORS_SECURITY.md](CORS_SECURITY.md)** - Sécurité CORS et limitations
+
+### Sécurité et logging
+
+- **[LOGGING_ENRICHERS.md](LOGGING_ENRICHERS.md)** - Enrichers Serilog (tenant_id, client_id)
+- **[CERTIFICATE_ROTATION.md](CERTIFICATE_ROTATION.md)** - Rotation des certificats IdentityServer
+- **[IDENTITY_SERVER_KEYS.md](IDENTITY_SERVER_KEYS.md)** - Gestion des clés de signature
+- **[ROLES_PERMISSIONS_MFA.md](ROLES_PERMISSIONS_MFA.md)** - Rôles, permissions et MFA
+
+### Opérations
+
+- **[HEALTH_CHECKS.md](HEALTH_CHECKS.md)** - Health checks et monitoring
+- **[MIGRATIONS_API.md](MIGRATIONS_API.md)** - Gestion des migrations de base de données
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Guide de dépannage
+
+### Résumés et journalisation
+
+- **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)** - Résumé des implémentations
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Résumé technique
+- **[JOURNALISATION.md](JOURNALISATION.md)** - Stratégie de journalisation
+- **[SCHEMA_DBO_MIGRATION.md](SCHEMA_DBO_MIGRATION.md)** - Migration du schéma de base de données
 
 ## 📚 Ressources
 
@@ -619,44 +699,94 @@ johodp/
 
 ## 📝 Notes de version
 
-### Version actuelle (2025-11-18)
+### Version actuelle (2025-11-25)
 
-**Nouvelles fonctionnalités :**
-- ✅ Support multi-tenant via `acr_values`
-- ✅ Claims JWT personnalisés (`tenant_id`, `role`, `permission`)
-- ✅ Valeurs par défaut pour rôles et permissions (`reader`)
-- ✅ Migration vers Duende IdentityServer 7.3.2
-- ✅ Support PKCE complet pour applications SPA
-- ✅ Configuration CORS pour développement SPA
-- ✅ API d'authentification avec cookies
-- ✅ Pages de gestion de compte (login, register, reset password)
+**Nouvelles fonctionnalités majeures :**
+- ✅ **Logging enrichi** avec Serilog
+  - Extraction automatique de `tenant_id` et `client_id`
+  - Support `acr_values` parsing (tenant:xxx)
+  - Enricher personnalisé `TenantClientEnricher`
+- ✅ **Multi-tenant via URL**
+  - Format : `acr_values=tenant:<url_nettoyee>`
+  - Support ASCII uniquement (translittération accents)
+  - Claims JWT : `tenant_id` + `tenant_url`
+- ✅ **OAuth2 Client Credentials**
+  - Authentification machine-to-machine
+  - Caching automatique des tokens
+  - Retry policies avec Polly
+  - Dead-letter queue pour webhooks
+- ✅ **IdP externe** pour protection des webhooks
+  - Configuration External IdP (Authority, ClientId, ClientSecret)
+  - Token obtention et caching
+  - Circuit breaker et retry
 
 **Améliorations techniques :**
-- Mise à niveau Npgsql 8.0.6 (résolution CVE)
-- Middleware ordering optimisé
-- Cookie configuration pour développement local
-- Page de debug des claims
+- Migration vers Duende IdentityServer 7.3.2
+- Support PKCE complet pour applications SPA
+- UserStore étendu (IUserTwoFactorStore, IUserAuthenticatorKeyStore, IUserTwoFactorRecoveryCodeStore)
+- Aggregate User étendu (AuthenticatorKey, TwoFactorEnabled, RecoveryCodes)
+- EF Core mapping avec jsonb pour collections
+- Health checks (PostgreSQL, IdentityServer, Redis)
+- Cookie configuration sécurisée
+- HttpContextAccessor pour enrichers
 
-**Documentation :**
-- README.md réorganisé et traduit en français
-- Fichier `pkceconnection.http` avec exemples complets
-- Scripts d'initialisation DB (Bash et PowerShell)
+**Documentation complète :**
+- 20+ fichiers de documentation markdown
+- Guide d'installation complet (INSTALL.md)
+- Format URL tenant (TENANT_URL_FORMAT.md)
+- Logging enrichers (LOGGING_ENRICHERS.md)
+- User stories (10 épics, 68+ story points)
+- Use cases (UC-00 à UC-11)
+- Architecture DDD détaillée
+- Troubleshooting et best practices
 
 ## 🤝 Contribution
 
 Ce projet suit les principes du Domain-Driven Design. Avant de contribuer, veuillez :
-1. Comprendre l'architecture en couches
+1. Lire [ARCHITECTURE.md](ARCHITECTURE.md) pour comprendre l'architecture en couches
 2. Respecter les patterns DDD (Agrégats, Value Objects, Domain Events)
 3. Ajouter des tests unitaires pour la logique métier
-4. Documenter les changements d'API
+4. Documenter les changements d'API dans [API_ENDPOINTS.md](API_ENDPOINTS.md)
+5. Mettre à jour [USER_STORIES.md](USER_STORIES.md) pour nouvelles fonctionnalités
 
 ## 📄 Licence
 
 [À définir]
 
+## ⚡ Démarrage rapide
+
+```bash
+# 1. Clone et installation
+git clone https://github.com/FantasticJoho/johodp.git
+cd johodp
+docker-compose up -d
+dotnet restore
+.\init-db.ps1
+
+# 2. Lancer l'application
+dotnet run --project src/Johodp.Api
+
+# 3. Tester l'installation
+curl https://localhost:5001/.well-known/openid-configuration
+```
+
+## 🔗 Liens utiles
+
+- **Documentation** : Voir section [Documentation](#documentation) ci-dessus
+- **Issues** : [GitHub Issues](https://github.com/FantasticJoho/johodp/issues)
+- **Tests HTTP** : `src/Johodp.Api/httpTest/pkceconnection.http`
+- **Health Check** : `http://localhost:5000/health`
+
 ---
 
 **Développé avec ❤️ en .NET 8**
+
+---
+
+# 📖 Documentation technique détaillée (legacy)
+
+<details>
+<summary>Cliquez pour voir l'ancienne documentation (sera déplacée dans les fichiers markdown dédiés)</summary>
 
 ## Architecture
 
