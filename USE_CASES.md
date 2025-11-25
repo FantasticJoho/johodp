@@ -1,4 +1,4 @@
-# 📋 Cas d'Usage de Johodp Identity Provider
+# 📋 Besoins et Cas d'Usage de Johodp Identity Provider
 
 ## Vue d'ensemble
 
@@ -6,83 +6,399 @@ Johodp est un Identity Provider multi-tenant basé sur OAuth2/OIDC, conçu pour 
 
 ---
 
-## 🎯 Cas d'Usage Principaux
+# PARTIE 1 : BESOINS FONCTIONNELS
 
-### UC-01: Création d'un Client OAuth2 (Application Tierce)
+## 🎯 Besoins Métier
 
-**Acteur Principal:** Administrateur système
+### Besoin 1 : Permettre à une application tierce de gérer ses propres clients OAuth2
+
+**Contexte:**
+Une entreprise possède une application métier (ERP, CRM, plateforme SaaS) et souhaite permettre à ses utilisateurs de s'authentifier via Johodp sans gérer elle-même l'infrastructure d'authentification.
+
+**Besoin:**
+L'application tierce doit pouvoir créer et gérer ses propres configurations OAuth2 (appelées "clients") de manière autonome et sécurisée.
+
+**Solution:**
+- L'application tierce s'authentifie auprès de Johodp en mode "machine-to-machine" (client credentials OAuth2)
+- Elle peut ensuite créer un ou plusieurs clients OAuth2 via l'API Johodp
+- Chaque client représente une application ou un environnement (ex: prod, staging, dev)
+
+**Bénéfices:**
+- Autonomie complète de l'application tierce
+- Pas besoin d'intervention manuelle d'un administrateur Johodp
+- Intégration rapide et automatisable (scripts, CI/CD)
+
+---
+
+### Besoin 2 : Permettre à une application tierce de gérer ses espaces clients (tenants)
+
+**Contexte:**
+Une application tierce peut avoir plusieurs clients finaux (B2B) ou plusieurs environnements qui nécessitent des configurations différentes (branding, URLs, règles métier).
+
+**Besoin:**
+L'application tierce doit pouvoir créer des espaces isolés (tenants) pour chacun de ses clients finaux, avec :
+- Des URLs de redirection spécifiques
+- Un branding personnalisé (logo, couleurs)
+- Des paramètres de localisation (langue, timezone, devise)
+
+**Solution:**
+- L'application tierce crée d'abord un client OAuth2 (Besoin 1)
+- Elle crée ensuite un ou plusieurs tenants associés à ce client
+- Chaque tenant a ses propres configurations visuelles et techniques
+
+**Bénéfices:**
+- Isolation des clients finaux (white-label)
+- Personnalisation de l'expérience utilisateur
+- Gestion multi-environnement facilitée
+
+---
+
+### Besoin 3 : Valider les utilisateurs selon les règles métier de l'application tierce
+
+**Contexte:**
+L'application tierce a ses propres règles métier pour accepter ou refuser un nouvel utilisateur (vérification d'un numéro de client, validation d'un contrat, contrôle de quota, etc.).
+
+**Besoin:**
+Avant de créer un utilisateur dans Johodp, l'application tierce doit pouvoir appliquer ses règles de validation métier.
+
+**Solution:**
+- L'application tierce configure un endpoint de vérification (webhook) lors de la création du tenant
+- Lors d'une demande d'inscription, Johodp notifie l'application tierce
+- L'application tierce valide les informations (appels API internes, vérifications en base, etc.)
+- Si valide, elle appelle l'API Johodp pour finaliser la création de l'utilisateur
+- Sinon, elle rejette la demande
+
+**Bénéfices:**
+- L'application tierce garde le contrôle total sur qui peut accéder à ses services
+- Johodp ne crée jamais d'utilisateur sans validation préalable
+- Flexibilité totale pour implémenter n'importe quelle règle métier
+
+---
+
+### Besoin 4 : Permettre aux utilisateurs de créer leur compte via l'application tierce
+
+**Contexte:**
+Un utilisateur final découvre l'application tierce et souhaite créer un compte.
+
+**Besoin:**
+L'utilisateur doit pouvoir remplir un formulaire d'inscription avec le branding de l'application tierce, puis recevoir un email pour activer son compte.
+
+**Solution:**
+- L'application redirige vers la page d'inscription Johodp (avec branding du tenant)
+- L'utilisateur remplit le formulaire (email, nom, prénom)
+- Johodp notifie l'application tierce pour validation (Besoin 3)
+- L'application tierce valide et crée l'utilisateur via l'API
+- Johodp envoie un email avec un lien d'activation
+- L'utilisateur active son compte en créant son mot de passe
+
+**Bénéfices:**
+- Expérience utilisateur fluide et personnalisée
+- Sécurité : validation en deux étapes (métier + email)
+- Pas de gestion de mot de passe côté application tierce
+
+---
+
+### Besoin 5 : Authentifier les utilisateurs de manière sécurisée (Single Sign-On)
+
+**Contexte:**
+Un utilisateur existant veut se connecter à l'application tierce.
+
+**Besoin:**
+L'utilisateur doit pouvoir se connecter une seule fois et accéder à toutes les applications du tenant sans ressaisir ses identifiants (SSO).
+
+**Solution:**
+- L'application redirige vers la page de login Johodp
+- L'utilisateur entre email et mot de passe
+- Johodp vérifie les credentials et la validité du tenant
+- Johodp génère un code d'autorisation OAuth2
+- L'application échange le code contre des tokens (access, refresh, id)
+- L'application peut maintenant appeler ses APIs avec l'access token
+
+**Bénéfices:**
+- Sécurité renforcée (OAuth2 + PKCE)
+- Expérience utilisateur simplifiée (SSO)
+- Pas de gestion de session côté application tierce
+
+---
+
+### Besoin 6 : Isoler les utilisateurs par tenant (multi-tenancy)
+
+**Contexte:**
+Une application tierce a plusieurs clients finaux qui ne doivent pas voir les données des autres.
+
+**Besoin:**
+Un utilisateur ne doit pouvoir se connecter qu'aux tenants auxquels il a explicitement accès.
+
+**Solution:**
+- Chaque utilisateur a une liste de tenants autorisés
+- Lors de la connexion, Johodp vérifie que le tenant demandé est dans la liste
+- Si oui, l'authentification réussit
+- Si non, l'authentification échoue
+
+**Bénéfices:**
+- Isolation stricte des données
+- Conformité RGPD (séparation des données clients)
+- Gestion fine des accès
+
+---
+
+### Besoin 7 : Personnaliser l'apparence des pages d'authentification
+
+**Contexte:**
+Chaque client final de l'application tierce veut son propre branding (logo, couleurs, charte graphique).
+
+**Besoin:**
+Les pages de login, inscription et activation doivent afficher le branding du tenant concerné.
+
+**Solution:**
+- Chaque tenant configure son branding (logo, couleurs, CSS custom)
+- Johodp génère dynamiquement un fichier CSS par tenant
+- Les pages d'authentification chargent ce CSS automatiquement
+
+**Bénéfices:**
+- Expérience white-label complète
+- Cohérence visuelle avec l'application tierce
+- Pas de développement front-end côté application tierce
+
+---
+
+### Besoin 8 : Gérer les paramètres régionaux par tenant
+
+**Contexte:**
+Les clients finaux sont dans différents pays avec des langues, fuseaux horaires et devises différents.
+
+**Besoin:**
+Chaque tenant doit pouvoir configurer ses paramètres régionaux (langue, timezone, devise, format de date).
+
+**Solution:**
+- Chaque tenant configure ses paramètres de localisation
+- L'application tierce récupère ces paramètres via l'API
+- Les interfaces utilisateur s'adaptent automatiquement
+
+**Bénéfices:**
+- Expérience utilisateur localisée
+- Conformité avec les attentes régionales
+- Centralisation de la configuration i18n
+
+---
+
+### Besoin 9 : Renouveler les sessions utilisateur de manière transparente
+
+**Contexte:**
+Un utilisateur connecté ne doit pas être déconnecté brusquement après expiration du token.
+
+**Besoin:**
+L'application doit pouvoir renouveler automatiquement les tokens sans intervention de l'utilisateur.
+
+**Solution:**
+- Lors de l'authentification, Johodp fournit un refresh token (validité 15 jours)
+- Avant expiration de l'access token, l'application échange le refresh token contre de nouveaux tokens
+- L'utilisateur reste connecté sans interruption
+
+**Bénéfices:**
+- Expérience utilisateur fluide
+- Sécurité maintenue (tokens courts + renouvellement)
+- Pas de re-authentification fréquente
+
+---
+
+### Besoin 10 : Authentifier l'application tierce elle-même (machine-to-machine)
+
+**Contexte:**
+L'application tierce doit pouvoir appeler les APIs Johodp pour créer des clients, des tenants et des utilisateurs.
+
+**Besoin:**
+L'application tierce doit s'authentifier de manière sécurisée sans interaction utilisateur.
+
+**Solution:**
+- L'application tierce utilise le flux "client credentials" OAuth2
+- Elle envoie son client_id et client_secret à Johodp
+- Johodp retourne un access token avec les permissions appropriées
+- L'application utilise ce token pour appeler les APIs d'administration
+
+**Bénéfices:**
+- Sécurité : pas de mot de passe utilisateur, pas de clé API statique
+- Standard OAuth2
+- Traçabilité des actions (quel client a fait quoi)
+
+---
+
+# PARTIE 2 : SPÉCIFICATIONS TECHNIQUES
+
+## 🔧 Architecture OAuth2/OIDC
+
+### Flux d'Authentification
+Johodp implémente le standard OAuth2 avec les extensions suivantes :
+- **Authorization Code Flow** avec PKCE (Proof Key for Code Exchange)
+- **Client Credentials Flow** pour l'authentification machine-to-machine
+- **Refresh Token Flow** pour le renouvellement de session
+- Support complet d'OpenID Connect (OIDC) pour l'identité utilisateur
+
+### Sécurité
+- PKCE obligatoire pour tous les clients publics (SPA, applications mobiles)
+- Client secret requis pour les clients confidentiels (backends)
+- Validation stricte des redirect URIs et CORS origins
+- Tokens JWT signés avec rotation des clés de signature
+- Access tokens courts (1h) + refresh tokens longs (15 jours)
+
+---
+
+## 🎯 Cas d'Usage Techniques
+
+### UC-00: Authentification de l'Application Tierce (Client Credentials)
+
+**Acteur Principal:** Application tierce (système)
 
 **Préconditions:**
-- L'administrateur a accès à l'API Johodp
+- L'application tierce a reçu un client_id et client_secret de Johodp
+- Le client est configuré avec le grant_type "client_credentials"
+
+**Scénario Principal:**
+1. L'application tierce envoie une requête POST `/connect/token` avec:
+   ```json
+   {
+     "grant_type": "client_credentials",
+     "client_id": "third-party-app",
+     "client_secret": "secret-value",
+     "scope": "johodp.admin"
+   }
+   ```
+2. Johodp valide le client_id et client_secret
+3. Johodp vérifie que le client a le droit d'utiliser le scope demandé
+4. Johodp génère un access_token avec les claims appropriés:
+   ```json
+   {
+     "sub": "third-party-app",
+     "client_id": "third-party-app",
+     "scope": ["johodp.admin"],
+     "exp": 3600
+   }
+   ```
+5. L'application tierce reçoit le token et peut maintenant appeler les APIs
+
+**Règles de Gestion:**
+- RG-CLIENT-CRED-01: Le client_secret doit être stocké de manière sécurisée (hashed en base)
+- RG-CLIENT-CRED-02: L'access_token expire après 1 heure
+- RG-CLIENT-CRED-03: Pas de refresh_token pour ce flux (l'app redemande un token)
+- RG-CLIENT-CRED-04: Le scope "johodp.admin" permet de créer clients, tenants et utilisateurs
+
+**Postconditions:**
+- L'application tierce a un access_token valide pour appeler les APIs d'administration
+- Toutes les actions sont tracées avec le client_id source
+
+---
+
+### UC-01: Création d'un Client OAuth2 par l'Application Tierce
+
+**Acteur Principal:** Application tierce (authentifiée via client credentials)
+
+**Préconditions:**
+- L'application tierce a un access_token valide avec le scope "johodp.admin" (UC-00 complété)
 - Un ClientName unique est disponible
 
 **Scénario Principal:**
-1. L'administrateur envoie une requête POST `/api/clients` avec:
-   - `clientName`: Identifiant unique du client (ex: "my-app")
-   - `allowedScopes`: Liste de scopes OAuth2 (ex: ["openid", "profile", "email"])
-   - `requireConsent`: true/false (demander consentement à l'utilisateur)
-2. Le système crée un agrégat `Client` dans l'état suivant:
+1. L'application tierce envoie une requête POST `/api/clients` avec:
+   ```http
+   Authorization: Bearer <access_token>
+   Content-Type: application/json
+   
+   {
+     "clientName": "my-app",
+     "allowedScopes": ["openid", "profile", "email"],
+     "requireConsent": true
+   }
+   ```
+2. Johodp valide l'access_token (signature, expiration, scope)
+3. Le système crée un agrégat `Client` dans l'état suivant:
    - `RequireClientSecret = true` (PKCE avec client secret)
    - `RequirePkce = true` (Protection PKCE obligatoire)
    - `IsActive = true`
-3. Le système retourne le `ClientDto` avec un `ClientId` (GUID)
-4. **Note:** Le client est créé SANS tenant associé (pas de redirect URIs)
-5. Le client n'est PAS visible pour IdentityServer tant qu'il n'a pas de tenant
+4. Le système retourne le `ClientDto` avec un `ClientId` (GUID)
+5. **Note:** Le client est créé SANS tenant associé (pas de redirect URIs)
+6. Le client n'est PAS visible pour IdentityServer tant qu'il n'a pas de tenant
 
 **Règles de Gestion:**
-- RG-CLIENT-01: Un client ne peut pas être créé avec un tenant (tenant optionnel supprimé)
+- RG-CLIENT-01: L'access_token DOIT avoir le scope "johodp.admin"
 - RG-CLIENT-02: Un clientName doit être unique dans le système
 - RG-CLIENT-03: Un client sans tenant n'est pas visible pour IdentityServer (sécurité)
 - RG-CLIENT-04: Les scopes doivent être des valeurs valides (openid, profile, email, api)
+- RG-CLIENT-05: L'action est tracée avec le client_id appelant (audit trail)
 
 **Postconditions:**
 - Un client est créé mais non fonctionnel (besoin d'un tenant)
 - Le client n'apparaît pas dans IdentityServer
+- L'application tierce peut maintenant créer des tenants pour ce client
 
 ---
 
-### UC-02: Création d'un Tenant pour un Client
+### UC-02: Création d'un Tenant par l'Application Tierce
 
-**Acteur Principal:** Administrateur système
+**Acteur Principal:** Application tierce (authentifiée via client credentials)
 
 **Préconditions:**
+- L'application tierce a un access_token valide avec le scope "johodp.admin" (UC-00)
 - Un client existe déjà (UC-01 complété)
 - Le ClientName du client est connu
+- L'application tierce a configuré un endpoint de vérification utilisateur (webhook)
 
 **Scénario Principal:**
-1. L'administrateur envoie POST `/api/tenant` avec:
-   - `name`: Identifiant du tenant (ex: "acme-corp")
-   - `displayName`: Nom affiché (ex: "ACME Corporation")
-   - `clientId`: ClientName du client existant (OBLIGATOIRE)
-   - `allowedReturnUrls`: Liste des URLs de redirection (ex: ["http://localhost:4200/callback"])
-   - `allowedCorsOrigins`: Liste des origines CORS (ex: ["http://localhost:4200"])
-   - Branding optionnel: primaryColor, secondaryColor, logoUrl, customCss
-   - Localisation optionnelle: timezone, currency, supportedLanguages
-2. Le système vérifie que le client existe
-3. Le système crée l'agrégat `Tenant` avec:
+1. L'application tierce envoie POST `/api/tenant` avec:
+   ```http
+   Authorization: Bearer <access_token>
+   Content-Type: application/json
+   
+   {
+     "name": "acme-corp",
+     "displayName": "ACME Corporation",
+     "clientId": "my-app",
+     "allowedReturnUrls": ["http://localhost:4200/callback"],
+     "allowedCorsOrigins": ["http://localhost:4200"],
+     "userVerificationEndpoint": "https://api.acme.com/webhooks/johodp/verify-user",
+     "branding": {
+       "primaryColor": "#007bff",
+       "secondaryColor": "#6c757d",
+       "logoUrl": "https://acme.com/logo.png"
+     },
+     "localization": {
+       "defaultLanguage": "fr-FR",
+       "timezone": "Europe/Paris",
+       "currency": "EUR"
+     }
+   }
+   ```
+2. Johodp valide l'access_token (signature, expiration, scope "johodp.admin")
+3. Le système vérifie que le client existe
+4. Le système crée l'agrégat `Tenant` avec:
    - Association bidirectionnelle avec le client
    - Validation des URLs de redirection (format URI absolu)
    - Validation des CORS origins (format URI autorité uniquement, pas de path)
-4. Le système met à jour le client pour ajouter le tenant dans `AssociatedTenantIds`
-5. Le système persiste les changements
-6. Le client devient VISIBLE pour IdentityServer (a des redirect URIs)
+   - **Stockage de l'endpoint de vérification utilisateur**
+5. Le système met à jour le client pour ajouter le tenant dans `AssociatedTenantIds`
+6. Le système persiste les changements
+7. Le client devient VISIBLE pour IdentityServer (a des redirect URIs)
 
 **Règles de Gestion:**
-- RG-TENANT-01: Un tenant DOIT avoir un client associé (ClientId obligatoire)
-- RG-TENANT-02: Un tenant ne peut être associé qu'à UN SEUL client (relation 1-1)
-- RG-TENANT-03: Le client doit exister AVANT la création du tenant
-- RG-TENANT-04: Un tenant doit avoir au moins une URL de redirection
-- RG-TENANT-05: Les CORS origins doivent être des URIs d'autorité uniquement (pas de path)
+- RG-TENANT-01: L'access_token DOIT avoir le scope "johodp.admin"
+- RG-TENANT-02: Un tenant DOIT avoir un client associé (ClientId obligatoire)
+- RG-TENANT-03: Un tenant ne peut être associé qu'à UN SEUL client (relation 1-1)
+- RG-TENANT-04: Le client doit exister AVANT la création du tenant
+- RG-TENANT-05: Un tenant doit avoir au moins une URL de redirection
+- RG-TENANT-06: Les CORS origins doivent être des URIs d'autorité uniquement (pas de path)
   * ✅ Valide: `http://localhost:4200`, `https://app.acme.com`
   * ❌ Invalide: `http://localhost:4200/callback`, `https://app.acme.com/path`
-- RG-TENANT-06: AllowedCorsOrigins géré au niveau Tenant (migration depuis Client)
-- RG-TENANT-07: CustomClientStore agrège CORS depuis tous les tenants associés au client
-- RG-TENANT-06: Un nom de tenant doit être unique dans le système
+- RG-TENANT-07: AllowedCorsOrigins géré au niveau Tenant (migration depuis Client)
+- RG-TENANT-08: CustomClientStore agrège CORS depuis tous les tenants associés au client
+- RG-TENANT-09: Un nom de tenant doit être unique dans le système
+- RG-TENANT-10: **L'endpoint de vérification utilisateur DOIT être une URL HTTPS en production**
+- RG-TENANT-11: **L'endpoint sera appelé pour chaque demande d'inscription**
+- RG-TENANT-12: L'action est tracée avec le client_id appelant (audit trail)
 
 **Postconditions:**
 - Le tenant est créé et actif
 - Le client devient visible pour IdentityServer
 - Les redirect URIs et CORS origins sont agrégés dynamiquement
+- **L'endpoint de vérification utilisateur est enregistré et prêt à être appelé**
+- L'application tierce peut maintenant gérer les inscriptions utilisateur
 
 ---
 
@@ -119,13 +435,13 @@ Johodp est un Identity Provider multi-tenant basé sur OAuth2/OIDC, conçu pour 
 
 ---
 
-### UC-04: Flux d'Onboarding Utilisateur (Application Tierce)
+### UC-04: Flux d'Onboarding Utilisateur avec Vérification Tierce
 
 **Acteur Principal:** Utilisateur final
 
 **Préconditions:**
 - Un tenant existe avec un client associé
-- L'application tierce a une notification URL configurée
+- **L'application tierce a configuré son endpoint de vérification (UC-02)**
 
 **Scénario Principal:**
 1. L'utilisateur clique sur "Créer un compte" dans l'application tierce
@@ -134,43 +450,59 @@ Johodp est un Identity Provider multi-tenant basé sur OAuth2/OIDC, conçu pour 
 4. L'utilisateur remplit: email, firstName, lastName
 5. L'utilisateur soumet le formulaire
 6. Le système vérifie que l'email n'existe pas déjà
-7. Le système envoie une notification HTTP POST vers l'app tierce:
-   ```json
+7. **Le système envoie une notification HTTP POST vers l'endpoint de vérification du tenant:**
+   ```http
+   POST https://api.acme.com/webhooks/johodp/verify-user
+   Content-Type: application/json
+   X-Johodp-Signature: <HMAC signature>
+   
    {
      "requestId": "uuid",
      "tenantId": "acme-corp",
      "email": "user@example.com",
      "firstName": "John",
-     "lastName": "Doe"
+     "lastName": "Doe",
+     "timestamp": "2025-11-25T10:30:00Z"
    }
    ```
-8. Le système affiche la page "En attente de validation"
-9. **Scénario asynchrone:** L'app tierce valide (règles métier)
-10. L'app tierce appelle POST `/api/users/register`:
-    ```json
-    {
-      "email": "user@example.com",
-      "firstName": "John",
-      "lastName": "Doe",
-      "tenantId": "acme-corp",
-      "createAsPending": true
-    }
-    ```
-11. Le système crée l'utilisateur en statut `PendingActivation`
-12. Le système génère un token d'activation
-13. **TODO:** Le système envoie un email avec le lien d'activation
-14. L'utilisateur clique sur le lien d'activation
+8. Le système affiche la page "En attente de validation par ACME Corporation"
+9. **Scénario asynchrone côté application tierce:**
+   - L'application reçoit la notification webhook
+   - Elle valide la signature HMAC (sécurité)
+   - Elle applique ses règles métier (ex: vérifier si l'email correspond à un client existant)
+   - **Si valide**, elle appelle POST `/api/users/register` avec son access_token:
+     ```http
+     Authorization: Bearer <access_token>
+     Content-Type: application/json
+     
+     {
+       "email": "user@example.com",
+       "firstName": "John",
+       "lastName": "Doe",
+       "tenantId": "acme-corp",
+       "createAsPending": true
+     }
+     ```
+   - **Si invalide**, elle ne fait rien (l'utilisateur reste en attente)
+10. Le système crée l'utilisateur en statut `PendingActivation`
+11. Le système génère un token d'activation
+12. Le système envoie un email avec le lien d'activation
+13. L'utilisateur clique sur le lien d'activation
 
 **Règles de Gestion:**
 - RG-ONBOARD-01: L'email doit être unique dans tout le système
-- RG-ONBOARD-02: La notification à l'app tierce est "fire-and-forget" (pas de retry)
-- RG-ONBOARD-03: L'utilisateur ne peut pas s'auto-activer (doit passer par validation tierce)
-- RG-ONBOARD-04: Le tenant doit être actif (`IsActive = true`)
-- RG-ONBOARD-05: Le branding du tenant est appliqué (CSS, logo, couleurs)
+- RG-ONBOARD-02: **La notification webhook inclut une signature HMAC pour sécurité**
+- RG-ONBOARD-03: **L'application tierce a 5 minutes pour valider (timeout)**
+- RG-ONBOARD-04: **Si timeout, l'utilisateur reçoit un message "Veuillez réessayer plus tard"**
+- RG-ONBOARD-05: L'utilisateur ne peut pas s'auto-activer (doit passer par validation tierce)
+- RG-ONBOARD-06: Le tenant doit être actif (`IsActive = true`)
+- RG-ONBOARD-07: Le branding du tenant est appliqué (CSS, logo, couleurs)
+- RG-ONBOARD-08: **L'appel à `/api/users/register` DOIT inclure un access_token valide avec scope "johodp.admin"**
 
 **Postconditions:**
-- Un utilisateur en statut `PendingActivation` est créé
-- Un token d'activation est généré et prêt à être envoyé par email
+- Un utilisateur en statut `PendingActivation` est créé (si validé par l'app tierce)
+- Un token d'activation est généré et envoyé par email
+- L'application tierce a tracé la demande dans ses logs
 
 ---
 

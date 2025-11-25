@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Infrastructure.Persistence;
@@ -127,75 +128,41 @@ public static class ServiceCollectionExtensions
         }
         else
         {
-            // Production: Use persistent signing credential
-            var signingMethod = configuration["IdentityServer:SigningMethod"] ?? "Certificate";
+            // Production: Use persistent signing credential (single key, no rotation)
+            var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
             
-            if (signingMethod == "Certificate")
+            if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
             {
-                // Option A: X.509 Certificate
-                var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
-                
-                if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
-                {
-                    throw new InvalidOperationException(
-                        "IdentityServer:SigningKeyPath must be configured in production. " +
-                        "Generate a key with: dotnet dev-certs https -ep path/to/key.pfx -p YourPassword");
-                }
-                
-                var keyPassword = configuration["IdentityServer:SigningKeyPassword"];
-                idServerBuilder.AddSigningCredential(
-                    new System.Security.Cryptography.X509Certificates.X509Certificate2(
-                        signingKeyPath, 
-                        keyPassword));
+                throw new InvalidOperationException(
+                    "IdentityServer:SigningKeyPath must be configured in production. " +
+                    "Generate a certificate with: dotnet dev-certs https -ep path/to/key.pfx -p YourPassword " +
+                    "Or generate a JWK with: dotnet run --project tools/KeyGenerator");
             }
-            else if (signingMethod == "JWK")
+            
+            // Auto-detect file type based on extension
+            var extension = Path.GetExtension(signingKeyPath).ToLowerInvariant();
+            
+            if (extension == ".pfx" || extension == ".p12")
             {
-                // Option B: JSON Web Key (RFC 7517)
-                // Load from Vault JSON or file
-                var currentKeyJson = configuration["IdentityServer:CurrentKeyJson"];
+                // X.509 Certificate (PFX/PKCS#12)
+                var keyPassword = configuration["IdentityServer:SigningKeyPassword"];
+                var cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(
+                    signingKeyPath, 
+                    keyPassword);
                 
-                if (!string.IsNullOrEmpty(currentKeyJson))
-                {
-                    // Load from Vault (injected via Program.cs)
-                    var currentKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromJson(currentKeyJson);
-                    idServerBuilder.AddSigningCredential(currentKey, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
-                    
-                    // Support rotation: load previous key for validation
-                    var previousKeyJson = configuration["IdentityServer:PreviousKeyJson"];
-                    if (!string.IsNullOrEmpty(previousKeyJson))
-                    {
-                        var previousKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromJson(previousKeyJson);
-                        idServerBuilder.AddValidationKey(previousKey);
-                    }
-                }
-                else
-                {
-                    // Fallback: load from file
-                    var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
-                    
-                    if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
-                    {
-                        throw new InvalidOperationException(
-                            "IdentityServer:SigningKeyPath must be configured in production. " +
-                            "Generate a JWK with: dotnet run --project tools/KeyGenerator");
-                    }
-                    
-                    var jwkKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(signingKeyPath);
-                    idServerBuilder.AddSigningCredential(jwkKey, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
-                    
-                    // Support rotation: load previous key if configured
-                    var previousKeyPath = configuration["IdentityServer:PreviousSigningKeyPath"];
-                    if (!string.IsNullOrEmpty(previousKeyPath) && File.Exists(previousKeyPath))
-                    {
-                        var previousKey = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(previousKeyPath);
-                        idServerBuilder.AddValidationKey(previousKey);
-                    }
-                }
+                idServerBuilder.AddSigningCredential(cert);
+            }
+            else if (extension == ".json" || extension == ".jwk")
+            {
+                // JSON Web Key (RFC 7517)
+                var key = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(signingKeyPath);
+                idServerBuilder.AddSigningCredential(key, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
             }
             else
             {
                 throw new InvalidOperationException(
-                    $"Unknown signing method: {signingMethod}. Valid values: Certificate, JWK");
+                    $"Unsupported signing key file format: {extension}. " +
+                    "Supported formats: .pfx, .p12 (certificate), .json, .jwk (JSON Web Key)");
             }
         }
 

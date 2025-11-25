@@ -40,7 +40,7 @@ public class UserAggregateTests
         // Assert
         Assert.Single(user.DomainEvents);
         var @event = user.DomainEvents.First();
-        Assert.IsType<Domain.Users.Events.UserRegisteredEvent>(@event);
+        Assert.IsType<Johodp.Domain.Users.Events.UserRegisteredEvent>(@event);
     }
 
     [Fact]
