@@ -1275,3 +1275,103 @@ Pour que le projet soit considéré comme "Done":
 - [Flux de Compte](ACCOUNT_FLOWS.md)
 - [Endpoints API](API_ENDPOINTS.md)
 - [Flux d'Onboarding](ONBOARDING_FLOW.md)
+
+---
+
+## 📊 Diagrammes Mermaid (Principaux Flux)
+
+### Flux Onboarding + Validation + Création Pending (US-4.1 / US-4.2 / US-3.1)
+```mermaid
+sequenceDiagram
+  participant U as Utilisateur
+  participant IdP as Johodp (Pages)
+  participant App as Application Tierce (Webhook)
+  participant API as Johodp API
+  U->>IdP: GET /account/onboarding?tenant
+  IdP-->>U: Formulaire (email, nom, prénom)
+  U->>IdP: POST /account/onboarding
+  IdP->>App: POST verify-user (HMAC)
+  App->>App: Vérification règles métier
+  alt Accepté
+    App->>API: POST /api/users/register (PendingActivation)
+    API->>API: Créer User(Status=PendingActivation)
+    API->>U: Email d'activation envoyé
+  else Refus / Timeout
+    IdP-->>U: Message attente / réessayer
+  end
+```
+
+### Flux Activation (US-4.3 / US-4.4 / US-4.5)
+```mermaid
+sequenceDiagram
+  participant U as Utilisateur
+  participant IdP as Johodp (AccountController)
+  participant Store as UserStore
+  U->>IdP: GET /account/activate?token&userId
+  IdP-->>U: Formulaire mot de passe
+  U->>IdP: POST /account/activate
+  IdP->>Store: VerifyUserTokenAsync
+  Store-->>IdP: OK
+  IdP->>Store: SetPasswordHash + Activate + ConfirmEmail
+  IdP-->>U: Succès + session
+```
+
+### Flux Login OAuth2 Authorization Code + PKCE (US-5.1 / US-5.2 / US-6.3 / US-6.4)
+```mermaid
+sequenceDiagram
+  participant SPA as Application SPA
+  participant IdP as IdentityServer/Johodp
+  participant CS as CustomClientStore
+  participant DB as DB
+  SPA->>SPA: Générer code_verifier + code_challenge
+  SPA->>IdP: /connect/authorize (PKCE + tenant)
+  IdP->>CS: FindClientByIdAsync
+  CS->>DB: Charger client + tenants
+  DB-->>CS: Données
+  CS-->>IdP: Client agrégé
+  IdP-->>SPA: Redirection login
+  SPA->>IdP: POST /account/login (credentials)
+  IdP->>DB: Vérifier user + tenant access
+  IdP-->>SPA: Redirect callback?code=XYZ
+  SPA->>IdP: POST /connect/token (code + code_verifier)
+  IdP->>IdP: Vérifier PKCE + code
+  IdP-->>SPA: access_token + id_token + refresh_token
+```
+
+### Flux Refresh Token (US-6.6) & API Protégée (US-6.7 / US-5.3)
+```mermaid
+sequenceDiagram
+  participant SPA as SPA
+  participant IdP as IdentityServer
+  participant API as Johodp API
+  SPA->>API: GET /api/users/me (Bearer access_token)
+  API->>API: Validation JWT (signature, exp, scope)
+  API-->>SPA: 200 OK UserDto
+  SPA->>IdP: POST /connect/token (grant_type=refresh_token)
+  IdP->>IdP: Vérifier refresh_token (non révoqué)
+  IdP-->>SPA: Nouveaux tokens
+```
+
+### Flux Multi-Tenant (US-3.3 / US-3.4 / US-3.5) & Accès Global
+```mermaid
+flowchart LR
+  Admin[Admin] --> Add[POST /api/users/{u}/tenants/{t}]
+  Add --> Domain[User.AddTenantId]
+  Domain --> Persist[Save]
+  Persist --> Access[User autorisé]
+  Admin --> Remove[DELETE /api/users/{u}/tenants/{t}]
+  Remove --> DomainRem[User.RemoveTenantId]
+  DomainRem --> PersistRem[Save]
+  PersistRem --> Revoked[Accès révoqué]
+  style Access fill:#c3f3c3,stroke:#2e7
+  style Revoked fill:#f9d2d2,stroke:#a33
+```
+
+### Vue d'État Utilisateur (PendingActivation → Active)
+```mermaid
+stateDiagram-v2
+  [*] --> PendingActivation
+  PendingActivation --> Active: Activation réussite
+```
+
+---

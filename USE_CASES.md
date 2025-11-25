@@ -942,3 +942,176 @@ SPA              IdP (Johodp)         CustomClientStore    Database
 - Flux de compte: `ACCOUNT_FLOWS.md`
 - Endpoints API: `API_ENDPOINTS.md`
 - Onboarding: `ONBOARDING_FLOW.md`
+
+---
+
+## 📊 Diagrammes Mermaid (Synthèse UC-00 → UC-11)
+
+### Vue Globale (Création & Activation Écosystème)
+```mermaid
+flowchart LR
+   subgraph Admin[Application Tierce]
+      A0[UC-00: Obtenir access_token (client credentials)] --> A1[UC-01: Créer Client]
+      A1 --> A2[UC-02: Créer Tenant (webhook + branding + i18n)]
+   end
+   A2 --> A3[UC-03: CustomClientStore agrège RedirectUris & CORS]
+   A3 --> A4[UC-06: OAuth2 Authorization Code + PKCE]
+   A2 --> A5[UC-04: Onboarding demande]
+   A5 --> A6[UC-05: Activation compte]
+   A6 --> A4
+   A4 --> A7[UC-07: Appel API protégé]
+   A4 --> A8[UC-08: Refresh Token]
+   A2 --> A9[UC-10: Branding CSS]
+   A2 --> A10[UC-11: Localisation]
+   A2 --> A11[UC-09: Multi-tenant (ajout/retrait access)]
+```
+
+### UC-04: Flux d'Onboarding avec Vérification Tierce
+```mermaid
+sequenceDiagram
+   participant U as Utilisateur
+   participant IdP as Johodp
+   participant T as Tenant (config)
+   participant App as App Tierce (Webhook)
+   U->>IdP: GET /account/onboarding?acr_values=tenant:acme-corp
+   IdP->>T: Charger branding + endpoint vérification
+   IdP-->>U: Formulaire (email, prénom, nom)
+   U->>IdP: POST /account/onboarding
+   IdP->>IdP: Vérifier unicité email
+   IdP->>App: POST verify-user (HMAC signature)
+   App->>App: Valider règle métier (contrats, client interne...)
+   alt Validation OK
+      App->>IdP: POST /api/users/register (PendingActivation)
+      IdP->>IdP: Créer utilisateur + token activation
+      IdP->>U: Page "En attente d'activation" + email envoyé
+   else Timeout / Refus
+      IdP-->>U: Message d'attente / réessayer
+   end
+```
+
+### UC-05: Activation du Compte
+```mermaid
+sequenceDiagram
+   participant U as Utilisateur
+   participant IdP as Johodp
+   participant Store as UserStore
+   U->>IdP: GET /account/activate?token&userId&tenant
+   IdP->>Store: Charger utilisateur (PendingActivation)
+   IdP-->>U: Formulaire (mot de passe + confirmation)
+   U->>IdP: POST /account/activate
+   IdP->>Store: VerifyUserTokenAsync(token)
+   Store-->>IdP: Token Valide?
+   IdP->>Store: Hash + SetPasswordHash + Activate()
+   IdP->>Store: ConfirmEmailAsync
+   IdP-->>U: Succès + Session (cookie)
+```
+
+### UC-06: Authorization Code Flow avec PKCE
+```mermaid
+sequenceDiagram
+   participant SPA as Application SPA
+   participant IdP as IdentityServer/Johodp
+   participant CS as CustomClientStore
+   participant DB as DB
+   SPA->>SPA: Générer code_verifier + code_challenge
+   SPA->>IdP: /connect/authorize (PKCE + acr_values tenant)
+   IdP->>CS: FindClientByIdAsync(clientName)
+   CS->>DB: Charger Client + Tenants
+   DB-->>CS: Données
+   CS-->>IdP: Client agrégé (RedirectUris/CORS)
+   IdP-->>SPA: Redirection vers /account/login
+   SPA->>IdP: POST /account/login (credentials)
+   IdP->>DB: Vérifier utilisateur + tenant accès
+   IdP-->>SPA: Set session + redirect callback?code=XYZ
+   SPA->>IdP: POST /connect/token (code + code_verifier)
+   IdP->>IdP: Vérifier code + PKCE
+   IdP-->>SPA: access_token + id_token + refresh_token
+```
+
+### UC-07: Appel API Protégé
+```mermaid
+sequenceDiagram
+   participant SPA as SPA
+   participant API as API Johodp
+   participant JWT as Middleware JWT
+   SPA->>API: GET /api/users/me (Bearer access_token)
+   API->>JWT: Valider signature, exp, iss, aud
+   JWT-->>API: Claims (sub, email, scope,...)
+   API-->>SPA: 200 OK (UserDto)
+```
+
+### UC-08: Renouvellement Refresh Token
+```mermaid
+sequenceDiagram
+   participant SPA as SPA
+   participant IdP as IdentityServer
+   SPA->>IdP: POST /connect/token (grant_type=refresh_token)
+   IdP->>IdP: Vérifier refresh_token (non expiré, non révoqué)
+   IdP->>IdP: Générer nouveaux tokens + révoquer ancien
+   IdP-->>SPA: Nouvel access + refresh token
+   SPA->>SPA: Remplacer anciens tokens
+```
+
+### UC-09: Multi-Tenant (Ajout/Retrait)
+```mermaid
+flowchart LR
+   Admin[Admin System] --> POSTAdd[POST /api/users/{user}/tenants/{tenant}]
+   POSTAdd --> Domain[User.AddTenantId]
+   Domain --> Persist[Save Changes]
+   Persist --> Access[Utilisateur peut se connecter via tenant]
+   Admin --> DELRem[DELETE /api/users/{user}/tenants/{tenant}]
+   DELRem --> DomainRem[User.RemoveTenantId]
+   DomainRem --> PersistRem[Save Changes]
+   PersistRem --> Revoke[Accès révoqué]
+```
+
+### UC-10: Branding CSS
+```mermaid
+sequenceDiagram
+   participant SPA as SPA
+   participant IdP as Johodp
+   participant DB as DB
+   SPA->>IdP: GET /api/tenant/{tenant}/branding.css
+   IdP->>DB: Charger configuration branding
+   IdP->>IdP: Générer variables CSS dynamiques
+   IdP-->>SPA: Response text/css
+   SPA->>SPA: Appliquer styles page login/onboarding
+```
+
+### UC-11: Localisation
+```mermaid
+sequenceDiagram
+   participant SPA as SPA
+   participant IdP as Johodp
+   participant DB as DB
+   SPA->>IdP: GET /api/tenant/{tenant}/language
+   IdP->>DB: Charger paramètres i18n
+   DB-->>IdP: defaultLanguage + supportedLanguages + timezone
+   IdP-->>SPA: JSON localisation
+   SPA->>SPA: Configurer i18n + formats
+```
+
+### UC-03 / Agrégation Dynamique (Focus Tenants)
+```mermaid
+sequenceDiagram
+   participant IdP as IdentityServer
+   participant Store as CustomClientStore
+   participant DB as DB
+   IdP->>Store: FindClientByIdAsync(clientName)
+   Store->>DB: Charger Client
+   DB-->>Store: Client + AssociatedTenantIds
+   Store->>DB: Charger Tenants
+   DB-->>Store: Tenants (AllowedReturnUrls, AllowedCorsOrigins)
+   Store->>Store: Agréger + dédupliquer
+   Store-->>IdP: Duende Client configuré
+```
+
+### Vue d'État Utilisateur (Pending → Active)
+```mermaid
+stateDiagram-v2
+   [*] --> PendingActivation
+   PendingActivation --> Active: Activation réussie (UC-05)
+   Active --> Active: Refresh Token Flow (UC-08)
+```
+
+---
