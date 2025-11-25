@@ -6,7 +6,13 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 
-public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserEmailStore<User>
+public class UserStore :
+    IUserStore<User>,
+    IUserPasswordStore<User>,
+    IUserEmailStore<User>,
+    IUserTwoFactorStore<User>,
+    IUserAuthenticatorKeyStore<User>,
+    IUserTwoFactorRecoveryCodeStore<User>
 {
     private readonly IUnitOfWork _unitOfWork;
 
@@ -50,9 +56,9 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserEmailS
         return Task.FromResult<string?>(user.Email.Value.ToUpperInvariant());
     }
 
-    public Task<string?> GetUserIdAsync(User user, CancellationToken cancellationToken)
+    public Task<string> GetUserIdAsync(User user, CancellationToken cancellationToken)
     {
-        return Task.FromResult<string?>(user.Id.Value.ToString());
+        return Task.FromResult(user.Id.Value.ToString());
     }
 
     public Task<string?> GetUserNameAsync(User user, CancellationToken cancellationToken)
@@ -137,5 +143,63 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserEmailS
         await _unitOfWork.Users.UpdateAsync(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return IdentityResult.Success;
+    }
+
+    // Two-factor store
+    public Task SetTwoFactorEnabledAsync(User user, bool enabled, CancellationToken cancellationToken)
+    {
+        user.SetTwoFactorEnabled(enabled);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> GetTwoFactorEnabledAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(user.TwoFactorEnabled);
+    }
+
+    // Authenticator key store
+    public Task SetAuthenticatorKeyAsync(User user, string key, CancellationToken cancellationToken)
+    {
+        user.SetAuthenticatorKey(key);
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetAuthenticatorKeyAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(user.AuthenticatorKey);
+    }
+
+    // Interface expects ReplaceCodesAsync (naming in ASP.NET Identity)
+    public Task ReplaceCodesAsync(User user, IEnumerable<string> recoveryCodes, CancellationToken cancellationToken)
+    {
+        user.ReplaceRecoveryCodes(recoveryCodes);
+        return Task.CompletedTask;
+    }
+
+    // Backward compatible method expected by UserManager (ASP.NET Identity interface)
+    public Task ReplaceRecoveryCodesAsync(User user, IEnumerable<string> recoveryCodes, CancellationToken cancellationToken)
+    {
+        return ReplaceCodesAsync(user, recoveryCodes, cancellationToken);
+    }
+
+    public Task<IEnumerable<string>> GetRecoveryCodesAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(user.RecoveryCodes.AsEnumerable());
+    }
+
+    public Task<int> CountCodesAsync(User user, CancellationToken cancellationToken)
+    {
+        return Task.FromResult(user.RecoveryCodes.Count);
+    }
+
+    public Task<bool> RedeemCodeAsync(User user, string code, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return Task.FromResult(false);
+        var match = user.RecoveryCodes.FirstOrDefault(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase));
+        if (match == null) return Task.FromResult(false);
+        var remaining = user.RecoveryCodes.Where(c => !string.Equals(c, code, StringComparison.OrdinalIgnoreCase)).ToList();
+        user.ReplaceRecoveryCodes(remaining);
+        return Task.FromResult(true);
     }
 }

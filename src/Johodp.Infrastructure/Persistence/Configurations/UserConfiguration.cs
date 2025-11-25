@@ -55,6 +55,28 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
+        builder.Property(x => x.TwoFactorEnabled)
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.AuthenticatorKey)
+            .HasColumnName("AuthenticatorKey")
+            .HasMaxLength(100)
+            .IsRequired(false);
+
+        builder.Property<List<string>>("_recoveryCodes")
+            .HasColumnName("RecoveryCodes")
+            .HasColumnType("jsonb")
+            .IsRequired(false);
+
+        builder.Property(x => x.MfaSecretEncrypted)
+            .HasColumnName("MfaSecret")
+            .HasColumnType("text")
+            .IsRequired(false);
+
+        builder.Property(x => x.MfaDeviceRegisteredAt)
+            .HasColumnType("timestamp with time zone")
+            .IsRequired(false);
+
         // Multi-tenancy - store as JSONB array
         builder.Property<List<string>>("_tenantIds")
             .HasColumnName("TenantIds")

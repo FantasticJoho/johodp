@@ -71,6 +71,8 @@ public static class ServiceCollectionExtensions
 
         // MFA Authentication Service (for client-specific MFA)
         services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
+        // TOTP Service for authenticator app based MFA
+        services.AddSingleton<Johodp.Infrastructure.Services.ITotpService, Johodp.Infrastructure.Services.TotpService>();
 
         // Additional handlers not yet converted to IRequestHandler (will be auto-registered once converted)
         services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();

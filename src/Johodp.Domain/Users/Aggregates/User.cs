@@ -29,6 +29,13 @@ public class User : AggregateRoot
     public bool EmailConfirmed { get; private set; }
     public bool IsActive => Status == UserStatus.Active;
     public bool MFAEnabled { get; private set; }
+    // Native ASP.NET Identity authenticator integration fields
+    public bool TwoFactorEnabled { get; private set; }
+    public string? AuthenticatorKey { get; private set; }
+    private readonly List<string> _recoveryCodes = new();
+    public IReadOnlyList<string> RecoveryCodes => _recoveryCodes.AsReadOnly();
+    public string? MfaSecretEncrypted { get; private set; }
+    public DateTime? MfaDeviceRegisteredAt { get; private set; }
     public UserStatus Status { get; private set; } = UserStatus.PendingActivation;
     public DateTime? ActivatedAt { get; private set; }
     public string? PasswordHash { get; private set; }
@@ -221,12 +228,51 @@ public class User : AggregateRoot
 
     public void EnableMFA()
     {
+        if (string.IsNullOrEmpty(MfaSecretEncrypted))
+            throw new InvalidOperationException("Cannot enable MFA without registered device secret");
         MFAEnabled = true;
+        MfaDeviceRegisteredAt ??= DateTime.UtcNow;
         UpdatedAt = DateTime.UtcNow;
     }
 
     public void DisableMFA()
     {
+        MFAEnabled = false;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    // Native 2FA helpers
+    public void SetAuthenticatorKey(string key)
+    {
+        AuthenticatorKey = key;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetTwoFactorEnabled(bool enabled)
+    {
+        TwoFactorEnabled = enabled;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ReplaceRecoveryCodes(IEnumerable<string> codes)
+    {
+        _recoveryCodes.Clear();
+        _recoveryCodes.AddRange(codes);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SetMfaSecret(string encryptedSecret)
+    {
+        if (string.IsNullOrWhiteSpace(encryptedSecret))
+            throw new ArgumentException("Secret cannot be empty", nameof(encryptedSecret));
+        MfaSecretEncrypted = encryptedSecret;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void ClearMfaSecret()
+    {
+        MfaSecretEncrypted = null;
+        MfaDeviceRegisteredAt = null;
         MFAEnabled = false;
         UpdatedAt = DateTime.UtcNow;
     }
@@ -239,6 +285,7 @@ public class User : AggregateRoot
 
     public bool RequiresMFA()
     {
-        return _roles.Any(r => r.RequiresMFA && r.IsActive);
+        // MFA required if any active role enforces it OR if client-level requirement handled upstream.
+        return _roles.Any(r => r.RequiresMFA && r.IsActive) || MFAEnabled || TwoFactorEnabled;
     }
 }

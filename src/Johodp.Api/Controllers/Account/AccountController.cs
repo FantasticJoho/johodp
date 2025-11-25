@@ -17,6 +17,8 @@ public class AccountController : ControllerBase
     private readonly IUserRepository _userRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
+    private readonly IClientRepository _clientRepository;
+    private readonly Johodp.Infrastructure.Services.ITotpService _totpService; // still used only for QR generation
 
     public AccountController(
         UserManager<User> userManager, 
@@ -25,7 +27,9 @@ public class AccountController : ControllerBase
         ITenantRepository tenantRepository,
         IUserRepository userRepository,
         IUnitOfWork unitOfWork,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IClientRepository clientRepository,
+        Johodp.Infrastructure.Services.ITotpService totpService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -34,6 +38,8 @@ public class AccountController : ControllerBase
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
+        _clientRepository = clientRepository;
+        _totpService = totpService;
     }
 
     // ========== AUTHENTICATION ==========
@@ -76,24 +82,47 @@ public class AccountController : ControllerBase
             return Unauthorized(new { error = "User does not have access to this tenant" });
         }
 
-        // Verify password and sign in
-        var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
-        if (passwordValid)
+        // Use SignInManager logic to leverage lockout and two-factor flags
+        var passwordCheck = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
+        if (passwordCheck.IsLockedOut)
         {
-            _logger.LogInformation("Successful API login for user: {Email}, tenant: {TenantId}", request.Email, tenantId);
-            await _signInManager.SignInAsync(user, isPersistent: false);
-            return Ok(new { message = "Login successful", email = request.Email });
+            _logger.LogWarning("API login locked out for user: {Email}", request.Email);
+            return Unauthorized(new { error = "LOCKED_OUT" });
+        }
+        if (!passwordCheck.Succeeded && !passwordCheck.RequiresTwoFactor)
+        {
+            _logger.LogWarning("API: Failed login attempt (bad password) for user: {Email}", request.Email);
+            return Unauthorized(new { error = "Invalid email or password" });
         }
 
-        // Check if MFA required
-        if (user.RequiresMFA())
+        // Determine if client requires MFA
+        bool clientRequiresMfa = false;
+        if (tenantId != "*" && !string.IsNullOrEmpty(tenantId))
         {
-            _logger.LogInformation("API: MFA required for user: {Email}", request.Email);
-            return Unauthorized(new { error = "Two-factor authentication required" });
+            var tenant = await _tenantRepository.GetByNameAsync(tenantId);
+            if (tenant?.ClientId != null)
+            {
+                var client = await _clientRepository.GetByNameAsync(tenant.ClientId);
+                clientRequiresMfa = client?.RequireMfa == true;
+            }
         }
 
-        _logger.LogWarning("API: Failed login attempt for user: {Email}", request.Email);
-        return Unauthorized(new { error = "Invalid email or password" });
+        var mfaNeeded = clientRequiresMfa || user.TwoFactorEnabled || user.RequiresMFA();
+        if (mfaNeeded && (passwordCheck.RequiresTwoFactor || user.TwoFactorEnabled))
+        {
+            // Do NOT sign in yet; client must call second step with code
+            _logger.LogInformation("API login step1 success, MFA required for {Email}", request.Email);
+            return Ok(new { status = "MFA_REQUIRED", email = request.Email, tenantId, twoFactor = true });
+        }
+
+        if (!passwordCheck.Succeeded)
+        {
+            return Unauthorized(new { error = "Invalid login state" });
+        }
+
+        _logger.LogInformation("Successful API login (no MFA) for user: {Email}, tenant: {TenantId}", request.Email, tenantId);
+        await _signInManager.SignInAsync(user, isPersistent: false);
+        return Ok(new { message = "Login successful", email = request.Email, mfa = false });
     }
 
     /// <summary>
@@ -242,12 +271,25 @@ public class AccountController : ControllerBase
 
         _logger.LogInformation("User {UserId} activated successfully via API", user.Id);
 
+        // Native provisioning now handled by dedicated endpoint; just signal requirement
+        bool clientMfa = false;
+        if (!string.IsNullOrEmpty(request.TenantId))
+        {
+            var tenant = await _tenantRepository.GetByNameAsync(request.TenantId);
+            if (tenant?.ClientId != null)
+            {
+                var client = await _clientRepository.GetByNameAsync(tenant.ClientId);
+                clientMfa = client?.RequireMfa == true;
+            }
+        }
+
         return Ok(new
         {
             message = "Account activated successfully",
             userId = user.Id.Value,
             email = user.Email.Value,
-            status = "Active"
+            status = "Active",
+            mfaRequired = clientMfa && !user.TwoFactorEnabled
         });
     }
 
@@ -333,11 +375,74 @@ public class AccountController : ControllerBase
         }
 
         _logger.LogInformation("Password successfully reset via API for user: {Email}", request.Email);
-        return Ok(new 
-        { 
+        bool clientMfaReset = false;
+        if (!string.IsNullOrEmpty(request.TenantId))
+        {
+            var tenant = await _tenantRepository.GetByNameAsync(request.TenantId);
+            if (tenant?.ClientId != null)
+            {
+                var client = await _clientRepository.GetByNameAsync(tenant.ClientId);
+                clientMfaReset = client?.RequireMfa == true && !user.TwoFactorEnabled;
+            }
+        }
+
+        return Ok(new
+        {
             message = "Password reset successful",
-            email = request.Email 
+            email = request.Email,
+            mfaRequired = clientMfaReset
         });
+    }
+
+    // ========== MFA (Native Authenticator) ==========
+
+    [HttpPost("mfa/provision")]
+    public async Task<IActionResult> ProvisionMfa([FromBody] MfaProvisionRequest request)
+    {
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null) return NotFound(new { error = "USER_NOT_FOUND" });
+        if (user.TwoFactorEnabled) return BadRequest(new { error = "ALREADY_ENABLED" });
+
+        var key = await _userManager.GetAuthenticatorKeyAsync(user);
+        if (string.IsNullOrEmpty(key))
+        {
+            await _userManager.ResetAuthenticatorKeyAsync(user);
+            key = await _userManager.GetAuthenticatorKeyAsync(user);
+        }
+
+        string issuer = request.Issuer ?? "Johodp";
+        var uri = _totpService.GetProvisioningUri(issuer, user.Email.Value, key!);
+        var qr = _totpService.GenerateQrCodeBase64(uri);
+        return Ok(new { authenticatorKey = key, provisioningUri = uri, qrBase64 = qr });
+    }
+
+    [HttpPost("mfa/confirm")]
+    public async Task<IActionResult> ConfirmMfa([FromBody] MfaConfirmRequest request)
+    {
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null) return NotFound(new { error = "USER_NOT_FOUND" });
+        if (user.TwoFactorEnabled) return BadRequest(new { error = "ALREADY_ENABLED" });
+        var valid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, request.Code);
+        if (!valid) return BadRequest(new { error = "INVALID_CODE" });
+
+        await _userManager.SetTwoFactorEnabledAsync(user, true);
+
+        // Generate recovery codes using Identity helper
+        var recoveryCodes = (await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10)).ToArray();
+        return Ok(new { enabled = true, recoveryCodes });
+    }
+
+    [HttpPost("login/mfa")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginMfa([FromBody] LoginMfaRequest request)
+    {
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null) return Unauthorized(new { error = "INVALID_USER" });
+        if (!user.TwoFactorEnabled) return BadRequest(new { error = "MFA_NOT_ENABLED" });
+        var codeValid = await _userManager.VerifyTwoFactorTokenAsync(user, TokenOptions.DefaultAuthenticatorProvider, request.Code);
+        if (!codeValid) return Unauthorized(new { error = "INVALID_MFA_CODE" });
+        await _signInManager.SignInAsync(user, isPersistent: false);
+        return Ok(new { message = "Login successful", email = request.Email });
     }
 }
 
@@ -348,7 +453,8 @@ public class AccountController : ControllerBase
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
         public string? TenantId { get; set; }
-    }public class RegisterRequest
+    }
+    public class RegisterRequest
 {
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
@@ -362,6 +468,7 @@ public class ActivateRequest
     public string UserId { get; set; } = string.Empty;
     public string NewPassword { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
+        public string? TenantId { get; set; }
 }
 
 public class ForgotPasswordRequest
@@ -369,10 +476,29 @@ public class ForgotPasswordRequest
     public string Email { get; set; } = string.Empty;
 }
 
-public class ResetPasswordRequest
-{
-    public string Email { get; set; } = string.Empty;
-    public string Token { get; set; } = string.Empty;
-    public string Password { get; set; } = string.Empty;
-    public string ConfirmPassword { get; set; } = string.Empty;
-}
+    public class ResetPasswordRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Token { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+        public string? TenantId { get; set; }
+    }
+
+    public class MfaProvisionRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string? Issuer { get; set; }
+    }
+
+    public class MfaConfirmRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+    }
+
+    public class LoginMfaRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Code { get; set; } = string.Empty;
+    }
