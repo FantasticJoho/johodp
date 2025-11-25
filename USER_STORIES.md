@@ -140,6 +140,9 @@ DELETE /api/clients/550e8400-e29b-41d4-a716-446655440000
 - [ ] Le système valide les AllowedCorsOrigins (format autorité uniquement)
 - [ ] Le tenant doit avoir au moins une URL de redirection
 - [ ] Le système refuse si le nom de tenant existe déjà (409 Conflict)
+- [ ] Je peux définir `userVerificationEndpoint` (webhook) pour la validation d'inscription
+- [ ] `userVerificationEndpoint` DOIT être HTTPS en production
+- [ ] Le système stocke le webhook et l'utilise lors des demandes d'onboarding (Ref UC-04)
 
 **Tests d'acceptation:**
 ```http
@@ -286,6 +289,7 @@ DELETE /api/tenant/550e8400-e29b-41d4-a716-446655440000
 - [ ] Le Content-Type de la réponse est "text/css"
 - [ ] Le système retourne 404 si le tenant n'existe pas
 - [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+- [ ] Génération dynamique (pas de cache), valeurs par défaut si absent (Ref UC-10)
 
 **Tests d'acceptation:**
 ```http
@@ -306,6 +310,7 @@ GET /api/tenant/acme-corp/branding.css
 - [ ] Le système retourne également dateFormat et timeFormat
 - [ ] Le système retourne 404 si le tenant n'existe pas
 - [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+- [ ] supportedLanguages inclut toujours defaultLanguage (Ref UC-11)
 
 **Tests d'acceptation:**
 ```http
@@ -331,6 +336,7 @@ GET /api/tenant/acme-corp/language
 - [ ] Le système refuse si l'email existe déjà (409 Conflict)
 - [ ] Le tenantId est obligatoire
 - [ ] L'utilisateur est ajouté au tenant spécifié
+- [ ] Requiert access_token avec scope administratif (Ref UC-04 RG-ONBOARD-08)
 
 **Tests d'acceptation:**
 ```http
@@ -388,6 +394,7 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000
 - [ ] Le système retourne 200 OK avec message de succès
 - [ ] Le système retourne 404 si utilisateur ou tenant inexistant
 - [ ] Le système refuse si l'utilisateur a déjà accès au tenant
+- [ ] Supporte valeur spéciale `"*"` pour accès global (Ref UC-09 RG-MULTITENANT-02)
 
 **Tests d'acceptation:**
 ```http
@@ -409,6 +416,7 @@ POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
 - [ ] Le système retourne 204 No Content en cas de succès
 - [ ] Le système retourne 404 si utilisateur ou tenant inexistant
 - [ ] L'utilisateur ne peut plus se connecter avec ce tenant
+- [ ] Si l'utilisateur avait `"*"`, retrait explicite remplace par liste sans ce tenant
 
 **Tests d'acceptation:**
 ```http
@@ -481,6 +489,10 @@ GET /account/onboarding?acr_values=tenant:acme-corp
 - [ ] Le système affiche la page "En attente de validation"
 - [ ] Le système retourne une erreur si l'email existe déjà
 - [ ] Le système ne crée PAS l'utilisateur (c'est l'app tierce qui le fera)
+- [ ] La notification inclut une signature HMAC (X-Johodp-Signature) (Ref UC-04 RG-ONBOARD-02)
+- [ ] L'app tierce doit répondre sous 5 minutes (timeout) (Ref UC-04 RG-ONBOARD-03)
+- [ ] Message d'erreur spécifique en cas de timeout (RG-ONBOARD-04)
+- [ ] Flux asynchrone: création via `/api/users/register` si validation réussie
 
 **Tests d'acceptation:**
 ```http
@@ -543,6 +555,7 @@ GET /account/activate?token=ABC123&userId=550e8400-e29b-41d4-a716-446655440000&t
 - [ ] Le système affiche la page de succès
 - [ ] Le système retourne une erreur si le token est invalide ou expiré
 - [ ] Le système retourne une erreur si les mots de passe ne correspondent pas
+- [ ] Token utilisable une seule fois, expiration configurable (24h) (Ref UC-05 RG-ACTIVATE-02)
 
 **Tests d'acceptation:**
 ```http
@@ -631,6 +644,7 @@ GET /account/login?returnUrl=/connect/authorize?acr_values=tenant:acme-corp
 - [ ] Le système retourne une erreur si credentials invalides
 - [ ] Le système retourne une erreur si l'utilisateur n'a pas accès au tenant
 - [ ] Le système détecte si MFA est requis (user.RequiresMFA())
+- [ ] Refuse connexion si utilisateur sans tenant (Ref UC-06 / UC-09 RG-MULTITENANT-04)
 
 **Tests d'acceptation:**
 ```http
@@ -664,6 +678,7 @@ POST /account/login
 - [ ] Le système crée un cookie de session
 - [ ] Le système retourne JSON { message, email }
 - [ ] Le système retourne 401 Unauthorized si credentials invalides
+- [ ] Vérifie tenantId présent dans TenantIds (Ref UC-06 / UC-09)
 
 **Tests d'acceptation:**
 ```http
@@ -770,6 +785,7 @@ POST /account/reset-password
 - [ ] Le système retourne null si le client n'a aucun tenant
 - [ ] Le système retourne null si aucun tenant n'a de redirect URIs
 - [ ] Le système mappe vers Duende.IdentityServer.Models.Client
+- [ ] Ref UC-03 pour agrégation dynamique sans cache
 
 **Tests d'acceptation:**
 ```csharp
@@ -895,6 +911,97 @@ Authorization: Bearer eyJ...
 ---
 
 ### US-6.6: Renouveler un Access Token avec Refresh Token (DOIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** renouveler mon access token expirant grâce à un refresh token  
+**Afin de** maintenir la session sans ré-authentification (Ref UC-08)
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/connect/token` avec `grant_type=refresh_token`
+- [ ] Le body contient refresh_token et client_id
+- [ ] Le système valide que le refresh_token n'est pas expiré
+- [ ] Le système valide que le refresh_token n'est pas révoqué
+- [ ] Le système valide correspondance du client
+- [ ] Le système révoque l'ancien refresh_token (usage unique)
+- [ ] Le système retourne nouvel access_token + nouveau refresh_token + expires_in
+- [ ] Le système applique fenêtre glissante (15 jours) sur le refresh_token
+- [ ] Retourne 400 ou 401 si token invalide/expiré/révoqué
+
+**Tests d'acceptation:**
+```http
+POST /connect/token
+{
+  "grant_type": "refresh_token",
+  "refresh_token": "rft123",
+  "client_id": "my-spa-app"
+}
+→ 200 OK avec nouveaux tokens
+```
+
+**DoD:**
+- Validation one-time use en place
+- Révocation précédente entrée persistée
+- Tests unitaires (expiration, révocation, renouvellement)
+- Documentation mise à jour
+
+---
+
+### US-6.7: Appeler une API protégée avec Access Token (DOIT AVOIR)
+**En tant qu'** application SPA  
+**Je veux** accéder à un endpoint protégé avec un access token valide  
+**Afin de** récupérer des données sécurisées (Ref UC-07)
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/users/me` avec header Authorization Bearer
+- [ ] Middleware vérifie signature, expiration, issuer, audience
+- [ ] Le système extrait claims (sub, email, role, scope)
+- [ ] Retourne 200 avec UserDto si valide
+- [ ] Retourne 401 en cas d'échec de validation
+
+**Tests d'acceptation:**
+```http
+GET /api/users/me
+Authorization: Bearer eyJ...
+→ 200 OK
+```
+
+**DoD:**
+- Tests d'intégration token valide/expiré
+- Documentation sécurité (SEC-01..SEC-05) référencée
+
+---
+
+## 🛠️ Epic 7: Authentification Machine-to-Machine
+
+### US-7.1: Obtenir un Token d'Administration (Client Credentials) (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** obtenir un access token via le flux client credentials  
+**Afin que** je puisse appeler les APIs d'administration (Ref UC-00)
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/connect/token` avec `grant_type=client_credentials`
+- [ ] Le système valide client_id + client_secret
+- [ ] Le système vérifie autorisation du scope demandé (ex: `johodp.admin`)
+- [ ] Le système génère access_token (exp 1h) sans refresh_token
+- [ ] Retourne 401 si client_secret invalide
+- [ ] Scope `johodp.admin` permet création clients, tenants, utilisateurs
+
+**Tests d'acceptation:**
+```http
+POST /connect/token
+{
+  "grant_type": "client_credentials",
+  "client_id": "third-party-app",
+  "client_secret": "s3cr3t",
+  "scope": "johodp.admin"
+}
+→ 200 OK avec access_token
+```
+
+**DoD:**
+- Stockage sécurisé du client_secret (hashé)
+- Journalisation du client_id pour audit
+- Tests unitaires validation scope/secret
+- Documentation mise à jour (API_ENDPOINTS.md)
 **En tant qu'** application SPA  
 **Je veux** renouveler mon access token  
 **Afin de** maintenir ma session sans redemander credentials

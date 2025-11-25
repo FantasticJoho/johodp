@@ -577,6 +577,264 @@ https://localhost:5001/swagger
 
 ---
 
+# 🧩 Clients Endpoints
+
+### Create Client
+**POST** `/api/clients`
+
+Crée un client OAuth2 (aucun tenant associé initialement). (US-1.1 / UC-01)
+
+**Auth:** `Bearer` (scope `johodp.admin` via client credentials UC-00)
+
+**Request Body**
+```json
+{
+  "clientName": "my-spa-app",
+  "allowedScopes": ["openid", "profile", "email", "api"],
+  "requireConsent": true
+}
+```
+
+### Get Client by Id
+**GET** `/api/clients/{clientId}` (US-1.2)
+
+### Get Client by Name
+**GET** `/api/clients/by-name/{clientName}` (US-1.3)
+
+### Update Client
+**PUT** `/api/clients/{clientId}` (US-1.4)
+
+### Delete Client
+**DELETE** `/api/clients/{clientId}` (US-1.5)
+
+---
+
+# 🏢 Tenants Endpoints
+
+### Create Tenant
+**POST** `/api/tenant` (US-2.1 / UC-02)
+
+Inclut `userVerificationEndpoint` (HTTPS en production) pour webhook d'onboarding.
+
+**Request Body (exemple)**
+```json
+{
+  "name": "acme-corp",
+  "displayName": "ACME Corporation",
+  "clientId": "my-spa-app",
+  "allowedReturnUrls": ["http://localhost:4200/callback"],
+  "allowedCorsOrigins": ["http://localhost:4200"],
+  "userVerificationEndpoint": "https://api.acme.com/webhooks/johodp/verify-user",
+  "branding": {"primaryColor": "#007bff"},
+  "localization": {"defaultLanguage": "fr-FR", "timezone": "Europe/Paris", "currency": "EUR"}
+}
+```
+
+### List Tenants
+**GET** `/api/tenant` (US-2.2)
+
+### Get Tenant by Id
+**GET** `/api/tenant/{id}` (US-2.3)
+
+### Get Tenant by Name
+**GET** `/api/tenant/by-name/{name}` (US-2.4)
+
+### Update Tenant
+**PUT** `/api/tenant/{id}` (US-2.5)
+
+### Delete Tenant
+**DELETE** `/api/tenant/{id}` (US-2.6)
+
+### Tenant Branding CSS
+**GET** `/api/tenant/{tenantId}/branding.css` (US-2.7 / UC-10)
+
+### Tenant Localization
+**GET** `/api/tenant/{tenantId}/language` (US-2.8 / UC-11)
+
+---
+
+# 👥 User Multi-Tenant Access
+
+### Add User to Tenant
+**POST** `/api/users/{userId}/tenants/{tenantId}` (US-3.3 / UC-09)
+
+### Remove User From Tenant
+**DELETE** `/api/users/{userId}/tenants/{tenantId}` (US-3.4 / UC-09)
+
+### List User Tenants
+**GET** `/api/users/{userId}/tenants` (US-3.5)
+
+### Current User Profile
+**GET** `/api/users/me` (Protected – requires valid access token; US-6.7 / UC-07)
+
+---
+
+# 🔐 OAuth2 / OIDC Endpoints
+
+Base IdentityServer endpoints (hors préfixe `/api`).
+
+### Authorization Request
+**GET** `/connect/authorize` (UC-06)
+
+Exemple:
+```
+/connect/authorize?client_id=my-spa-app&response_type=code&scope=openid profile email&redirect_uri=http://localhost:4200/callback&code_challenge=<challenge>&code_challenge_method=S256&acr_values=tenant:acme-corp
+```
+
+### Token Exchange
+**POST** `/connect/token`
+
+Grant Types supportés:
+- `authorization_code` (PKCE obligatoire)
+- `refresh_token` (UC-08 / US-6.6)
+- `client_credentials` (UC-00 / US-7.1)
+
+#### Authorization Code Flow Body
+```json
+{
+  "grant_type": "authorization_code",
+  "code": "abc123",
+  "redirect_uri": "http://localhost:4200/callback",
+  "client_id": "my-spa-app",
+  "code_verifier": "<original_verifier>"
+}
+```
+
+#### Refresh Token Flow Body
+```json
+{
+  "grant_type": "refresh_token",
+  "refresh_token": "rft123",
+  "client_id": "my-spa-app"
+}
+```
+
+#### Client Credentials Flow Body
+```json
+{
+  "grant_type": "client_credentials",
+  "client_id": "third-party-app",
+  "client_secret": "secret-value",
+  "scope": "johodp.admin"
+}
+```
+
+### Token Response (exemple)
+```json
+{
+  "access_token": "eyJ...",
+  "id_token": "eyJ...",
+  "refresh_token": "def456",
+  "expires_in": 3600,
+  "token_type": "Bearer"
+}
+```
+
+---
+
+# 📡 Webhook de Vérification Utilisateur (Onboarding)
+
+Utilisé pendant UC-04 et US-4.2 pour validation métier avant création de l'utilisateur.
+
+### Envoi par Johodp
+`POST {userVerificationEndpoint}`
+
+Headers:
+- `Content-Type: application/json`
+- `X-Johodp-Signature: <HMAC-SHA256>`
+- `X-Johodp-Timestamp: <UTC ISO8601>`
+
+Payload:
+```json
+{
+  "requestId": "uuid",
+  "tenantId": "acme-corp",
+  "email": "user@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "timestamp": "2025-11-25T10:30:00Z"
+}
+```
+
+La signature est calculée: `HMAC_SHA256(base64Secret, requestId + tenantId + email + timestamp)` (format canonique configurable).
+
+### Réponse Attendue
+- `200 OK` → Validation acceptée (application tierce créera l'utilisateur via `/api/users/register`)
+- `4xx/5xx` → Considéré refusé / erreur; l'utilisateur reste en attente.
+
+### Sécurité & Règles
+- Timeout de validation: 5 minutes (RG-ONBOARD-03)
+- Rejouer la notification en cas d'erreur réseau (stratégie de retry recommandée)
+- Secret HMAC stocké chiffré côté tenant
+- Journaliser les échecs de signature
+
+### Bonnes Pratiques
+1. Vérifier l'horodatage (anti-replay: tolérance ±5 min)
+2. Normaliser email (lowercase) avant calcul signature
+3. Implémenter circuit breaker si trop d'échecs
+
+---
+
+# 🔄 Refresh Token & Rotation
+
+Caractéristiques (UC-08 / US-6.6):
+- Durée de vie: 15 jours sliding window
+- Usage unique: ancien refresh_token révoqué lors du renouvellement
+- Rotation obligatoire: chaque réponse renvoie un nouveau token
+- Révocation manuelle possible (future endpoint d'administration)
+
+Erreurs possibles:
+- `invalid_grant` (token expiré/révoqué)
+- `unauthorized_client` (client sans droit refresh)
+
+---
+
+# 🛡️ Protected API Example
+
+**GET** `/api/users/me` (US-6.7) nécessite header:
+```
+Authorization: Bearer <access_token>
+```
+Validations: signature, exp, iss, aud, scopes.
+
+Réponse:
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "john.doe@example.com",
+  "tenants": ["acme-corp"],
+  "status": "Active"
+}
+```
+
+---
+
+## 🔄 Dynamic Client Aggregation
+
+Lors de `/connect/authorize`, IdentityServer appelle `CustomClientStore.FindClientByIdAsync` (US-6.1 / UC-03) pour:
+- Agréger `RedirectUris` depuis tous les tenants
+- Agréger `AllowedCorsOrigins` depuis tous les tenants
+- Dédupliquer entrées
+- Retourner `null` si aucune redirect URI ou aucun tenant
+
+---
+
+## Changelog des Endpoints
+
+### v4.0 (2025-11-25) - Multi-Tenant & OAuth Flows Complets
+- ✅ Ajout endpoints Clients (CRUD)
+- ✅ Ajout endpoints Tenants (CRUD + branding + localisation)
+- ✅ Endpoints multi-tenant utilisateur (add/remove/list)
+- ✅ Documentation `/connect/authorize` & `/connect/token` (authorization_code, refresh_token, client_credentials)
+- ✅ Refresh token rotation & sécurité
+- ✅ Webhook d'onboarding + signature HMAC
+- ✅ Endpoint protégé `/api/users/me`
+- ✅ Agrégation dynamique client documentée
+
+### v3.0 (2025-11-24) - API Authentication Endpoints + CORS Migration
+
+---
+
 ## Exemples de flux complet
 
 ### Scénario 1: Création et récupération d'un utilisateur

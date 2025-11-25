@@ -374,6 +374,38 @@ DROP COLUMN IF EXISTS "AllowedCorsOrigins";
 - ✅ `Infrastructure/IdentityServer/CustomClientStore.cs` - Agrégation depuis tenants
 - ✅ `Infrastructure/Persistence/Configurations/*` - Mapping jsonb
 
+## Webhook de Vérification Utilisateur (Onboarding)
+
+Le webhook d'onboarding permet la **validation métier externe** avant la création effective de l'utilisateur (UC-04 / US-4.2). Il complète le flux de formulaire côté Johodp en déclenchant un appel sortant vers l'application tierce.
+
+### Rôle dans le flux
+1. L'utilisateur soumet le formulaire `/account/onboarding` (Johodp).
+2. Johodp crée une demande interne et envoie un `POST` vers `userVerificationEndpoint` configuré dans le tenant.
+3. L'application tierce valide (contrats, email, contraintes métiers).
+4. Si acceptée, elle appelle l'API Johodp `/api/users/register` avec un access token `johodp.admin` pour créer l'utilisateur en `PendingActivation`.
+5. Johodp envoie l'email d'activation → flux d'activation standard.
+
+### Sécurité
+- Signature HMAC envoyée dans `X-Johodp-Signature` + horodatage `X-Johodp-Timestamp` (voir détails dans `API_ENDPOINTS.md`).
+- Timeout de validation: 5 minutes (sinon message d'attente ou réessai manuel).
+- Endpoint recommandé HTTPS obligatoire en production.
+- Idempotence requise: plusieurs envois possibles en cas de retry réseau.
+
+### Différences vs Appels API
+- Direction: webhook = sortie Johodp → application tierce; API = entrée vers Johodp.
+- Authentification: webhook par secret partagé (HMAC) vs API par OAuth2 (Bearer access token).
+- Synchronicité: webhook déclenché par événement interne; appel API initié par le client.
+
+### Extension / Évolutions futures
+- File d'attente persistée pour retries (ex: table `webhook_outbox`).
+- Traçabilité: corrélation par `requestId` dans logs.
+- Signature enrichie (payload canonique + version de schéma).
+
+### Références
+- Spécification payload & headers: `API_ENDPOINTS.md` (section Webhook)
+- User Stories: `USER_STORIES.md` (US-4.2 Onboarding, US-3.1 création via API, US-5.2 login tenant)
+- Use Cases: UC-04 (Onboarding), UC-05 (Activation)
+
 ## Avantages de cette architecture
 
 ✅ **Séparation des préoccupations** - Chaque couche a une responsabilité unique
