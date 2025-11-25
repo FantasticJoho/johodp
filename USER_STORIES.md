@@ -1073,33 +1073,534 @@ SELECT * FROM "PersistedGrants" WHERE "Type" = 'refresh_token';
 
 **Critères d'acceptation:**
 - [ ] Le système appelle INotificationService.NotifyAccountRequestAsync
-- [ ] Le service envoie POST vers tenant.NotificationUrl
-- [ ] Le body contient: requestId, tenantId, email, firstName, lastName
-- [ ] L'appel est asynchrone (fire-and-forget)
-- [ ] Le système log les erreurs de notification sans bloquer l'onboarding
-- [ ] Le système utilise tenant.ApiKey comme header Authorization si configuré
+- [ ] Le service obtient un `access_token` via Client Credentials (client interne Johodp)
+- [ ] Le service utilise scope `johodp.webhook` pour appeler les webhooks
+- [ ] Le service envoie POST vers `tenant.WebhookUrl` avec `Authorization: Bearer <token>`
+- [ ] Le body contient: `requestId`, `tenantId`, `email`, `firstName`, `lastName`, `timestamp`
+- [ ] Le token est mis en cache et renouvelé automatiquement avant expiration
+- [ ] L'appel est asynchrone (fire-and-forget avec queue si échec)
+- [ ] Le système retente 3 fois avec backoff exponentiel (1s, 2s, 4s)
+- [ ] Le système log les succès/échecs avec: `requestId`, `webhookUrl`, `statusCode`, `duration`, `retries`
+- [ ] Le système ne bloque pas l'onboarding en cas d'échec webhook
+- [ ] Le système stocke les webhooks échoués dans une dead-letter queue pour retry manuel
 
 **Tests d'acceptation:**
 ```http
+# 1. Johodp obtient token interne
+POST https://johodp.example.com/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&
+client_id=johodp-internal&
+client_secret=internal-s3cr3t&
+scope=johodp.webhook
+
+→ 200 OK { "access_token": "eyJ...", "expires_in": 3600 }
+
+# 2. Johodp appelle webhook avec token
 POST https://app.acme.com/api/account-requests
-Authorization: Bearer <tenant.ApiKey>
+Authorization: Bearer eyJ...
+Content-Type: application/json
+
 {
-  "requestId": "uuid",
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "tenantId": "acme-corp",
   "email": "john.doe@acme.com",
   "firstName": "John",
-  "lastName": "Doe"
+  "lastName": "Doe",
+  "timestamp": "2025-11-25T10:30:00Z"
 }
-→ App tierce reçoit la notification
+
+→ App tierce valide token JWT puis retourne 200 OK
 ```
 
 **DoD:**
-- INotificationService interface créée
-- NotificationService implémentation avec HttpClient
-- Tests unitaires avec mock HttpClient
-- Tests d'intégration avec webhook simulé
-- Configuration retry policy (Polly)
-- Logging des succès/erreurs
+- INotificationService interface créée avec méthode NotifyAccountRequestAsync
+- NotificationService implémentation avec:
+  - HttpClient configuré avec Polly retry policy (3 tentatives)
+  - Token manager avec cache mémoire (IMemoryCache)
+  - Dead-letter queue pour webhooks échoués (Redis/RabbitMQ/DB)
+- Client OAuth2 interne configuré dans IdentityServer (client_id: `johodp-internal`, scope: `johodp.webhook`)
+- Tests unitaires avec mock HttpClient + token expiré
+- Tests d'intégration avec webhook simulé + validation JWT
+- Logging structuré (Serilog) avec enrichers TenantId/RequestId
+- Monitoring métriques (taux succès, durée, retries) via Prometheus
+
+---
+
+## 🏗️ Epic 10: User Stories pour l'Application Tierce (Webhook Consumer)
+
+> **Contexte:** L'application tierce reçoit des notifications de Johodp lors des demandes d'inscription (onboarding). Elle doit valider la demande selon ses règles métier, puis créer l'utilisateur dans Johodp via l'API si accepté.
+
+---
+
+### US-10.1: Recevoir une Notification d'Onboarding (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** recevoir un webhook POST lors d'une demande d'inscription  
+**Afin de** valider la demande selon mes règles métier
+
+**Critères d'acceptation:**
+- [ ] Mon endpoint `POST /api/account-requests` reçoit le payload JSON
+- [ ] Le payload contient: `requestId`, `tenantId`, `email`, `firstName`, `lastName`, `timestamp`
+- [ ] L'endpoint est **protégé par OAuth2** (nécessite Bearer token valide)
+- [ ] Je valide le token JWT reçu: signature, expiration, issuer (Johodp), audience, scope (`johodp.webhook`)
+- [ ] Je vérifie que le `tenantId` correspond à mon organisation
+- [ ] Je vérifie le `timestamp` (< 5 minutes pour prévenir replay)
+- [ ] Je retourne `200 OK` immédiatement (< 5s) pour accuser réception
+- [ ] Je retourne `401 Unauthorized` si token invalide/expiré
+- [ ] Je lance un traitement asynchrone pour validation métier
+- [ ] Je log la réception avec `requestId`, `email`, `tenantId`, timestamp, IP source, claims JWT
+
+**Payload reçu:**
+```json
+{
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tenantId": "acme-corp",
+  "email": "john.doe@acme.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "timestamp": "2025-11-25T10:30:00Z"
+}
+```
+
+**Headers reçus:**
+```
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+User-Agent: Johodp/1.0
+```
+
+**Token JWT décodé:**
+```json
+{
+  "iss": "https://johodp.example.com",
+  "aud": "third-party-webhook",
+  "sub": "johodp-notification-service",
+  "scope": "johodp.webhook",
+  "client_id": "johodp-internal",
+  "exp": 1732534200,
+  "iat": 1732530600
+}
+```
+
+**DoD:**
+- Endpoint webhook implémenté avec validation JWT OAuth2
+- Configuration JWT authentication middleware (issuer, audience, signing key)
+- Traitement asynchrone (queue/background job)
+- Logging structuré avec `requestId` + claims JWT
+- Tests unitaires validation token (expiré, signature invalide, scope manquant)
+- Tests d'intégration avec token simulé
+- Documentation endpoint webhook + format token
+
+---
+
+### US-10.2: Valider une Demande selon Règles Métier (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** valider la demande d'inscription selon mes règles  
+**Afin de** décider si je crée l'utilisateur dans Johodp
+
+**Critères d'acceptation:**
+- [ ] Je vérifie que l'email respecte le format de mon organisation (ex: `@acme.com`)
+- [ ] Je vérifie que l'email n'existe pas déjà dans mon CRM
+- [ ] Je vérifie que le domaine email est autorisé (whitelist/blacklist)
+- [ ] Je peux appliquer des règles personnalisées (ex: département, rôle)
+- [ ] Je peux rejeter la demande avec un motif (email invalide, domaine non autorisé, doublon)
+- [ ] Je log la décision avec: `requestId`, `decision` (accepted/rejected), `reason`, `duration`
+- [ ] Je stocke la demande dans ma base avec statut `pending_validation`
+
+**Exemples de règles:**
+```typescript
+// Règle 1: Email domaine autorisé
+if (!email.endsWith('@acme.com')) {
+  reject('INVALID_DOMAIN');
+}
+
+// Règle 2: Pas de doublon CRM
+if (await crmService.userExists(email)) {
+  reject('DUPLICATE_CRM');
+}
+
+// Règle 3: Vérifier liste noire
+if (await blacklist.contains(email)) {
+  reject('BLACKLISTED');
+}
+```
+
+**DoD:**
+- Moteur de règles configurables (JSON/YAML)
+- Logging des décisions avec raison
+- Tests unitaires par règle
+- Métriques (% accepté/rejeté, durée validation)
+
+---
+
+### US-10.3: Créer un Utilisateur dans Johodp via API (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** créer l'utilisateur dans Johodp si la validation réussit  
+**Afin que** l'utilisateur reçoive l'email d'activation
+
+**Critères d'acceptation:**
+- [ ] J'obtiens un `access_token` via **Client Credentials** (`grant_type=client_credentials`)
+- [ ] J'utilise mon `client_id` et `client_secret` configurés dans Johodp
+- [ ] Je demande le scope `johodp.admin` pour accès API création utilisateurs
+- [ ] Je cache le token et le rafraîchis avant expiration (exp - 5 min)
+- [ ] J'appelle `POST /api/users/register` avec `Authorization: Bearer <token>`
+- [ ] Le body contient: `email`, `firstName`, `lastName`, `tenantId`, `createAsPending=true`
+- [ ] Johodp valide le token JWT (signature, expiration, scope `johodp.admin`)
+- [ ] Johodp crée l'utilisateur avec `Status=PendingActivation`
+- [ ] Johodp génère le token d'activation et envoie l'email
+- [ ] Je reçois `201 Created` avec `userId`, `email`, `status`
+- [ ] Je mets à jour ma base: `requestId` → `userId`, `status=user_created`
+- [ ] Je log le succès avec: `requestId`, `userId`, `email`, `duration`, `token_age`
+- [ ] En cas d'échec (409 Conflict, 400 Bad Request, 401 Unauthorized), je log l'erreur et notifie l'admin
+- [ ] En cas de 401, je force le renouvellement du token et retry une fois
+
+**Appels API:**
+```http
+# 1. Obtenir access token via Client Credentials
+POST https://johodp.example.com/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&
+client_id=third-party-app&
+client_secret=s3cr3tK3y123!&
+scope=johodp.admin
+
+→ 200 OK 
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "johodp.admin"
+}
+
+# Token JWT décodé:
+{
+  "iss": "https://johodp.example.com",
+  "aud": "johodp-api",
+  "sub": "third-party-app",
+  "client_id": "third-party-app",
+  "scope": "johodp.admin",
+  "exp": 1732534200,
+  "iat": 1732530600
+}
+
+# 2. Créer utilisateur avec token
+POST https://johodp.example.com/api/users/register
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "email": "john.doe@acme.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "tenantId": "acme-corp",
+  "createAsPending": true
+}
+
+→ 201 Created 
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "john.doe@acme.com",
+  "status": "PendingActivation"
+}
+```
+
+**DoD:**
+- HttpClient configuré avec retry policy (Polly) - 3 tentatives avec backoff exponentiel
+- Service de gestion token avec cache mémoire (expiration - 5 min)
+- Renouvellement automatique du token si 401 Unauthorized
+- Logging des appels API (request/response, duration, token_claims)
+- Tests unitaires avec mock HttpClient + token expiré/invalide
+- Tests d'intégration avec Johodp en staging (flow complet)
+- Gestion des erreurs 409 (doublon), 400 (validation), 401 (token expiré/invalide), 403 (scope insuffisant), 500 (erreur serveur)
+- Monitoring durée appels + taux erreur par endpoint
+
+---
+
+### US-10.4: Gérer le Timeout de Validation (DEVRAIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** gérer le timeout de validation (5 min)  
+**Afin de** ne pas bloquer le système Johodp
+
+**Critères d'acceptation:**
+- [ ] Si ma validation dépasse 5 minutes, Johodp affiche un message d'erreur à l'utilisateur
+- [ ] Je peux quand même créer l'utilisateur après le timeout (création asynchrone)
+- [ ] Je log le timeout avec: `requestId`, `duration`, `reason`
+- [ ] Je stocke la demande avec statut `timeout_validation`
+- [ ] Je peux re-traiter manuellement les demandes en timeout
+- [ ] Je notifie l'admin en cas de timeout répétés
+
+**DoD:**
+- Mécanisme de retry manuel (dashboard admin)
+- Alertes automatiques (email/Slack) si > 10% timeout
+- Monitoring durée validation (P50, P95, P99)
+
+---
+
+### US-10.5: Rejeter une Demande et Notifier l'Utilisateur (DEVRAIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** rejeter une demande invalide et notifier l'utilisateur  
+**Afin que** l'utilisateur comprenne pourquoi sa demande a été refusée
+
+**Critères d'acceptation:**
+- [ ] Si je rejette la demande, je stocke le motif dans ma base
+- [ ] J'envoie un email à l'utilisateur avec le motif (ex: "Domaine email non autorisé")
+- [ ] Je log le rejet avec: `requestId`, `email`, `reason`, `timestamp`
+- [ ] L'utilisateur peut contacter le support avec le `requestId` pour clarification
+- [ ] Je peux configurer des motifs de rejet personnalisés par tenant
+
+**Exemple d'email de rejet:**
+```
+Objet: Demande d'inscription refusée - ACME Corp
+
+Bonjour John,
+
+Votre demande d'inscription (ID: a1b2c3d4) a été refusée pour la raison suivante:
+"Domaine email non autorisé. Veuillez utiliser une adresse @acme.com."
+
+Si vous pensez qu'il s'agit d'une erreur, contactez notre support à support@acme.com
+en indiquant l'ID de demande.
+
+Cordialement,
+L'équipe ACME Corp
+```
+
+**DoD:**
+- Template email configurable par motif
+- Logging des rejets avec raison
+- Dashboard admin pour voir les rejets
+- Tests E2E avec vérification email
+
+---
+
+### US-10.6: Dashboard Admin pour Gérer les Demandes (DEVRAIT AVOIR)
+**En tant qu'** administrateur de l'app tierce  
+**Je veux** voir toutes les demandes d'onboarding  
+**Afin de** monitorer et gérer manuellement les cas particuliers
+
+**Critères d'acceptation:**
+- [ ] Je peux voir la liste des demandes avec: `requestId`, `email`, `status`, `timestamp`
+- [ ] Les statuts incluent: `pending_validation`, `accepted`, `rejected`, `timeout_validation`, `user_created`
+- [ ] Je peux filtrer par statut, tenant, date
+- [ ] Je peux rechercher par email ou requestId
+- [ ] Je peux voir les détails d'une demande (payload, décision, logs)
+- [ ] Je peux re-traiter manuellement une demande en timeout
+- [ ] Je peux forcer l'acceptation/rejet d'une demande
+- [ ] Je peux voir les métriques: nombre total, % accepté, % rejeté, durée moyenne
+
+**DoD:**
+- Dashboard web avec authentification
+- API backend pour CRUD demandes
+- Tests E2E avec Playwright
+- Exports CSV/Excel pour reporting
+
+---
+
+### US-10.7: Synchroniser les Utilisateurs Existants (POURRAIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** synchroniser mes utilisateurs existants vers Johodp  
+**Afin de** migrer vers le nouveau système d'authentification
+
+**Critères d'acceptation:**
+- [ ] Je peux lancer un script de migration en batch
+- [ ] Le script lit mes utilisateurs depuis le CRM/DB
+- [ ] Le script appelle `POST /api/users/register` pour chaque utilisateur
+- [ ] Le script respecte un rate limit (ex: 10 req/s)
+- [ ] Le script log les succès/échecs avec `email`, `userId`, `status`
+- [ ] Le script génère un rapport de migration (total, succès, échecs)
+- [ ] Le script gère les doublons (409 Conflict) en les ignorant
+- [ ] Le script envoie automatiquement l'email d'activation pour chaque utilisateur
+
+**DoD:**
+- Script CLI avec progress bar
+- Logging structuré (JSON lines)
+- Rapport final avec statistiques
+- Tests avec dataset simulé (1000 users)
+- Documentation migration step-by-step
+
+---
+
+### US-10.8: Logger les Appels Webhook avec Contexte (DOIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** logger tous les événements webhook avec contexte complet  
+**Afin de** faciliter le débogage et l'audit
+
+**Critères d'acceptation:**
+- [ ] Chaque réception webhook loggée avec:
+  - `requestId`, `tenantId`, `email`, `timestamp`, `ipSource`, `userAgent`
+- [ ] Chaque décision de validation loggée avec:
+  - `requestId`, `decision` (accepted/rejected), `reason`, `duration`, `rules_evaluated`
+- [ ] Chaque appel API Johodp loggé avec:
+  - `requestId`, `method`, `endpoint`, `statusCode`, `duration`, `response`
+- [ ] Les erreurs loggées avec:
+  - `requestId`, `error_type`, `error_message`, `stack_trace`, `context`
+- [ ] Les logs structurés en JSON pour parsing facile
+- [ ] Les logs incluent TenantId et ClientId (via enricher si applicable)
+- [ ] Les logs sensibles (email, nom) sont masqués en production (RGPD)
+
+**Exemples de logs:**
+```json
+{
+  "timestamp": "2025-11-25T10:30:45.123Z",
+  "level": "INFO",
+  "message": "Webhook received",
+  "requestId": "a1b2c3d4",
+  "tenantId": "acme-corp",
+  "email": "j***n@acme.com",
+  "ipSource": "192.168.1.1",
+  "userAgent": "Johodp/1.0"
+}
+
+{
+  "timestamp": "2025-11-25T10:30:47.456Z",
+  "level": "INFO",
+  "message": "Validation completed",
+  "requestId": "a1b2c3d4",
+  "decision": "accepted",
+  "duration": 2.3,
+  "rules_evaluated": ["domain_check", "crm_duplicate", "blacklist"]
+}
+
+{
+  "timestamp": "2025-11-25T10:30:50.789Z",
+  "level": "INFO",
+  "message": "User created in Johodp",
+  "requestId": "a1b2c3d4",
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "j***n@acme.com",
+  "apiDuration": 3.2
+}
+```
+
+**DoD:**
+- Logger structuré (Serilog, Winston, etc.)
+- Enricher custom pour TenantId/RequestId
+- Masquage PII en production
+- Sink vers ElasticSearch/Seq/Loki
+- Dashboard de monitoring (Grafana/Kibana)
+
+---
+
+### US-10.9: Métriques et Monitoring (DEVRAIT AVOIR)
+**En tant qu'** administrateur de l'app tierce  
+**Je veux** voir des métriques temps réel  
+**Afin de** surveiller la santé du système
+
+**Critères d'acceptation:**
+- [ ] Je peux voir le nombre de demandes reçues (dernière heure, jour, semaine)
+- [ ] Je peux voir le taux d'acceptation/rejet (%)
+- [ ] Je peux voir la durée moyenne de validation (P50, P95, P99)
+- [ ] Je peux voir le taux d'erreur API Johodp (%)
+- [ ] Je peux voir le nombre de timeouts (5 min)
+- [ ] Je reçois des alertes si:
+  - Taux d'erreur > 5%
+  - Durée validation P95 > 4 min
+  - Taux timeout > 10%
+  - Taux rejet > 50%
+- [ ] Les métriques sont exposées via Prometheus `/metrics`
+
+**Métriques exposées:**
+```
+# HELP onboarding_requests_total Total webhook requests received
+# TYPE onboarding_requests_total counter
+onboarding_requests_total{tenant="acme-corp",status="accepted"} 1234
+
+# HELP onboarding_validation_duration_seconds Validation duration
+# TYPE onboarding_validation_duration_seconds histogram
+onboarding_validation_duration_seconds_bucket{le="1.0"} 800
+onboarding_validation_duration_seconds_bucket{le="2.0"} 950
+onboarding_validation_duration_seconds_bucket{le="5.0"} 1200
+
+# HELP johodp_api_errors_total Total API errors
+# TYPE johodp_api_errors_total counter
+johodp_api_errors_total{endpoint="/api/users/register",status="500"} 3
+```
+
+**DoD:**
+- Métriques Prometheus implémentées
+- Dashboard Grafana avec alertes
+- Tests de charge (100 req/s)
+- Documentation monitoring
+
+---
+
+### US-10.10: Tests de Charge et Résilience (DEVRAIT AVOIR)
+**En tant que** développeur  
+**Je veux** tester la résilience de mon webhook  
+**Afin de** garantir la disponibilité en production
+
+**Critères d'acceptation:**
+- [ ] Je peux simuler 100 requêtes/seconde pendant 10 minutes
+- [ ] Le système répond en < 200ms (P95)
+- [ ] Le système gère les pics de charge sans perte de requêtes
+- [ ] Le système applique un rate limit (429 Too Many Requests) si dépassement
+- [ ] Les requêtes en attente sont mises en queue (Redis/RabbitMQ)
+- [ ] Les requêtes échouées sont retentées automatiquement (exponential backoff)
+- [ ] Le système graceful shutdown (termine les requêtes en cours avant arrêt)
+
+**DoD:**
+- Tests de charge avec k6/Gatling/Locust
+- Queue avec Redis/RabbitMQ/SQS
+- Circuit breaker (Polly) pour appels Johodp API
+- Tests de resilience (chaos engineering)
+- Documentation scaling (horizontal/vertical)
+
+---
+
+## 📊 Résumé Epic 10 - Application Tierce
+
+| User Story | Story Points | Priorité | Sprint |
+|------------|--------------|----------|--------|
+| US-10.1 - Recevoir webhook | 5 | DOIT AVOIR | Sprint 3 |
+| US-10.2 - Valider règles métier | 8 | DOIT AVOIR | Sprint 3 |
+| US-10.3 - Créer utilisateur API | 8 | DOIT AVOIR | Sprint 3 |
+| US-10.4 - Gérer timeout | 3 | DEVRAIT AVOIR | Sprint 4 |
+| US-10.5 - Rejeter et notifier | 5 | DEVRAIT AVOIR | Sprint 4 |
+| US-10.6 - Dashboard admin | 13 | DEVRAIT AVOIR | Sprint 5 |
+| US-10.7 - Migration batch | 8 | POURRAIT AVOIR | Sprint 6 |
+| US-10.8 - Logging structuré | 5 | DOIT AVOIR | Sprint 3 |
+| US-10.9 - Métriques monitoring | 8 | DEVRAIT AVOIR | Sprint 5 |
+| US-10.10 - Tests charge | 5 | DEVRAIT AVOIR | Sprint 6 |
+| **TOTAL Epic 10** | **68 SP** | - | **~3-4 sprints** |
+
+---
+
+## 🔗 Architecture Webhook (Référence)
+
+```mermaid
+sequenceDiagram
+  participant U as Utilisateur Final
+  participant Johodp as Johodp IdP
+  participant Webhook as App Tierce (Webhook)
+  participant Queue as Queue (Redis/RMQ)
+  participant Worker as Background Worker
+  participant CRM as CRM/DB Interne
+  participant JohodpAPI as Johodp API
+  
+  U->>Johodp: POST /account/onboarding
+  Johodp->>Webhook: POST /api/account-requests (HMAC)
+  Webhook->>Webhook: Vérifier signature HMAC
+  Webhook->>Queue: Enqueue validation job
+  Webhook-->>Johodp: 200 OK (< 5s)
+  Johodp-->>U: "En attente validation"
+  
+  Queue->>Worker: Traiter job
+  Worker->>CRM: Vérifier règles métier
+  CRM-->>Worker: Accepté/Rejeté
+  
+  alt Accepté
+    Worker->>JohodpAPI: POST /connect/token (client_credentials)
+    JohodpAPI-->>Worker: access_token
+    Worker->>JohodpAPI: POST /api/users/register
+    JohodpAPI-->>Worker: 201 Created (userId)
+    JohodpAPI->>U: Email activation
+    Worker->>Worker: Log succès + Update DB
+  else Rejeté
+    Worker->>U: Email rejet (raison)
+    Worker->>Worker: Log rejet + Update DB
+  end
+```
 
 ---
 
