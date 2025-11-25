@@ -1073,33 +1073,70 @@ SELECT * FROM "PersistedGrants" WHERE "Type" = 'refresh_token';
 
 **Critères d'acceptation:**
 - [ ] Le système appelle INotificationService.NotifyAccountRequestAsync
-- [ ] Le service obtient un `access_token` via Client Credentials (client interne Johodp)
-- [ ] Le service utilise scope `johodp.webhook` pour appeler les webhooks
+- [ ] Le service obtient un `access_token` depuis un **IdP externe** via Client Credentials
+- [ ] Configuration IdP externe dans appsettings: `ExternalIdP:Authority`, `ExternalIdP:ClientId`, `ExternalIdP:ClientSecret`, `ExternalIdP:Scope`
+- [ ] Le service demande le scope configuré (ex: `webhook.notify` ou scope spécifique par tenant)
 - [ ] Le service envoie POST vers `tenant.WebhookUrl` avec `Authorization: Bearer <token>`
 - [ ] Le body contient: `requestId`, `tenantId`, `email`, `firstName`, `lastName`, `timestamp`
-- [ ] Le token est mis en cache et renouvelé automatiquement avant expiration
+- [ ] Le token est mis en cache (IMemoryCache/IDistributedCache) et renouvelé automatiquement avant expiration
 - [ ] L'appel est asynchrone (fire-and-forget avec queue si échec)
-- [ ] Le système retente 3 fois avec backoff exponentiel (1s, 2s, 4s)
-- [ ] Le système log les succès/échecs avec: `requestId`, `webhookUrl`, `statusCode`, `duration`, `retries`
+- [ ] Le système retente 3 fois avec backoff exponentiel (1s, 2s, 4s) en cas d'échec réseau
+- [ ] Le système log les succès/échecs avec: `requestId`, `webhookUrl`, `statusCode`, `duration`, `retries`, `idp_issuer`
 - [ ] Le système ne bloque pas l'onboarding en cas d'échec webhook
 - [ ] Le système stocke les webhooks échoués dans une dead-letter queue pour retry manuel
+- [ ] Si l'IdP externe retourne 401/403, le service log une alerte critique (mauvaise config)
+
+**Configuration appsettings.json:**
+```json
+{
+  "ExternalIdP": {
+    "Authority": "https://external-idp.example.com",
+    "ClientId": "johodp-webhook-client",
+    "ClientSecret": "external-secret-xyz",
+    "Scope": "webhook.notify",
+    "TokenEndpoint": "https://external-idp.example.com/oauth/token"
+  },
+  "Webhook": {
+    "TimeoutSeconds": 5,
+    "MaxRetries": 3,
+    "BackoffSeconds": [1, 2, 4]
+  }
+}
+```
 
 **Tests d'acceptation:**
 ```http
-# 1. Johodp obtient token interne
-POST https://johodp.example.com/connect/token
+# 1. Johodp obtient token depuis IdP EXTERNE
+POST https://external-idp.example.com/oauth/token
 Content-Type: application/x-www-form-urlencoded
 
 grant_type=client_credentials&
-client_id=johodp-internal&
-client_secret=internal-s3cr3t&
-scope=johodp.webhook
+client_id=johodp-webhook-client&
+client_secret=external-secret-xyz&
+scope=webhook.notify
 
-→ 200 OK { "access_token": "eyJ...", "expires_in": 3600 }
+→ 200 OK 
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "webhook.notify"
+}
 
-# 2. Johodp appelle webhook avec token
+# Token JWT décodé (émis par IdP externe):
+{
+  "iss": "https://external-idp.example.com",
+  "aud": "third-party-webhooks",
+  "sub": "johodp-webhook-client",
+  "client_id": "johodp-webhook-client",
+  "scope": "webhook.notify",
+  "exp": 1732534200,
+  "iat": 1732530600
+}
+
+# 2. Johodp appelle webhook avec token de l'IdP externe
 POST https://app.acme.com/api/account-requests
-Authorization: Bearer eyJ...
+Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
 
 {
@@ -1111,20 +1148,24 @@ Content-Type: application/json
   "timestamp": "2025-11-25T10:30:00Z"
 }
 
-→ App tierce valide token JWT puis retourne 200 OK
+→ App tierce valide token JWT (issuer = IdP externe) puis retourne 200 OK
 ```
 
 **DoD:**
 - INotificationService interface créée avec méthode NotifyAccountRequestAsync
 - NotificationService implémentation avec:
-  - HttpClient configuré avec Polly retry policy (3 tentatives)
-  - Token manager avec cache mémoire (IMemoryCache)
-  - Dead-letter queue pour webhooks échoués (Redis/RabbitMQ/DB)
-- Client OAuth2 interne configuré dans IdentityServer (client_id: `johodp-internal`, scope: `johodp.webhook`)
-- Tests unitaires avec mock HttpClient + token expiré
-- Tests d'intégration avec webhook simulé + validation JWT
-- Logging structuré (Serilog) avec enrichers TenantId/RequestId
-- Monitoring métriques (taux succès, durée, retries) via Prometheus
+  - HttpClient configuré avec Polly retry policy (3 tentatives + circuit breaker)
+  - OAuth2 client pour IdP externe (IdentityModel.Client ou custom HttpClient)
+  - Token manager avec cache distribué (Redis) pour support multi-instances
+  - Dead-letter queue pour webhooks échoués (table DB `WebhookFailures` ou Redis Stream)
+- Configuration appsettings avec section `ExternalIdP`
+- Validation configuration au démarrage (Authority accessible, credentials valides)
+- Tests unitaires avec mock HttpClient + token expiré/invalide
+- Tests d'intégration avec IdP externe en staging + webhook simulé
+- Logging structuré (Serilog) avec enrichers TenantId/RequestId + `idp_issuer`
+- Monitoring métriques (taux succès webhook, taux succès IdP, durée, retries) via Prometheus
+- Alertes si taux échec IdP > 5% (credentials expirés/révoqués)
+- Documentation architecture avec diagramme séquence (Johodp → IdP Externe → App Tierce)
 
 ---
 
@@ -1572,27 +1613,36 @@ johodp_api_errors_total{endpoint="/api/users/register",status="500"} 3
 sequenceDiagram
   participant U as Utilisateur Final
   participant Johodp as Johodp IdP
+  participant ExtIdP as IdP Externe
   participant Webhook as App Tierce (Webhook)
   participant Queue as Queue (Redis/RMQ)
   participant Worker as Background Worker
   participant CRM as CRM/DB Interne
-  participant JohodpAPI as Johodp API
+  participant JohodpAPI as Johodp API (UserManager)
   
   U->>Johodp: POST /account/onboarding
-  Johodp->>Webhook: POST /api/account-requests (HMAC)
-  Webhook->>Webhook: Vérifier signature HMAC
+  
+  Note over Johodp,ExtIdP: 1. Obtenir token depuis IdP externe
+  Johodp->>ExtIdP: POST /oauth/token (client_credentials)
+  ExtIdP-->>Johodp: access_token (scope: webhook.notify)
+  
+  Note over Johodp,Webhook: 2. Envoyer notification avec token IdP externe
+  Johodp->>Webhook: POST /api/account-requests<br/>Authorization: Bearer <token_externe>
+  Webhook->>Webhook: Valider JWT (issuer = IdP externe)
   Webhook->>Queue: Enqueue validation job
   Webhook-->>Johodp: 200 OK (< 5s)
   Johodp-->>U: "En attente validation"
   
+  Note over Queue,Worker: 3. Traitement asynchrone par app tierce
   Queue->>Worker: Traiter job
   Worker->>CRM: Vérifier règles métier
   CRM-->>Worker: Accepté/Rejeté
   
   alt Accepté
-    Worker->>JohodpAPI: POST /connect/token (client_credentials)
-    JohodpAPI-->>Worker: access_token
-    Worker->>JohodpAPI: POST /api/users/register
+    Note over Worker,JohodpAPI: 4. App tierce crée user dans Johodp
+    Worker->>Johodp: POST /connect/token (client_credentials)
+    Johodp-->>Worker: access_token (scope: johodp.admin)
+    Worker->>JohodpAPI: POST /api/users/register<br/>Authorization: Bearer <token_johodp>
     JohodpAPI-->>Worker: 201 Created (userId)
     JohodpAPI->>U: Email activation
     Worker->>Worker: Log succès + Update DB
@@ -1601,6 +1651,11 @@ sequenceDiagram
     Worker->>Worker: Log rejet + Update DB
   end
 ```
+
+**Note Architecture:**
+- **IdP Externe protège:** Johodp → App Tierce (webhooks)
+- **Johodp IdP protège:** App Tierce → Johodp API (création utilisateurs)
+- Deux systèmes OAuth2 distincts, deux ensembles de credentials
 
 ---
 
