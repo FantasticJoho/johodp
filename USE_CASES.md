@@ -130,7 +130,8 @@ Une application tierce a plusieurs clients finaux qui ne doivent pas voir les do
 Un utilisateur ne doit pouvoir se connecter qu'aux tenants auxquels il a explicitement accès.
 
 **Solution:**
-- Chaque utilisateur a une liste de tenants autorisés
+- Chaque utilisateur a une liste de tenants autorisés (URLs sans caractères spéciaux)
+- L'URL du tenant est transmise via `acr_values=tenant:<url>` (ex: `tenant:https://acme-corp.example.com` nettoyé en `acme-corp-example-com`)
 - Lors de la connexion, Johodp vérifie que le tenant demandé est dans la liste
 - Si oui, l'authentification réussit
 - Si non, l'authentification échoue
@@ -348,7 +349,8 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
    Content-Type: application/json
    
    {
-     "name": "acme-corp",
+     "name": "acme-corp-example-com",
+     "tenantUrl": "https://acme-corp.example.com",
      "displayName": "ACME Corporation",
      "clientId": "my-app",
      "allowedReturnUrls": ["http://localhost:4200/callback"],
@@ -388,10 +390,11 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
   * ❌ Invalide: `http://localhost:4200/callback`, `https://app.acme.com/path`
 - RG-TENANT-07: AllowedCorsOrigins géré au niveau Tenant (migration depuis Client)
 - RG-TENANT-08: CustomClientStore agrège CORS depuis tous les tenants associés au client
-- RG-TENANT-09: Un nom de tenant doit être unique dans le système
+- RG-TENANT-09: Un nom de tenant doit être unique dans le système et dérivé de l'URL (ex: `https://acme-corp.example.com` → `acme-corp-example-com`)
 - RG-TENANT-10: **L'endpoint de vérification utilisateur DOIT être une URL HTTPS en production**
 - RG-TENANT-11: **L'endpoint sera appelé pour chaque demande d'inscription**
 - RG-TENANT-12: L'action est tracée avec le client_id appelant (audit trail)
+- RG-TENANT-13: **Le paramètre `acr_values` doit contenir l'URL nettoyée: `acr_values=tenant:acme-corp-example-com`**
 
 **Postconditions:**
 - Le tenant est créé et actif
@@ -445,7 +448,7 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 **Scénario Principal:**
 1. L'utilisateur clique sur "Créer un compte" dans l'application tierce
-2. L'application redirige vers `/account/onboarding?acr_values=tenant:acme-corp`
+2. L'application redirige vers `/account/onboarding?acr_values=tenant:acme-corp-example-com` (URL nettoyée)
 3. Johodp affiche le formulaire d'onboarding avec le branding du tenant (logo, couleurs)
 4. L'utilisateur remplit: email, firstName, lastName
 5. L'utilisateur soumet le formulaire
@@ -458,7 +461,8 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
    
    {
      "requestId": "uuid",
-     "tenantId": "acme-corp",
+     "tenantId": "acme-corp-example-com",
+     "tenantUrl": "https://acme-corp.example.com",
      "email": "user@example.com",
      "firstName": "John",
      "lastName": "Doe",
@@ -479,7 +483,7 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
        "email": "user@example.com",
        "firstName": "John",
        "lastName": "Doe",
-       "tenantId": "acme-corp",
+       "tenantId": "acme-corp-example-com",
        "createAsPending": true
      }
      ```
@@ -516,7 +520,7 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 **Scénario Principal:**
 1. L'utilisateur clique sur le lien d'activation:
-   `/account/activate?token=<token>&userId=<guid>&tenant=acme-corp`
+   `/account/activate?token=<token>&userId=<guid>&tenant=acme-corp-example-com`
 2. Johodp affiche le formulaire d'activation avec:
    - Email masqué (ex: `j***n@example.com`)
    - Branding du tenant
@@ -568,8 +572,9 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
      redirect_uri=http://localhost:4200/callback&
      code_challenge=<challenge>&
      code_challenge_method=S256&
-     acr_values=tenant:acme-corp
+     acr_values=tenant:acme-corp-example-com
    ```
+   Note: `acme-corp-example-com` est dérivé de l'URL `https://acme-corp.example.com`
 4. IdentityServer vérifie le client via `CustomClientStore`
 5. L'utilisateur est redirigé vers `/account/login` (pas authentifié)
 6. L'utilisateur entre email et mot de passe

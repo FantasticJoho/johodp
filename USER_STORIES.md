@@ -148,7 +148,8 @@ DELETE /api/clients/550e8400-e29b-41d4-a716-446655440000
 ```http
 POST /api/tenant
 {
-  "name": "acme-corp",
+  "name": "acme-corp-example-com",
+  "tenantUrl": "https://acme-corp.example.com",
   "displayName": "ACME Corporation",
   "clientId": "my-spa-app",
   "allowedReturnUrls": ["http://localhost:4200/callback"],
@@ -157,6 +158,7 @@ POST /api/tenant
   "logoUrl": "https://acme.com/logo.png"
 }
 → 201 Created avec TenantDto
+# Note: 'name' est dérivé de 'tenantUrl' (https://acme-corp.example.com → acme-corp-example-com)
 ```
 
 **DoD:**
@@ -398,8 +400,9 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000
 
 **Tests d'acceptation:**
 ```http
-POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
+POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp-example-com
 → 200 OK avec { message: "User added to tenant successfully" }
+# Note: acme-corp-example-com est l'URL nettoyée de https://acme-corp.example.com
 ```
 
 ---
@@ -420,8 +423,9 @@ POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
 
 **Tests d'acceptation:**
 ```http
-DELETE /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp
+DELETE /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp-example-com
 → 204 No Content
+# Note: acme-corp-example-com est l'URL nettoyée de https://acme-corp.example.com
 ```
 
 ---
@@ -598,11 +602,12 @@ POST /api/account/activate
 {
   "token": "ABC123",
   "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "tenantId": "acme-corp",
+  "tenantId": "acme-corp-example-com",
   "newPassword": "SecureP@ss123",
   "confirmPassword": "SecureP@ss123"
 }
 → 200 OK avec { userId, email, status: "Active" }
+# Note: tenantId est l'URL nettoyée (https://acme-corp.example.com → acme-corp-example-com)
 ```
 
 ---
@@ -623,8 +628,9 @@ POST /api/account/activate
 
 **Tests d'acceptation:**
 ```
-GET /account/login?returnUrl=/connect/authorize?acr_values=tenant:acme-corp
+GET /account/login?returnUrl=/connect/authorize?acr_values=tenant:acme-corp-example-com
 → 200 OK avec formulaire de login
+# Note: acme-corp-example-com dérivé de https://acme-corp.example.com
 ```
 
 ---
@@ -682,12 +688,13 @@ POST /account/login
 
 **Tests d'acceptation:**
 ```http
-POST /api/auth/login?acr_values=tenant:acme-corp
+POST /api/auth/login?acr_values=tenant:acme-corp-example-com
 {
   "email": "john.doe@acme.com",
   "password": "SecureP@ss123"
 }
 → 200 OK avec { message: "Login successful", email: "..." }
+# Note: acme-corp-example-com dérivé de https://acme-corp.example.com
 ```
 
 ---
