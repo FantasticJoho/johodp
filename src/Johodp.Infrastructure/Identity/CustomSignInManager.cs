@@ -31,12 +31,8 @@ public class CustomSignInManager : SignInManager<User>
         if (!passwordValid)
             return SignInResult.Failed;
 
-        // Enforce MFA for roles that require it
-        if (user.RequiresMFA())
-        {
-            // In a real implementation you'd initiate a 2FA flow here.
-            return SignInResult.TwoFactorRequired;
-        }
+        // Note: MFA enforcement removed (was based on Role.RequiresMFA which no longer exists)
+        // MFA can still be checked via user.MFAEnabled if needed
 
         await SignInAsync(user, isPersistent);
         return SignInResult.Success;

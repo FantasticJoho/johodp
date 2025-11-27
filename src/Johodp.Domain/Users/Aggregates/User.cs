@@ -43,16 +43,6 @@ public class User : AggregateRoot
     // Convenience property to get tenant IDs
     public IReadOnlyList<TenantId> TenantIds => _userTenants.Select(ut => ut.TenantId).ToList().AsReadOnly();
 
-    // Relations
-    public ScopeId? ScopeId { get; private set; }
-    public Scope? Scope { get; private set; }
-
-    private readonly List<Role> _roles = new();
-    public IReadOnlyList<Role> Roles => _roles.AsReadOnly();
-
-    private readonly List<Permission> _permissions = new();
-    public IReadOnlyList<Permission> Permissions => _permissions.AsReadOnly();
-
 
     private User() { }
 
@@ -204,66 +194,6 @@ public class User : AggregateRoot
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void SetScope(Scope scope)
-    {
-        if (scope == null)
-            throw new ArgumentNullException(nameof(scope));
-
-        Scope = scope;
-        ScopeId = scope.Id;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void AddRole(Role role)
-    {
-        if (role == null)
-            throw new ArgumentNullException(nameof(role));
-
-        if (_roles.Any(r => r.Id.Value == role.Id.Value))
-            return; // Idempotent
-
-        _roles.Add(role);
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void RemoveRole(RoleId roleId)
-    {
-        if (roleId == null)
-            throw new ArgumentNullException(nameof(roleId));
-
-        var role = _roles.FirstOrDefault(r => r.Id.Value == roleId.Value);
-        if (role != null)
-        {
-            _roles.Remove(role);
-            UpdatedAt = DateTime.UtcNow;
-        }
-    }
-
-    public void AddPermission(Permission permission)
-    {
-        if (permission == null)
-            throw new ArgumentNullException(nameof(permission));
-
-        if (_permissions.Any(p => p.Id.Value == permission.Id.Value))
-            return; // Idempotent
-
-        _permissions.Add(permission);
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void RemovePermission(PermissionId permissionId)
-    {
-        if (permissionId == null)
-            throw new ArgumentNullException(nameof(permissionId));
-
-        var permission = _permissions.FirstOrDefault(p => p.Id.Value == permissionId.Value);
-        if (permission != null)
-        {
-            _permissions.Remove(permission);
-            UpdatedAt = DateTime.UtcNow;
-        }
-    }
-
     public void EnableMFA()
     {
         MFAEnabled = true;
@@ -280,10 +210,5 @@ public class User : AggregateRoot
     {
         PasswordHash = hash;
         UpdatedAt = DateTime.UtcNow;
-    }
-
-    public bool RequiresMFA()
-    {
-        return _roles.Any(r => r.RequiresMFA && r.IsActive);
     }
 }

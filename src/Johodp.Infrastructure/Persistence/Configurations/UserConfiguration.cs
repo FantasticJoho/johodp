@@ -66,24 +66,8 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         // Ignore the computed TenantIds property (derived from UserTenants)
         builder.Ignore(x => x.TenantIds);
 
-        builder.Property(x => x.ScopeId)
-            .HasConversion(
-                v => v != null ? v.Value : (Guid?)null,
-                v => v.HasValue ? Johodp.Domain.Users.ValueObjects.ScopeId.From(v.Value) : null);
-
-        // Relations
-        builder.HasOne(x => x.Scope)
-            .WithMany()
-            .HasForeignKey("ScopeId")
-            .IsRequired(false);
-
-        builder.HasMany(x => x.Roles)
-            .WithMany()
-            .UsingEntity("UserRoles");
-
-        builder.HasMany(x => x.Permissions)
-            .WithMany()
-            .UsingEntity("UserPermissions");
+        // Note: ScopeId, Roles, Permissions removed from User aggregate
+        // Authorization is now handled via UserTenant.Role and UserTenant.Scope
 
         // Ignore computed property and domain events
         builder.Ignore(x => x.IsActive);

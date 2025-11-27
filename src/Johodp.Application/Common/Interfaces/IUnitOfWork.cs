@@ -6,9 +6,6 @@ public interface IUnitOfWork
 {
     IUserRepository Users { get; }
     IClientRepository Clients { get; }
-    IRoleRepository Roles { get; }
-    IPermissionRepository Permissions { get; }
-    IScopeRepository Scopes { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);

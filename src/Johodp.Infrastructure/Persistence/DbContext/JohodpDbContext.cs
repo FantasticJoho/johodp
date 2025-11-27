@@ -17,9 +17,6 @@ public class JohodpDbContext : DbContext
     public DbSet<UserTenant> UserTenants { get; set; } = null!;
     public DbSet<Client> Clients { get; set; } = null!;
     public DbSet<Tenant> Tenants { get; set; } = null!;
-    public DbSet<Role> Roles { get; set; } = null!;
-    public DbSet<Permission> Permissions { get; set; } = null!;
-    public DbSet<Scope> Scopes { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,8 +32,5 @@ public class JohodpDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserTenantConfiguration());
         modelBuilder.ApplyConfiguration(new ClientConfiguration());
         modelBuilder.ApplyConfiguration(new TenantConfiguration());
-        modelBuilder.ApplyConfiguration(new RoleConfiguration());
-        modelBuilder.ApplyConfiguration(new PermissionConfiguration());
-        modelBuilder.ApplyConfiguration(new ScopeConfiguration());
     }
 }

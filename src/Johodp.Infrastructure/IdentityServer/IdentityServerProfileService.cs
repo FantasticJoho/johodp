@@ -101,41 +101,9 @@ public class IdentityServerProfileService : IProfileService
             }
         }
 
-        if (user.Scope != null)
-        {
-            claims.Add(new Claim("scope", user.Scope.Code));
-        }
-
-        // Add roles - default to "reader" if no roles assigned
-        if (user.Roles != null && user.Roles.Any())
-        {
-            foreach (var role in user.Roles)
-            {
-                claims.Add(new Claim("role", role.Name));
-                if (role.RequiresMFA)
-                {
-                    // add an auth method reference if MFA is required for roles
-                    claims.Add(new Claim("amr", "mfa"));
-                }
-            }
-        }
-        else
-        {
-            claims.Add(new Claim("role", "reader"));
-        }
-
-        // Add permissions - default to "reader" if no permissions assigned
-        if (user.Permissions != null && user.Permissions.Any())
-        {
-            foreach (var perm in user.Permissions)
-            {
-                claims.Add(new Claim("permission", perm.Name.Value));
-            }
-        }
-        else
-        {
-            claims.Add(new Claim("permission", "reader"));
-        }
+        // Note: System-level Scope/Role/Permission aggregates removed
+        // All authorization is now handled via UserTenant.Role and UserTenant.Scope (strings)
+        // These are already added above as tenant_role and tenant_scope claims
 
         // Filter by requested claim types if provided
         if (context.RequestedClaimTypes != null && context.RequestedClaimTypes.Any())

@@ -126,12 +126,8 @@ public class AccountController : ControllerBase
             return Ok(new { message = "Login successful", email = request.Email });
         }
 
-        // Check if MFA required
-        if (user.RequiresMFA())
-        {
-            _logger.LogInformation("API: MFA required for user: {Email}", request.Email);
-            return Unauthorized(new { error = "Two-factor authentication required" });
-        }
+        // Note: MFA enforcement removed (was based on Role.RequiresMFA which no longer exists)
+        // Can still check user.MFAEnabled if needed
 
         _logger.LogWarning("API: Failed login attempt for user: {Email}", request.Email);
         return Unauthorized(new { error = "Invalid email or password" });

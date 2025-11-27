@@ -23,22 +23,8 @@ public class DomainUserClaimsPrincipalFactory : IUserClaimsPrincipalFactory<User
         identity.AddClaim(new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"));
         identity.AddClaim(new Claim(ClaimTypes.Email, user.Email.Value));
 
-
-        // Roles as string claims
-        foreach (var role in user.Roles)
-        {
-            var roleName = role?.Name?.ToString() ?? role?.Name;
-            if (!string.IsNullOrWhiteSpace(roleName))
-                identity.AddClaim(new Claim(ClaimTypes.Role, roleName));
-        }
-
-        // Permissions as string claims
-        foreach (var perm in user.Permissions)
-        {
-            var permissionName = perm?.Name?.ToString() ?? perm?.Name.ToString();
-            if (!string.IsNullOrWhiteSpace(permissionName))
-                identity.AddClaim(new Claim("permission", permissionName));
-        }
+        // Note: System roles and permissions removed
+        // Tenant-specific roles/scopes are handled by IdentityServerProfileService
 
         // Add all tenant IDs as separate claims
         foreach (var tenantId in user.TenantIds)
