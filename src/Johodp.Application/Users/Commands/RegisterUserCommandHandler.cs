@@ -25,13 +25,31 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         if (existingUser != null)
             throw new InvalidOperationException($"User with email {request.Email} already exists");
 
+        // Determine tenant for the creation event (first tenant or legacy single tenant)
+        var eventTenantId = request.Tenants?.FirstOrDefault()?.TenantId ?? request.TenantId;
+
         // Create user aggregate (with or without pending status)
         var user = User.Create(
             request.Email, 
             request.FirstName, 
             request.LastName, 
-            request.TenantId,
+            eventTenantId,
             request.CreateAsPending);
+
+        // Add user to multiple tenants with their roles and scopes
+        if (request.Tenants != null && request.Tenants.Any())
+        {
+            foreach (var tenantAssignment in request.Tenants)
+            {
+                user.AddTenant(tenantAssignment.TenantId, tenantAssignment.Role, tenantAssignment.Scope);
+            }
+        }
+        // Legacy support: single tenant
+        else if (request.TenantId != null)
+        {
+            // For backward compatibility, use default role/scope if not specified
+            user.AddTenant(request.TenantId, "user", "default");
+        }
 
         // If not pending and password provided, set it (for direct registration)
         // Note: Password hashing should be handled by UserManager in the API layer

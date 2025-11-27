@@ -85,6 +85,11 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .HasDefaultValue("EUR");
 
         // Collections stored as JSON
+        builder.Property<List<string>>("_urls")
+            .HasColumnName("Urls")
+            .HasColumnType("jsonb")
+            .IsRequired();
+
         builder.Property<List<string>>("_supportedLanguages")
             .HasColumnName("SupportedLanguages")
             .HasColumnType("jsonb")

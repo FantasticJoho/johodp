@@ -1,0 +1,277 @@
+### Tenant User Validation Tests
+### Tests pour vérifier la validation des utilisateurs par tenant avec acr_values
+
+@baseUrl = http://localhost:5000
+@tenantName = test-tenant-example-com
+@tenantUrl = https://test-tenant.example.com
+
+### 1. Créer un tenant de test
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "{{tenantName}}",
+  "displayName": "Test Tenant",
+  "tenantUrl": "{{tenantUrl}}",
+  "allowedReturnUrls": [
+    "{{tenantUrl}}/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "{{tenantUrl}}",
+    "http://localhost:4200"
+  ]
+}
+
+### 2. Ajouter une URL au tenant
+# Utiliser le GUID du tenant créé ci-dessus
+@tenantId = <GUID_FROM_STEP_1>
+
+POST {{baseUrl}}/api/tenants/{{tenantId}}/urls
+Content-Type: application/json
+
+{
+  "url": "{{tenantName}}"
+}
+
+### 3. Créer un utilisateur
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "firstName": "Test",
+  "lastName": "User",
+  "password": "Test@1234"
+}
+
+### 4. Récupérer l'ID de l'utilisateur
+@userId = <GUID_FROM_STEP_3>
+
+### 5. Associer l'utilisateur au tenant avec role et scope
+POST {{baseUrl}}/api/users/{{userId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantId}}",
+  "role": "admin",
+  "scope": "full_access"
+}
+
+### 6. ✅ TEST: Login avec acr_values valide (devrait réussir)
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:{{tenantName}}
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234"
+}
+
+### 7. ✅ TEST: Login avec TenantName dans le body (devrait réussir)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234",
+  "tenantName": "{{tenantName}}"
+}
+
+### 8. ❌ TEST: Login avec acr_values invalide (devrait échouer)
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:wrong-tenant-com
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234"
+}
+
+### 9. ❌ TEST: Login sans tenant (devrait échouer)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234"
+}
+
+### 10. Créer un deuxième tenant (non associé à l'utilisateur)
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "other-tenant-example-com",
+  "displayName": "Other Tenant",
+  "tenantUrl": "https://other-tenant.example.com",
+  "allowedReturnUrls": [
+    "https://other-tenant.example.com/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://other-tenant.example.com"
+  ]
+}
+
+### 11. Ajouter URL au deuxième tenant
+@otherTenantId = <GUID_FROM_STEP_10>
+
+POST {{baseUrl}}/api/tenants/{{otherTenantId}}/urls
+Content-Type: application/json
+
+{
+  "url": "other-tenant-example-com"
+}
+
+### 12. ❌ TEST: Login avec un tenant auquel l'utilisateur n'appartient pas (devrait échouer)
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:other-tenant-example-com
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234"
+}
+
+### 13. Lister les tenants de l'utilisateur
+GET {{baseUrl}}/api/users/{{userId}}
+
+### 14. Retirer l'utilisateur du tenant
+DELETE {{baseUrl}}/api/users/{{userId}}/tenants/{{tenantId}}
+
+### 15. ❌ TEST: Login après suppression de l'association (devrait échouer)
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:{{tenantName}}
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234"
+}
+
+### 16. Tester avec acr_values prioritaire sur body
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:{{tenantName}}
+Content-Type: application/json
+
+{
+  "email": "testuser@example.com",
+  "password": "Test@1234",
+  "tenantName": "other-tenant-example-com"
+}
+# Note: acr_values devrait être prioritaire, donc utilise test-tenant-example-com
+
+### 17. Nettoyer - Supprimer l'utilisateur
+DELETE {{baseUrl}}/api/users/{{userId}}
+
+### 18. Nettoyer - Supprimer les tenants
+DELETE {{baseUrl}}/api/tenants/{{tenantId}}
+DELETE {{baseUrl}}/api/tenants/{{otherTenantId}}
+
+###
+### SCÉNARIO COMPLET: OAuth Flow avec acr_values
+###
+
+### S1. Créer un tenant pour OAuth
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "oauth-app-example-com",
+  "displayName": "OAuth Application",
+  "tenantUrl": "https://oauth-app.example.com",
+  "allowedReturnUrls": [
+    "https://oauth-app.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://oauth-app.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@oauthTenantId = <GUID_FROM_S1>
+
+### S2. Ajouter l'URL nettoyée au tenant OAuth
+POST {{baseUrl}}/api/tenants/{{oauthTenantId}}/urls
+Content-Type: application/json
+
+{
+  "url": "oauth-app-example-com"
+}
+
+### S3. Créer un utilisateur OAuth
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "firstName": "OAuth",
+  "lastName": "User",
+  "password": "OAuth@1234"
+}
+
+@oauthUserId = <GUID_FROM_S3>
+
+### S4. Associer l'utilisateur au tenant OAuth avec role et scope
+POST {{baseUrl}}/api/users/{{oauthUserId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{oauthTenantId}}",
+  "role": "user",
+  "scope": "read_write"
+}
+
+### S5. ✅ Simuler Authorization Code Flow - Login avec acr_values
+# Ceci simule ce qui se passe quand le client OAuth redirige vers le login
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:oauth-app-example-com
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "password": "OAuth@1234"
+}
+
+### S6. Vérifier les claims de l'utilisateur (après login)
+# Note: Dans un vrai flow OAuth, ceci serait fait automatiquement par IdentityServer
+# Les claims devraient contenir tenant_id = <GUID du tenant>
+
+###
+### TESTS DE VALIDATION D'URL
+###
+
+### V1. Test URL exacte
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:oauth-app-example-com
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "password": "OAuth@1234"
+}
+# ✅ Devrait réussir: URL exacte dans la liste
+
+### V2. Test URL avec casse différente
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:OAuth-App-Example-Com
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "password": "OAuth@1234"
+}
+# ✅ Devrait réussir: La validation est case-insensitive
+
+### V3. Test URL non autorisée
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:malicious-site-com
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "password": "OAuth@1234"
+}
+# ❌ Devrait échouer: URL pas dans la liste du tenant
+
+### V4. Test sans préfixe tenant:
+POST {{baseUrl}}/api/auth/login?acr_values=oauth-app-example-com
+Content-Type: application/json
+
+{
+  "email": "oauthuser@example.com",
+  "password": "OAuth@1234"
+}
+# ❌ Devrait échouer: Format acr_values invalide (manque "tenant:")

@@ -50,9 +50,9 @@ public class UserStore : IUserStore<User>, IUserPasswordStore<User>, IUserEmailS
         return Task.FromResult<string?>(user.Email.Value.ToUpperInvariant());
     }
 
-    public Task<string?> GetUserIdAsync(User user, CancellationToken cancellationToken)
+    public Task<string> GetUserIdAsync(User user, CancellationToken cancellationToken)
     {
-        return Task.FromResult<string?>(user.Id.Value.ToString());
+        return Task.FromResult(user.Id.Value.ToString());
     }
 
     public Task<string?> GetUserNameAsync(User user, CancellationToken cancellationToken)

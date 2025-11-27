@@ -43,9 +43,20 @@ public class AccountController : ControllerBase
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, [FromQuery] string? acr_values = null)
     {
-        _logger.LogInformation("API login attempt for email: {Email}, tenantId: {TenantId}", request.Email, request.TenantId);
+        // Extract tenant from acr_values if provided (format: tenant:tenant-name)
+        string? tenantIdFromAcr = null;
+        if (!string.IsNullOrEmpty(acr_values) && acr_values.StartsWith("tenant:", StringComparison.OrdinalIgnoreCase))
+        {
+            tenantIdFromAcr = acr_values.Substring(7); // Remove "tenant:" prefix
+        }
+
+        // Use acr_values tenant if provided, otherwise use request body tenant
+        var tenantName = tenantIdFromAcr ?? request.TenantName;
+
+        _logger.LogInformation("API login attempt for email: {Email}, tenantName: {TenantName}, acr_values: {AcrValues}", 
+            request.Email, tenantName, acr_values);
         
         if (!ModelState.IsValid)
         {
@@ -53,8 +64,12 @@ public class AccountController : ControllerBase
             return BadRequest(new { error = "Invalid request" });
         }
 
-        // Use tenantId from request body, default to wildcard if not specified
-        string tenantId = string.IsNullOrEmpty(request.TenantId) ? "*" : request.TenantId;
+        // Tenant name is required
+        if (string.IsNullOrEmpty(tenantName))
+        {
+            _logger.LogWarning("API login failed - tenant name is required for email: {Email}", request.Email);
+            return BadRequest(new { error = "Tenant name is required" });
+        }
 
         // Find user
         var user = await _userManager.FindByEmailAsync(request.Email);
@@ -65,23 +80,49 @@ public class AccountController : ControllerBase
             return Unauthorized(new { error = "Invalid email or password" });
         }
 
-        // Check tenant access
-        bool hasWildcardAccess = user.TenantIds.Contains("*");
-        bool hasTenantAccess = user.TenantIds.Contains(tenantId) || hasWildcardAccess || tenantId == "*";
+        // Get tenant by name to retrieve GUID
+        var tenant = await _tenantRepository.GetByNameAsync(tenantName);
+        if (tenant == null || !tenant.IsActive)
+        {
+            _logger.LogWarning("API login failed - invalid or inactive tenant: {TenantName}", tenantName);
+            return Unauthorized(new { error = "Invalid or inactive tenant" });
+        }
+
+        // Check tenant access: verify user belongs to requested tenant (by TenantId)
+        bool hasTenantAccess = user.BelongsToTenant(tenant.Id);
         
         if (!hasTenantAccess)
         {
-            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenants: {UserTenants}, Requested tenant: {RequestedTenant}", 
-                request.Email, string.Join(", ", user.TenantIds), tenantId);
+            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenants count: {UserTenantsCount}, Requested tenant: {RequestedTenant}", 
+                request.Email, user.TenantIds.Count, tenant.Id.Value);
             return Unauthorized(new { error = "User does not have access to this tenant" });
+        }
+
+        // Validate acr_values matches tenant URLs (if acr_values was provided)
+        if (!string.IsNullOrEmpty(tenantIdFromAcr))
+        {
+            if (!tenant.IsValidForAcrValue(tenantIdFromAcr))
+            {
+                _logger.LogWarning("API: acr_values validation failed for user {Email}. Tenant: {TenantId}, acr_values: {AcrValues}", 
+                    request.Email, tenant.Name, tenantIdFromAcr);
+                return Unauthorized(new { error = "Invalid acr_values for this tenant" });
+            }
         }
 
         // Verify password and sign in
         var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
         if (passwordValid)
         {
-            _logger.LogInformation("Successful API login for user: {Email}, tenant: {TenantId}", request.Email, tenantId);
-            await _signInManager.SignInAsync(user, isPersistent: false);
+            _logger.LogInformation("Successful API login for user: {Email}, tenant: {TenantName}", request.Email, tenantName);
+            
+            // Add tenant claim for this session
+            var additionalClaims = new List<System.Security.Claims.Claim>
+            {
+                new System.Security.Claims.Claim("tenant_id", tenant.Id.Value.ToString()),
+                new System.Security.Claims.Claim("tenant_name", tenant.Name)
+            };
+            
+            await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, additionalClaims);
             return Ok(new { message = "Login successful", email = request.Email });
         }
 
@@ -118,7 +159,7 @@ public class AccountController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        _logger.LogInformation("API registration attempt for email: {Email}, tenant: {TenantId}", request.Email, request.TenantId);
+        _logger.LogInformation("API registration attempt for email: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
         
         if (!ModelState.IsValid)
         {
@@ -134,15 +175,19 @@ public class AccountController : ControllerBase
             return Conflict(new { error = "An account with this email already exists" });
         }
 
-        // If tenant specified, verify it exists and is active
-        if (!string.IsNullOrEmpty(request.TenantId) && request.TenantId != "*")
+        // Tenant name is required
+        if (string.IsNullOrEmpty(request.TenantName))
         {
-            var tenant = await _tenantRepository.GetByNameAsync(request.TenantId);
-            if (tenant == null || !tenant.IsActive)
-            {
-                _logger.LogWarning("API registration failed - invalid or inactive tenant: {TenantId}", request.TenantId);
-                return BadRequest(new { error = "Invalid or inactive tenant" });
-            }
+            _logger.LogWarning("API registration failed - tenant name is required for email: {Email}", request.Email);
+            return BadRequest(new { error = "Tenant name is required" });
+        }
+
+        // Verify tenant exists and is active
+        var tenant = await _tenantRepository.GetByNameAsync(request.TenantName);
+        if (tenant == null || !tenant.IsActive)
+        {
+            _logger.LogWarning("API registration failed - invalid or inactive tenant: {TenantName}", request.TenantName);
+            return BadRequest(new { error = "Invalid or inactive tenant" });
         }
 
         try
@@ -151,16 +196,16 @@ public class AccountController : ControllerBase
 
             // Send notification to external app for validation (fire-and-forget)
             await _notificationService.NotifyAccountRequestAsync(
-                tenantId: request.TenantId ?? "*",
+                tenantId: request.TenantName,
                 email: request.Email,
                 firstName: request.FirstName,
                 lastName: request.LastName,
                 requestId: requestId);
 
             _logger.LogInformation(
-                "API registration notification sent for {Email} on tenant {TenantId}, RequestId: {RequestId}",
+                "API registration notification sent for {Email} on tenant {TenantName}, RequestId: {RequestId}",
                 request.Email,
-                request.TenantId,
+                request.TenantName,
                 requestId);
 
             return Accepted(new
@@ -168,7 +213,7 @@ public class AccountController : ControllerBase
                 message = "Registration request submitted. Awaiting validation.",
                 requestId = requestId,
                 email = request.Email,
-                tenantId = request.TenantId ?? "*",
+                tenantName = request.TenantName,
                 status = "pending"
             });
         }
@@ -347,13 +392,13 @@ public class AccountController : ControllerBase
     {
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
-        public string? TenantId { get; set; }
+        public string? TenantName { get; set; }
     }public class RegisterRequest
 {
     public string Email { get; set; } = string.Empty;
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
-    public string TenantId { get; set; } = "*";
+    public string TenantName { get; set; } = string.Empty;
 }
 
 public class ActivateRequest

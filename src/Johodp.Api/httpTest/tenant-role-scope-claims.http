@@ -1,0 +1,266 @@
+### Test des claims JWT avec Role et Scope par tenant
+### Vérifie que les tokens JWT contiennent les bonnes informations de role et scope pour le tenant demandé
+
+@baseUrl = http://localhost:5000
+@clientId = johodp-spa
+@redirectUri = http://localhost:4200/callback
+
+### 1. Créer un tenant
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "company-a-example-com",
+  "displayName": "Company A",
+  "tenantUrl": "https://company-a.example.com",
+  "allowedReturnUrls": [
+    "https://company-a.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://company-a.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@tenantAId = <GUID_FROM_STEP_1>
+
+### 2. Ajouter l'URL au tenant
+POST {{baseUrl}}/api/tenants/{{tenantAId}}/urls
+Content-Type: application/json
+
+{
+  "url": "company-a-example-com"
+}
+
+### 3. Créer un deuxième tenant
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "company-b-example-com",
+  "displayName": "Company B",
+  "tenantUrl": "https://company-b.example.com",
+  "allowedReturnUrls": [
+    "https://company-b.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://company-b.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@tenantBId = <GUID_FROM_STEP_3>
+
+### 4. Ajouter l'URL au deuxième tenant
+POST {{baseUrl}}/api/tenants/{{tenantBId}}/urls
+Content-Type: application/json
+
+{
+  "url": "company-b-example-com"
+}
+
+### 5. Créer un utilisateur multi-tenant
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "multitenantuser@example.com",
+  "firstName": "Multi",
+  "lastName": "Tenant",
+  "password": "Multi@1234"
+}
+
+@userId = <GUID_FROM_STEP_5>
+
+### 6. Associer l'utilisateur au Tenant A avec role "admin" et scope "full_access"
+POST {{baseUrl}}/api/users/{{userId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantAId}}",
+  "role": "admin",
+  "scope": "full_access"
+}
+
+### 7. Associer l'utilisateur au Tenant B avec role "user" et scope "read_only"
+POST {{baseUrl}}/api/users/{{userId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantBId}}",
+  "role": "user",
+  "scope": "read_only"
+}
+
+### 8. ✅ TEST: Login sur Tenant A - devrait retourner role=admin, scope=full_access
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:company-a-example-com
+Content-Type: application/json
+
+{
+  "email": "multitenantuser@example.com",
+  "password": "Multi@1234"
+}
+
+# Vérifier dans les logs ou le token JWT:
+# - tenant_id = <GUID Tenant A>
+# - tenant_role = "admin"
+# - tenant_scope = "full_access"
+
+### 9. ✅ TEST: Login sur Tenant B - devrait retourner role=user, scope=read_only
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:company-b-example-com
+Content-Type: application/json
+
+{
+  "email": "multitenantuser@example.com",
+  "password": "Multi@1234"
+}
+
+# Vérifier dans les logs ou le token JWT:
+# - tenant_id = <GUID Tenant B>
+# - tenant_role = "user"
+# - tenant_scope = "read_only"
+
+### 10. Récupérer les informations utilisateur pour voir tous ses tenants
+GET {{baseUrl}}/api/users/{{userId}}
+
+### 11. Test OAuth Flow complet - Tenant A
+
+# Step 1: Authorization request avec PKCE
+# Copier cette URL dans le navigateur:
+# {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope=openid profile email&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&acr_values=tenant:company-a-example-com
+
+# Step 2: Après login, récupérer le code et échanger contre un token
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+client_id={{clientId}}&
+redirect_uri={{redirectUri}}&
+code=<AUTHORIZATION_CODE>&
+code_verifier=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+
+### 12. Décoder le token JWT
+# Copier le access_token de la réponse précédente
+# Aller sur https://jwt.io
+# Vérifier les claims:
+# - sub: GUID de l'utilisateur
+# - tenant_id: GUID du tenant demandé
+# - tenant_role: role spécifique au tenant
+# - tenant_scope: scope spécifique au tenant
+
+### 13. Test avec un utilisateur qui a un seul tenant
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "singletenant@example.com",
+  "firstName": "Single",
+  "lastName": "Tenant",
+  "password": "Single@1234"
+}
+
+@singleUserId = <GUID_FROM_STEP_13>
+
+### 14. Associer au Tenant A uniquement avec role "viewer" et scope "read_only"
+POST {{baseUrl}}/api/users/{{singleUserId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantAId}}",
+  "role": "viewer",
+  "scope": "read_only"
+}
+
+### 15. ✅ TEST: Login utilisateur mono-tenant
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:company-a-example-com
+Content-Type: application/json
+
+{
+  "email": "singletenant@example.com",
+  "password": "Single@1234"
+}
+
+# Vérifier:
+# - tenant_role = "viewer"
+# - tenant_scope = "read_only"
+
+### 16. ❌ TEST: Tentative de login sur Tenant B (devrait échouer - pas d'accès)
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:company-b-example-com
+Content-Type: application/json
+
+{
+  "email": "singletenant@example.com",
+  "password": "Single@1234"
+}
+
+# Devrait retourner: "User does not have access to this tenant"
+
+###
+### TESTS DE MISE À JOUR DES ROLES/SCOPES
+###
+
+### U1. Créer un endpoint pour mettre à jour role/scope (à ajouter dans UsersController)
+# PUT /api/users/{userId}/tenants/{tenantId}
+# Body: { "role": "new_role", "scope": "new_scope" }
+
+### U2. Vérifier le changement après mise à jour
+# - Login avant mise à jour
+# - Mettre à jour role/scope
+# - Login après mise à jour
+# - Vérifier que les nouveaux claims sont corrects
+
+###
+### SCÉNARIO: Application tierce fournit les roles/scopes
+###
+
+### A1. Simuler callback d'application tierce lors de la création d'utilisateur
+# L'application tierce appelle /api/users avec les informations complètes
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+
+{
+  "email": "external@example.com",
+  "firstName": "External",
+  "lastName": "User",
+  "password": "External@1234"
+}
+
+@externalUserId = <GUID_FROM_A1>
+
+### A2. L'application tierce associe l'utilisateur au tenant avec role/scope
+POST {{baseUrl}}/api/users/{{externalUserId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantAId}}",
+  "role": "external_admin",
+  "scope": "custom_perimeter_123"
+}
+
+### A3. Login de l'utilisateur externe
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:company-a-example-com
+Content-Type: application/json
+
+{
+  "email": "external@example.com",
+  "password": "External@1234"
+}
+
+# Vérifier que les claims contiennent:
+# - tenant_role = "external_admin"
+# - tenant_scope = "custom_perimeter_123"
+
+###
+### NETTOYAGE
+###
+
+### Supprimer les utilisateurs de test
+DELETE {{baseUrl}}/api/users/{{userId}}
+DELETE {{baseUrl}}/api/users/{{singleUserId}}
+DELETE {{baseUrl}}/api/users/{{externalUserId}}
+
+### Supprimer les tenants de test
+DELETE {{baseUrl}}/api/tenants/{{tenantAId}}
+DELETE {{baseUrl}}/api/tenants/{{tenantBId}}

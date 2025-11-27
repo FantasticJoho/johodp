@@ -14,16 +14,39 @@ Crée un nouvel utilisateur en statut **PendingActivation** (appelé par l'appli
 
 **Authentification :** `[AllowAnonymous]` (TODO: Sécuriser avec API Key)
 
-#### Request Body
+#### Request Body (Format recommandé - multi-tenant)
 ```json
 {
   "email": "john.doe@example.com",
   "firstName": "John",
   "lastName": "Doe",
-  "tenantId": "acme",
+  "tenants": [
+    {
+      "tenantId": "acme-corp-guid",
+      "role": "user",
+      "scope": "default"
+    },
+    {
+      "tenantId": "another-tenant-guid",
+      "role": "admin",
+      "scope": "full_access"
+    }
+  ],
   "createAsPending": true
 }
 ```
+
+#### Request Body (Format legacy - single tenant - backward compatibility)
+```json
+{
+  "email": "john.doe@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "tenantId": "acme-corp-guid",
+  "createAsPending": true
+}
+```
+Note: Le format legacy ajoute automatiquement `role="user"` et `scope="default"`.
 
 #### Request Parameters
 | Parameter | Type | Required | Description |
@@ -31,8 +54,16 @@ Crée un nouvel utilisateur en statut **PendingActivation** (appelé par l'appli
 | email | string | ✅ | Adresse e-mail unique |
 | firstName | string | ✅ | Prénom (max 50 caractères) |
 | lastName | string | ✅ | Nom (max 50 caractères) |
-| tenantId | string | ✅ | Identifiant du tenant |
+| tenants | array | ❌ | Liste des associations tenant-role-scope (format recommandé) |
+| tenantId | guid | ❌ | GUID du tenant (legacy, deprecated) |
 | createAsPending | boolean | Auto | Forcé à `true` par le controller |
+
+**Structure UserTenantAssignment:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| tenantId | guid | ✅ | GUID du tenant |
+| role | string | ✅ | Rôle fourni par l'application tierce |
+| scope | string | ✅ | Périmètre/Scope fourni par l'application tierce |
 
 #### Response 201 Created
 ```json
@@ -656,7 +687,27 @@ Inclut `userVerificationEndpoint` (HTTPS en production) pour webhook d'onboardin
 # 👥 User Multi-Tenant Access
 
 ### Add User to Tenant
-**POST** `/api/users/{userId}/tenants/{tenantId}` (US-3.3 / UC-09)
+**POST** `/api/users/{userId}/tenants` (US-3.3 / UC-09)
+
+**Request Body:**
+```json
+{
+  "tenantId": "tenant-guid",
+  "role": "manager",
+  "scope": "department_sales"
+}
+```
+
+### Update User Tenant Role and Scope
+**PUT** `/api/users/{userId}/tenants/{tenantId}` (UC-09)
+
+**Request Body:**
+```json
+{
+  "role": "admin",
+  "scope": "full_access"
+}
+```
 
 ### Remove User From Tenant
 **DELETE** `/api/users/{userId}/tenants/{tenantId}` (US-3.4 / UC-09)

@@ -5,6 +5,7 @@ using Moq;
 using Johodp.Application.Users.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.Aggregates;
+using Johodp.Domain.Tenants.ValueObjects;
 
 public class RegisterUserCommandHandlerTests
 {
@@ -114,7 +115,7 @@ public class RegisterUserCommandHandlerTests
     public async Task Handle_WithTenantId_ShouldAssociateTenant()
     {
         // Arrange
-        var tenantId = Guid.NewGuid().ToString();
+        var tenantId = TenantId.Create();
         var command = new RegisterUserCommand
         {
             Email = "tenant@example.com",
@@ -138,6 +139,6 @@ public class RegisterUserCommandHandlerTests
 
         // Assert
         Assert.NotNull(capturedUser);
-        Assert.Contains(tenantId, capturedUser.TenantIds);
+        Assert.Contains(capturedUser.TenantIds, t => t.Value == tenantId.Value);
     }
 }

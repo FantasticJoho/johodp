@@ -6,6 +6,242 @@ Johodp est un Identity Provider multi-tenant basé sur OAuth2/OIDC, conçu pour 
 
 ---
 
+# CHAPITRE 0 : CONCEPTS FONDAMENTAUX
+
+## 🏗️ Modèle de Données : Clients, Tenants et Utilisateurs
+
+### Qu'est-ce qu'un **Client** ?
+
+Un **Client** représente une **application tierce** qui souhaite utiliser Johodp comme système d'authentification. C'est l'entité racine dans la hiérarchie OAuth2.
+
+**Caractéristiques techniques :**
+- Identifié par un `ClientId` (GUID) et un `ClientName` (ex: "my-app")
+- Possède un `ClientSecret` pour l'authentification machine-to-machine
+- Configure les `AllowedScopes` (openid, profile, email, api)
+- Définit les règles OAuth2 : `RequirePkce`, `RequireClientSecret`, `RequireConsent`
+
+**Métaphore :**
+> Un Client est comme une **entreprise** qui possède un ou plusieurs magasins (tenants). L'entreprise a une identité unique, mais chaque magasin a sa propre adresse et sa propre décoration.
+
+**Exemples concrets :**
+- Une application ERP d'entreprise
+- Une plateforme SaaS B2B
+- Un CRM multi-clients
+- Une application mobile avec backend
+
+**Cycle de vie :**
+1. L'application tierce s'authentifie auprès de Johodp (client credentials)
+2. Elle crée un Client via l'API : `POST /api/clients`
+3. À ce stade, le Client existe mais **n'est pas visible pour IdentityServer** (pas de redirect URIs)
+4. Le Client devient opérationnel uniquement après création d'au moins un Tenant
+
+**Règles importantes :**
+- ✅ Un Client peut avoir **plusieurs Tenants** (relation 1-to-many)
+- ✅ Un Client sans Tenant **ne peut pas effectuer d'authentification OAuth2**
+- ✅ Le `ClientName` doit être **unique** dans tout le système
+- ✅ Les redirect URIs et CORS origins sont **agrégés depuis les Tenants**
+
+---
+
+### Qu'est-ce qu'un **Tenant** ?
+
+Un **Tenant** représente un **espace isolé** au sein d'un Client. Il permet à l'application tierce de gérer plusieurs clients finaux (B2B), environnements (prod/staging) ou marques (white-label) de manière indépendante.
+
+**Caractéristiques techniques :**
+- Identifié par un `TenantId` (GUID) et un `Name` (ex: "acme-corp-example-com", dérivé de l'URL)
+- Associé à **un seul Client** (relation many-to-1)
+- Configure les **redirect URIs** (`AllowedReturnUrls`) : où l'utilisateur est renvoyé après authentification
+- Configure les **CORS origins** (`AllowedCorsOrigins`) : quels domaines peuvent appeler l'API
+- Stocke le **branding** (logo, couleurs, CSS custom)
+- Stocke les **paramètres régionaux** (langue, timezone, devise)
+- Configure un **endpoint de vérification utilisateur** (webhook) pour valider les inscriptions
+
+**Métaphore :**
+> Un Tenant est comme un **magasin** dans une chaîne. Chaque magasin a sa propre adresse (URL), sa décoration (branding), ses horaires (timezone), et son système de validation d'entrée (webhook).
+
+**Exemples concrets :**
+- **Client = SaaS CRM :**
+  - Tenant 1 : `acme-corp` → Client final ACME Corporation
+  - Tenant 2 : `globex-inc` → Client final Globex Inc
+- **Client = Application Entreprise :**
+  - Tenant 1 : `production` → Environnement de production
+  - Tenant 2 : `staging` → Environnement de test
+- **Client = Plateforme White-Label :**
+  - Tenant 1 : `brand-a` → Marque A avec logo rouge
+  - Tenant 2 : `brand-b` → Marque B avec logo bleu
+
+**Cycle de vie :**
+1. L'application tierce crée un Tenant via l'API : `POST /api/tenant`
+2. Elle fournit les redirect URIs, CORS origins, branding, localisation et webhook
+3. Le Tenant est automatiquement associé au Client
+4. Le Client devient **visible pour IdentityServer** (agrégation des redirect URIs)
+5. Les utilisateurs peuvent maintenant s'authentifier via ce Tenant
+
+**Règles importantes :**
+- ✅ Un Tenant appartient à **un seul Client** (pas de partage entre Clients)
+- ✅ Un Tenant doit avoir **au moins une redirect URI** (sinon non opérationnel)
+- ✅ Les CORS origins sont des **URIs d'autorité uniquement** (pas de path) :
+  - ✅ Valide : `http://localhost:4200`, `https://app.acme.com`
+  - ❌ Invalide : `http://localhost:4200/callback`
+- ✅ Le `Name` du Tenant est **dérivé de l'URL** (ex: `https://acme.com` → `acme-com`)
+- ✅ Le **webhook** est appelé à chaque demande d'inscription (validation métier)
+
+**Format `acr_values` :**
+Lors de l'authentification, le Tenant est identifié par le paramètre `acr_values` :
+```
+/connect/authorize?acr_values=tenant:acme-corp-example-com
+```
+L'URL complète `https://acme-corp.example.com` est nettoyée en `acme-corp-example-com`.
+
+---
+
+### Qu'est-ce qu'un **Utilisateur** (User) ?
+
+Un **Utilisateur** représente une **personne physique** qui peut s'authentifier sur un ou plusieurs Tenants. C'est l'entité centrale de l'authentification.
+
+**Caractéristiques techniques :**
+- Identifié par un `UserId` (GUID) et un `Email` (unique dans tout le système)
+- Possède des données d'identité : `FirstName`, `LastName`, `PhoneNumber`
+- A un statut : `PendingActivation` (en attente) ou `Active` (activé)
+- **Multi-tenant** : associé à une liste de `UserTenants` (relation many-to-many)
+- Chaque association `UserTenant` contient :
+  - `TenantId` : le Tenant auquel l'utilisateur a accès
+  - `Role` : le rôle fourni par l'application tierce (ex: "admin", "user", "manager")
+  - `Scope` : le périmètre fourni par l'application tierce (ex: "full_access", "read_only", "department_sales")
+- Stocke le `PasswordHash` (jamais en clair)
+- Peut avoir une authentification multi-facteurs (MFA, à venir)
+
+**Métaphore :**
+> Un Utilisateur est comme une **carte de membre** qui donne accès à plusieurs magasins. Pour chaque magasin (Tenant), la carte indique le niveau d'accès (Role) et la zone autorisée (Scope).
+
+**Exemples concrets :**
+- **Utilisateur Simple :**
+  - Email : `john@acme.com`
+  - Accès : 1 Tenant (`acme-corp`)
+  - Role : `user`
+  - Scope : `default`
+
+- **Consultant Multi-Client :**
+  - Email : `consultant@agency.com`
+  - Accès :
+    - Tenant `client-a` → Role: `architect`, Scope: `project_alpha`
+    - Tenant `client-b` → Role: `developer`, Scope: `project_beta`
+    - Tenant `client-c` → Role: `reviewer`, Scope: `all_projects`
+
+- **Manager Multi-Départements :**
+  - Email : `manager@company.com`
+  - Accès :
+    - Tenant `dept-sales` → Role: `manager`, Scope: `region_north`
+    - Tenant `dept-marketing` → Role: `viewer`, Scope: `all_campaigns`
+
+**Cycle de vie :**
+1. **Inscription (Onboarding) :**
+   - L'utilisateur remplit le formulaire sur `/account/onboarding?acr_values=tenant:xxx`
+   - Johodp envoie une notification webhook à l'application tierce
+   - L'application valide selon ses règles métier (contrat, quota, etc.)
+   - Si valide, elle crée l'utilisateur via `POST /api/users/register` avec la liste des Tenants
+   - L'utilisateur reçoit un email d'activation
+
+2. **Activation :**
+   - L'utilisateur clique sur le lien d'activation
+   - Il définit son mot de passe
+   - Son statut passe de `PendingActivation` à `Active`
+
+3. **Authentification :**
+   - L'utilisateur se connecte via `/connect/authorize?acr_values=tenant:xxx`
+   - Johodp vérifie qu'il a accès au Tenant demandé
+   - Il reçoit un JWT contenant uniquement les claims du Tenant spécifique :
+     ```json
+     {
+       "tenant_id": "guid-tenant",
+       "tenant_role": "admin",
+       "tenant_scope": "full_access"
+     }
+     ```
+
+4. **Gestion Multi-Tenant :**
+   - Ajout d'accès : `POST /api/users/{userId}/tenants` avec `role` et `scope`
+   - Modification : `PUT /api/users/{userId}/tenants/{tenantId}` avec nouveaux `role` et `scope`
+   - Retrait : `DELETE /api/users/{userId}/tenants/{tenantId}`
+
+**Règles importantes :**
+- ✅ Un Utilisateur peut avoir accès à **plusieurs Tenants** (multi-tenant)
+- ✅ Chaque association Tenant a son propre **Role** et **Scope** (fournis par l'app tierce)
+- ✅ L'email est **unique** dans tout le système (pas de doublons)
+- ✅ Un Utilisateur **ne peut se connecter qu'aux Tenants auxquels il a accès**
+- ✅ Les **Role** et **Scope** sont des **strings libres** (pas de validation stricte, c'est l'app tierce qui décide)
+- ✅ Lors de la connexion, le JWT contient **uniquement** les claims du Tenant demandé (isolation)
+
+---
+
+## 🔗 Relations entre Entités
+
+```
+┌─────────────────┐
+│     Client      │ (Application Tierce)
+│  - ClientId     │ Exemple: "my-erp-app"
+│  - ClientName   │
+│  - ClientSecret │
+└────────┬────────┘
+         │
+         │ 1-to-many
+         │
+         ▼
+┌─────────────────┐
+│     Tenant      │ (Espace Isolé)
+│  - TenantId     │ Exemple: "acme-corp"
+│  - Name         │
+│  - RedirectURIs │
+│  - CORS Origins │
+│  - Branding     │
+│  - Webhook      │
+└────────┬────────┘
+         │
+         │ many-to-many
+         │ (via UserTenant)
+         ▼
+┌─────────────────┐         ┌──────────────────┐
+│   UserTenant    │◄────────│      User        │ (Personne)
+│  - UserId       │         │  - UserId        │ Exemple: "john@acme.com"
+│  - TenantId     │         │  - Email         │
+│  - Role         │         │  - FirstName     │
+│  - Scope        │         │  - Status        │
+│  - CreatedAt    │         │  - PasswordHash  │
+└─────────────────┘         └──────────────────┘
+```
+
+**Résumé :**
+- **1 Client** → **N Tenants** (un client peut avoir plusieurs espaces)
+- **1 Tenant** → **1 Client** (un espace appartient à un seul client)
+- **N Users** → **M Tenants** (many-to-many via UserTenant avec Role + Scope)
+
+---
+
+## 🎯 Pourquoi cette Architecture ?
+
+### Séparation des Responsabilités
+- **Client** = Configuration OAuth2 globale (scopes, PKCE, secrets)
+- **Tenant** = Configuration contextuelle (URLs, branding, webhooks)
+- **User** = Identité avec accès multi-tenant + rôles/périmètres
+
+### Flexibilité
+- Une application peut avoir plusieurs environnements (prod/staging) → 1 Client, 2 Tenants
+- Une plateforme B2B peut gérer plusieurs clients finaux → 1 Client, N Tenants
+- Un utilisateur peut travailler pour plusieurs clients → 1 User, M Tenants
+
+### Sécurité
+- Les redirect URIs sont validées par Tenant (isolation)
+- Les CORS origins sont validées par Tenant (pas de cross-tenant XSS)
+- Les utilisateurs ne peuvent accéder qu'aux Tenants autorisés (validation stricte)
+- Les Roles et Scopes sont contextuels (un utilisateur peut être "admin" sur tenant-A et "viewer" sur tenant-B)
+
+### Évolutivité
+- Nouveaux clients finaux = nouveaux Tenants (pas de modification du Client)
+- Nouveaux environnements = nouveaux Tenants (isolation complète)
+- Nouveaux utilisateurs = création avec liste de Tenants + Roles/Scopes
+
+---
+
 # PARTIE 1 : BESOINS FONCTIONNELS
 
 ## 🎯 Besoins Métier
@@ -483,10 +719,17 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
        "email": "user@example.com",
        "firstName": "John",
        "lastName": "Doe",
-       "tenantId": "acme-corp-example-com",
+       "tenants": [
+         {
+           "tenantId": "acme-corp-example-com",
+           "role": "user",
+           "scope": "default"
+         }
+       ],
        "createAsPending": true
      }
      ```
+     Note: Le format legacy avec `tenantId` simple est encore supporté (ajouté avec role="user", scope="default")
    - **Si invalide**, elle ne fait rien (l'utilisateur reste en attente)
 10. Le système crée l'utilisateur en statut `PendingActivation`
 11. Le système génère un token d'activation
@@ -605,13 +848,26 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
       "token_type": "Bearer"
     }
     ```
+    Le `id_token` décodé contient les claims suivants:
+    ```json
+    {
+      "sub": "user-guid",
+      "email": "user@example.com",
+      "given_name": "John",
+      "family_name": "Doe",
+      "tenant_id": "acme-corp-example-com",
+      "tenant_role": "user",
+      "tenant_scope": "default"
+    }
+    ```
+    Note: Le token contient **uniquement** les claims du tenant demandé (isolation).
 15. La SPA stocke les tokens et peut appeler l'API
 
 **Règles de Gestion:**
 - RG-OAUTH-01: PKCE est obligatoire (RequirePkce = true)
 - RG-OAUTH-02: Le redirect_uri DOIT être dans AllowedReturnUrls du tenant
 - RG-OAUTH-03: L'origine CORS DOIT être dans AllowedCorsOrigins du tenant
-- RG-OAUTH-04: L'utilisateur DOIT avoir accès au tenant demandé (TenantIds)
+- RG-OAUTH-04: L'utilisateur DOIT avoir accès au tenant demandé (vérifié via `user.BelongsToTenant(tenantId)`)
 - RG-OAUTH-05: Le code d'autorisation expire après 5 minutes
 - RG-OAUTH-06: L'access_token expire après 1 heure (configurable)
 - RG-OAUTH-07: Le refresh_token permet de renouveler l'access_token (sliding 15 jours)
@@ -712,34 +968,48 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 ### UC-09: Gestion Multi-Tenant pour un Utilisateur
 
-**Acteur Principal:** Administrateur système
+**Acteur Principal:** Administrateur système ou Application tierce
 
 **Préconditions:**
 - Un utilisateur existe dans le système
 - Plusieurs tenants existent
 
-**Scénario Principal:**
-1. L'administrateur appelle POST `/api/users/{userId}/tenants/{tenantId}`
-2. Le système récupère l'utilisateur
-3. Le système vérifie que le tenant existe
-4. Le système appelle `user.AddTenantId(tenantId)` (domain)
-5. Le système sauvegarde les changements
-6. L'utilisateur peut maintenant s'authentifier avec ce tenant
+**Scénario Principal:** Ajout d'un tenant avec role et scope
+1. L'administrateur appelle POST `/api/users/{userId}/tenants`
+2. Body: `{ "tenantId": "guid", "role": "manager", "scope": "department_sales" }`
+3. Le système récupère l'utilisateur
+4. Le système vérifie que le tenant existe
+5. Le système appelle `user.AddTenant(tenantId, role, scope)` (domain)
+6. Une entité `UserTenant` est créée avec les timestamps
+7. Le système sauvegarde les changements
+8. L'utilisateur peut maintenant s'authentifier avec ce tenant
 
-**Scénario Alternatif:** Retrait d'accès
+**Scénario Alternatif 1:** Modification du role/scope
+1. L'administrateur appelle PUT `/api/users/{userId}/tenants/{tenantId}`
+2. Body: `{ "role": "admin", "scope": "full_access" }`
+3. Le système appelle `user.UpdateTenantRoleAndScope(tenantId, role, scope)`
+4. L'entité `UserTenant` est mise à jour avec `UpdatedAt`
+5. Lors de la prochaine connexion, l'utilisateur aura les nouveaux role/scope
+
+**Scénario Alternatif 2:** Retrait d'accès
 1. L'administrateur appelle DELETE `/api/users/{userId}/tenants/{tenantId}`
-2. Le système appelle `user.RemoveTenantId(tenantId)`
-3. L'utilisateur ne peut plus s'authentifier avec ce tenant
+2. Le système appelle `user.RemoveTenant(tenantId)`
+3. L'entité `UserTenant` est supprimée
+4. L'utilisateur ne peut plus s'authentifier avec ce tenant
 
 **Règles de Gestion:**
-- RG-MULTITENANT-01: Un utilisateur peut avoir accès à plusieurs tenants
-- RG-MULTITENANT-02: Un utilisateur avec `TenantIds = ["*"]` a accès à tous les tenants
-- RG-MULTITENANT-03: À la connexion, l'utilisateur DOIT avoir le tenant demandé dans sa liste
+- RG-MULTITENANT-01: Un utilisateur peut avoir accès à plusieurs tenants avec role/scope différents
+- RG-MULTITENANT-02: Chaque association `UserTenant` a un `Role` et un `Scope` obligatoires (strings non vides)
+- RG-MULTITENANT-03: À la connexion, l'utilisateur DOIT avoir le tenant demandé dans sa liste `UserTenants`
 - RG-MULTITENANT-04: Un utilisateur sans tenant ne peut pas se connecter
+- RG-MULTITENANT-05: Les Role et Scope sont des strings libres (définis par l'application tierce)
+- RG-MULTITENANT-06: Le JWT contient uniquement le role/scope du tenant de connexion (isolation)
+- RG-MULTITENANT-07: Un utilisateur ne peut pas avoir deux associations avec le même tenant (unicité)
 
 **Postconditions:**
-- L'utilisateur a accès au tenant spécifié
+- L'utilisateur a accès au tenant spécifié avec role et scope définis
 - L'utilisateur peut s'authentifier via ce tenant
+- Le JWT généré contiendra `tenant_id`, `tenant_role`, et `tenant_scope`
 
 ---
 

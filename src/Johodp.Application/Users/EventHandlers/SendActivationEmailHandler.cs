@@ -24,10 +24,10 @@ public class SendActivationEmailHandler : IEventHandler<UserPendingActivationEve
     public async Task HandleAsync(UserPendingActivationEvent @event, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "User pending activation event received for {Email} (UserId: {UserId}, Tenant: {TenantId})",
+            "User pending activation event received for {Email} (UserId: {UserId}, TenantId: {TenantId})",
             @event.Email,
             @event.UserId,
-            @event.TenantId ?? "wildcard");
+            @event.TenantId?.ToString() ?? "none");
 
         // Envoyer l'email d'activation via le service dédié
         // Le service génère le token et envoie l'email

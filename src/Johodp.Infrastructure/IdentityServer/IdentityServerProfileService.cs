@@ -8,6 +8,7 @@ using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Tenants.ValueObjects;
 
 public class IdentityServerProfileService : IProfileService
 {
@@ -55,7 +56,7 @@ public class IdentityServerProfileService : IProfileService
             return;
         }
         
-        _logger.LogInformation("Building claims for user: {Email}, tenants: {TenantCount}", user.Email.Value, user.TenantIds.Count);
+        _logger.LogInformation("Building claims for user: {Email}, tenants: {TenantCount}", user.Email.Value, user.UserTenants.Count);
 
         var claims = new List<Claim>
         {
@@ -66,10 +67,38 @@ public class IdentityServerProfileService : IProfileService
             new Claim("email_verified", user.EmailConfirmed.ToString().ToLowerInvariant())
         };
 
-        // Add all tenant IDs as separate claims
-        foreach (var tenantId in user.TenantIds)
+        // Extract tenant from subject claims (set during login)
+        var tenantIdClaim = context.Subject.FindFirst("tenant_id")?.Value;
+        
+        if (!string.IsNullOrEmpty(tenantIdClaim) && Guid.TryParse(tenantIdClaim, out var tenantGuid))
         {
-            claims.Add(new Claim("tenant_id", tenantId));
+            var tenantId = TenantId.From(tenantGuid);
+            var userTenant = user.GetTenantContext(tenantId);
+            
+            if (userTenant != null)
+            {
+                // Add tenant-specific claims for the requested tenant only
+                claims.Add(new Claim("tenant_id", userTenant.TenantId.Value.ToString()));
+                claims.Add(new Claim("tenant_role", userTenant.Role));
+                claims.Add(new Claim("tenant_scope", userTenant.Scope));
+                
+                _logger.LogInformation("Added tenant-specific claims for user {Email}: tenant={TenantId}, role={Role}, scope={Scope}",
+                    user.Email.Value, userTenant.TenantId.Value, userTenant.Role, userTenant.Scope);
+            }
+            else
+            {
+                _logger.LogWarning("User {Email} requested tenant {TenantId} but does not have access", 
+                    user.Email.Value, tenantGuid);
+            }
+        }
+        else
+        {
+            // No specific tenant requested - add all tenant IDs (but not role/scope to avoid confusion)
+            _logger.LogInformation("No specific tenant claim found, adding all tenant IDs for user {Email}", user.Email.Value);
+            foreach (var userTenant in user.UserTenants)
+            {
+                claims.Add(new Claim("tenant_id", userTenant.TenantId.Value.ToString()));
+            }
         }
 
         if (user.Scope != null)

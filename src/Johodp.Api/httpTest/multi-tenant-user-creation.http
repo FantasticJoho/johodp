@@ -1,0 +1,333 @@
+### Création d'utilisateur multi-tenant en un seul appel
+### Test de l'API POST /api/users/register avec plusieurs tenants
+
+@baseUrl = http://localhost:5000
+
+### 1. Créer le premier tenant
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "tenant-a-example-com",
+  "displayName": "Tenant A",
+  "tenantUrl": "https://tenant-a.example.com",
+  "allowedReturnUrls": [
+    "https://tenant-a.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://tenant-a.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@tenantAId = <GUID_FROM_STEP_1>
+
+### 2. Ajouter URL au Tenant A
+POST {{baseUrl}}/api/tenants/{{tenantAId}}/urls
+Content-Type: application/json
+
+{
+  "url": "tenant-a-example-com"
+}
+
+### 3. Créer le deuxième tenant
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "tenant-b-example-com",
+  "displayName": "Tenant B",
+  "tenantUrl": "https://tenant-b.example.com",
+  "allowedReturnUrls": [
+    "https://tenant-b.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://tenant-b.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@tenantBId = <GUID_FROM_STEP_3>
+
+### 4. Ajouter URL au Tenant B
+POST {{baseUrl}}/api/tenants/{{tenantBId}}/urls
+Content-Type: application/json
+
+{
+  "url": "tenant-b-example-com"
+}
+
+### 5. Créer le troisième tenant
+POST {{baseUrl}}/api/tenants
+Content-Type: application/json
+
+{
+  "name": "tenant-c-example-com",
+  "displayName": "Tenant C",
+  "tenantUrl": "https://tenant-c.example.com",
+  "allowedReturnUrls": [
+    "https://tenant-c.example.com/callback",
+    "http://localhost:4200/callback"
+  ],
+  "allowedCorsOrigins": [
+    "https://tenant-c.example.com",
+    "http://localhost:4200"
+  ]
+}
+
+@tenantCId = <GUID_FROM_STEP_5>
+
+### 6. Ajouter URL au Tenant C
+POST {{baseUrl}}/api/tenants/{{tenantCId}}/urls
+Content-Type: application/json
+
+{
+  "url": "tenant-c-example-com"
+}
+
+###
+### ✅ CRÉATION MULTI-TENANT EN UN SEUL APPEL
+###
+
+### 7. Créer un utilisateur associé à 3 tenants avec roles et scopes différents
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "multitenant@example.com",
+  "firstName": "Multi",
+  "lastName": "Tenant",
+  "tenants": [
+    {
+      "tenantId": "{{tenantAId}}",
+      "role": "admin",
+      "scope": "full_access"
+    },
+    {
+      "tenantId": "{{tenantBId}}",
+      "role": "manager",
+      "scope": "department_sales"
+    },
+    {
+      "tenantId": "{{tenantCId}}",
+      "role": "viewer",
+      "scope": "read_only"
+    }
+  ]
+}
+
+@multiUserId = <GUID_FROM_STEP_7>
+
+### 8. Vérifier l'utilisateur créé
+GET {{baseUrl}}/api/users/{{multiUserId}}
+
+# Devrait montrer 3 associations de tenants avec leurs roles et scopes
+
+### 9. ✅ TEST: Login sur Tenant A - devrait avoir role=admin, scope=full_access
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-a-example-com
+Content-Type: application/json
+
+{
+  "email": "multitenant@example.com",
+  "password": "MotDePasseActivation"
+}
+
+# Note: Remplacer "MotDePasseActivation" par le mot de passe défini lors de l'activation
+
+### 10. ✅ TEST: Login sur Tenant B - devrait avoir role=manager, scope=department_sales
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-b-example-com
+Content-Type: application/json
+
+{
+  "email": "multitenant@example.com",
+  "password": "MotDePasseActivation"
+}
+
+### 11. ✅ TEST: Login sur Tenant C - devrait avoir role=viewer, scope=read_only
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-c-example-com
+Content-Type: application/json
+
+{
+  "email": "multitenant@example.com",
+  "password": "MotDePasseActivation"
+}
+
+###
+### CRÉATION AVEC LEGACY API (backward compatibility)
+###
+
+### 12. Créer un utilisateur avec l'ancienne API (single tenant)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "legacy@example.com",
+  "firstName": "Legacy",
+  "lastName": "User",
+  "tenantId": "{{tenantAId}}"
+}
+
+# Devrait créer l'utilisateur avec role="user" et scope="default" par défaut
+
+@legacyUserId = <GUID_FROM_STEP_12>
+
+### 13. Vérifier l'utilisateur legacy
+GET {{baseUrl}}/api/users/{{legacyUserId}}
+
+###
+### SCÉNARIO COMPLET: Application tierce crée un utilisateur
+###
+
+### S1. L'application tierce reçoit une demande d'inscription
+# Elle valide les informations et détermine les tenants, roles et scopes
+
+### S2. L'application tierce appelle Johodp en un seul appel
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "external.user@company.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "tenants": [
+    {
+      "tenantId": "{{tenantAId}}",
+      "role": "employee",
+      "scope": "region_north"
+    },
+    {
+      "tenantId": "{{tenantBId}}",
+      "role": "contractor",
+      "scope": "project_xyz"
+    }
+  ]
+}
+
+@externalUserId = <GUID_FROM_S2>
+
+### S3. L'utilisateur reçoit un email d'activation
+# (automatiquement envoyé via UserPendingActivationEvent)
+
+### S4. L'utilisateur clique sur le lien d'activation et définit son mot de passe
+POST {{baseUrl}}/api/auth/activate
+Content-Type: application/json
+
+{
+  "token": "<TOKEN_FROM_EMAIL>",
+  "userId": "{{externalUserId}}",
+  "newPassword": "SecurePassword@123",
+  "confirmPassword": "SecurePassword@123"
+}
+
+### S5. L'utilisateur peut maintenant se connecter sur n'importe lequel de ses tenants
+POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-a-example-com
+Content-Type: application/json
+
+{
+  "email": "external.user@company.com",
+  "password": "SecurePassword@123"
+}
+
+# Les claims JWT contiendront:
+# - tenant_id: {{tenantAId}}
+# - tenant_role: "employee"
+# - tenant_scope: "region_north"
+
+###
+### TESTS EDGE CASES
+###
+
+### E1. Créer un utilisateur sans aucun tenant (devrait échouer ou créer sans tenant)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "notenant@example.com",
+  "firstName": "No",
+  "lastName": "Tenant"
+}
+
+### E2. Créer un utilisateur avec tenants vides (devrait échouer)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "emptytenant@example.com",
+  "firstName": "Empty",
+  "lastName": "Tenant",
+  "tenants": []
+}
+
+### E3. Créer un utilisateur avec un tenant invalide (devrait échouer)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "invalidtenant@example.com",
+  "firstName": "Invalid",
+  "lastName": "Tenant",
+  "tenants": [
+    {
+      "tenantId": "00000000-0000-0000-0000-000000000000",
+      "role": "admin",
+      "scope": "full"
+    }
+  ]
+}
+
+### E4. Créer un utilisateur avec role ou scope vides (devrait échouer)
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "emptyrole@example.com",
+  "firstName": "Empty",
+  "lastName": "Role",
+  "tenants": [
+    {
+      "tenantId": "{{tenantAId}}",
+      "role": "",
+      "scope": ""
+    }
+  ]
+}
+
+###
+### MODIFICATION APRÈS CRÉATION
+###
+
+### M1. Ajouter un nouveau tenant à un utilisateur existant
+POST {{baseUrl}}/api/users/{{multiUserId}}/tenants
+Content-Type: application/json
+
+{
+  "tenantId": "{{tenantAId}}",
+  "role": "support",
+  "scope": "tickets_only"
+}
+
+### M2. Mettre à jour role/scope d'un tenant existant
+PUT {{baseUrl}}/api/users/{{multiUserId}}/tenants/{{tenantAId}}
+Content-Type: application/json
+
+{
+  "role": "super_admin",
+  "scope": "global_access"
+}
+
+### M3. Supprimer un tenant
+DELETE {{baseUrl}}/api/users/{{multiUserId}}/tenants/{{tenantCId}}
+
+###
+### NETTOYAGE
+###
+
+DELETE {{baseUrl}}/api/users/{{multiUserId}}
+DELETE {{baseUrl}}/api/users/{{legacyUserId}}
+DELETE {{baseUrl}}/api/users/{{externalUserId}}
+
+DELETE {{baseUrl}}/api/tenants/{{tenantAId}}
+DELETE {{baseUrl}}/api/tenants/{{tenantBId}}
+DELETE {{baseUrl}}/api/tenants/{{tenantCId}}

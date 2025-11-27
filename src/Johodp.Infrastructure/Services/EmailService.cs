@@ -25,9 +25,9 @@ public class EmailService : IEmailService
         string lastName,
         string activationToken,
         Guid userId,
-        string? tenantId = null)
+        Guid? tenantId = null)
     {
-        var activationUrl = BuildActivationUrl(activationToken, userId, tenantId);
+        var activationUrl = BuildActivationUrl(activationToken, userId, tenantId?.ToString());
 
         var subject = "Activez votre compte";
         var body = BuildActivationEmailBody(firstName, lastName, activationUrl);
@@ -38,7 +38,7 @@ public class EmailService : IEmailService
             firstName,
             lastName,
             userId,
-            tenantId ?? "wildcard");
+            tenantId?.ToString() ?? "none");
 
         _logger.LogInformation(
             "[EMAIL] Subject: {Subject}",

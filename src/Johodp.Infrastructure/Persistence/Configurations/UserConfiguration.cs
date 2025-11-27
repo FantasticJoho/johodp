@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Users.Entities;
+using Johodp.Domain.Tenants.Aggregates;
+using Johodp.Domain.Tenants.ValueObjects;
 
 public class UserConfiguration : IEntityTypeConfiguration<User>
 {
@@ -55,11 +58,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
-        // Multi-tenancy - store as JSONB array
-        builder.Property<List<string>>("_tenantIds")
-            .HasColumnName("TenantIds")
-            .HasColumnType("jsonb")
-            .IsRequired();
+        // Multi-tenancy - One-to-Many relationship with UserTenant entity
+        builder.HasMany(x => x.UserTenants)
+            .WithOne()
+            .HasForeignKey(ut => ut.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Ignore the computed TenantIds property (derived from UserTenants)
+        builder.Ignore(x => x.TenantIds);
 
         builder.Property(x => x.ScopeId)
             .HasConversion(

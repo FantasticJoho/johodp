@@ -43,7 +43,7 @@ public class DomainUserClaimsPrincipalFactory : IUserClaimsPrincipalFactory<User
         // Add all tenant IDs as separate claims
         foreach (var tenantId in user.TenantIds)
         {
-            identity.AddClaim(new Claim("tenantid", tenantId));
+            identity.AddClaim(new Claim("tenantid", tenantId.ToString()));
         }
 
         var principal = new ClaimsPrincipal(identity);

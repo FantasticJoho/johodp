@@ -35,14 +35,12 @@ public class Client : AggregateRoot
             Id = ClientId.Create(),
             ClientName = clientName,
             AllowedScopes = allowedScopes ?? Array.Empty<string>(),
-            RequireClientSecret = true,
+            RequireClientSecret = false,
             RequireConsent = requireConsent,
             RequireMfa = requireMfa,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
-
-        return client;
 
         client.AddDomainEvent(new ClientCreatedEvent(
             client.Id.Value,

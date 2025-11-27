@@ -8,9 +8,9 @@ public class UserPendingActivationEvent : DomainEvent
     public string Email { get; set; }
     public string FirstName { get; set; }
     public string LastName { get; set; }
-    public string? TenantId { get; set; }
+    public Guid? TenantId { get; set; }
 
-    public UserPendingActivationEvent(Guid userId, string email, string firstName, string lastName, string? tenantId)
+    public UserPendingActivationEvent(Guid userId, string email, string firstName, string lastName, Guid? tenantId)
     {
         UserId = userId;
         Email = email;

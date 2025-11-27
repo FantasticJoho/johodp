@@ -13,14 +13,23 @@ using Johodp.Infrastructure.IdentityServer;
 using Duende.IdentityServer.Services;
 using Johodp.Application.Common.Mediator;
 
+/// <summary>
+/// Extension methods for configuring infrastructure services
+/// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers all infrastructure services including database, repositories, 
+    /// IdentityServer, ASP.NET Identity, and application services
+    /// </summary>
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         IConfiguration configuration,
         IWebHostEnvironment environment)
     {
-        // Database - Configure Npgsql for dynamic JSON serialization
+        // ====================================================================
+        // DATABASE CONFIGURATION
+        // ====================================================================
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
@@ -31,26 +40,25 @@ public static class ServiceCollectionExtensions
             options.UseNpgsql(dataSource,
                 npgsqlOptions => npgsqlOptions.MigrationsAssembly("Johodp.Infrastructure")));
 
-        // User Repository (for profile service)
+        // ====================================================================
+        // REPOSITORIES & DATA ACCESS
+        // ====================================================================
         services.AddScoped<IUserRepository, Johodp.Infrastructure.Persistence.Repositories.UserRepository>();
-
-        // Client Repository
         services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
-
-        // Tenant Repository
         services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
-
-        // Unit of Work
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Mini-MediatR: Auto-register all handlers from Application assembly
+        // ====================================================================
+        // MEDIATOR (CQRS Pattern)
+        // ====================================================================
+        // Auto-register all command/query handlers from Application assembly
         services.AddMediator(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly);
 
-        // Domain Event Publisher with Channel-based Event Bus
+        // ====================================================================
+        // DOMAIN EVENTS (Event-Driven Architecture)
+        // ====================================================================
         services.AddSingleton<Johodp.Application.Common.Events.IEventBus, Johodp.Infrastructure.Services.ChannelEventBus>();
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
-        
-        // Domain Event Processor (Background Service)
         services.AddHostedService<Johodp.Infrastructure.Services.DomainEventProcessor>();
         
         // Event Handlers
@@ -59,24 +67,30 @@ public static class ServiceCollectionExtensions
         services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserActivatedEvent>, 
             Johodp.Application.Users.EventHandlers.UserActivatedEventHandler>();
 
-        // Notification Service (fire-and-forget HTTP calls to external apps)
+        // ====================================================================
+        // APPLICATION SERVICES
+        // ====================================================================
+        // Notification Service (webhooks to external applications)
         services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
-        // Email Service (pour l'envoi d'emails d'activation, etc.)
+        // Email Service (activation emails, password reset, etc.)
         services.AddScoped<IEmailService, Johodp.Infrastructure.Services.EmailService>();
 
-        // User Activation Service (génère les tokens d'activation et envoie les emails)
+        // User Activation Service (token generation and email sending)
         services.AddScoped<IUserActivationService, Johodp.Infrastructure.Services.UserActivationService>();
 
-        // MFA Authentication Service (for client-specific MFA)
+        // MFA Authentication Service (client-specific multi-factor authentication)
         services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
 
-        // Additional handlers not yet converted to IRequestHandler (will be auto-registered once converted)
+        // Legacy command handlers (TODO: Convert to IRequestHandler pattern)
         services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
         services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
 
-        // IdentityServer with custom client store (loads from database)
+        // ====================================================================
+        // IDENTITYSERVER CONFIGURATION
+        // ====================================================================
+        // Custom client store (loads clients dynamically from database)
         services.AddScoped<Duende.IdentityServer.Stores.IClientStore, Johodp.Infrastructure.IdentityServer.CustomClientStore>();
         
         var idServerBuilder = services.AddIdentityServer(options =>
@@ -166,10 +180,12 @@ public static class ServiceCollectionExtensions
             }
         }
 
-        // Profile service: map domain user -> token/userinfo claims
+        // Profile service: map domain user to token/userinfo claims
         services.AddScoped<IProfileService, IdentityServerProfileService>();
 
-        // ASP.NET Identity integration using domain User and custom stores
+        // ====================================================================
+        // ASP.NET IDENTITY CONFIGURATION
+        // ====================================================================
         services.AddIdentityCore<Johodp.Domain.Users.Aggregates.User>(options =>
         {
             options.Password.RequireNonAlphanumeric = false;
@@ -202,7 +218,9 @@ public static class ServiceCollectionExtensions
             opts.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
         });
 
-        // CORS policy for development (allow any origin with credentials)
+        // ====================================================================
+        // CORS CONFIGURATION (Development)
+        // ====================================================================
         services.AddCors(options =>
         {
             options.AddPolicy("AllowSpa", policy =>

@@ -21,7 +21,7 @@ public interface IEmailService
         string lastName,
         string activationToken,
         Guid userId,
-        string? tenantId = null);
+        Guid? tenantId = null);
 
     /// <summary>
     /// Envoie un email de réinitialisation de mot de passe

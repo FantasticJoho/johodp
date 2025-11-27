@@ -30,7 +30,7 @@ public class UserActivationService : IUserActivationService
         string email,
         string firstName,
         string lastName,
-        string? tenantId = null)
+        Guid? tenantId = null)
     {
         try
         {

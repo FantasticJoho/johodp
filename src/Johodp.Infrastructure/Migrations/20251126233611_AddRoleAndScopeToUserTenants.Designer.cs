@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Johodp.Infrastructure.Migrations
 {
     [DbContext(typeof(JohodpDbContext))]
-    partial class JohodpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251126233611_AddRoleAndScopeToUserTenants")]
+    partial class AddRoleAndScopeToUserTenants
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

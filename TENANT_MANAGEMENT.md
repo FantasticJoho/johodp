@@ -314,6 +314,120 @@ Retourne du CSS avec variables CSS :
 }
 ```
 
+## Relation User-Tenant avec Role et Scope
+
+### Architecture UserTenant
+
+Chaque utilisateur peut être associé à plusieurs tenants via l'entité `UserTenant` qui contient:
+- **UserId** (Guid) - Référence vers l'utilisateur
+- **TenantId** (Guid) - Référence vers le tenant
+- **Role** (string, max 100 chars) - Rôle fourni par l'application tierce (ex: "admin", "user", "manager")
+- **Scope** (string, max 200 chars) - Périmètre fourni par l'application tierce (ex: "full_access", "read_only", "department_sales")
+- **CreatedAt** (timestamp) - Date de création de l'association
+- **UpdatedAt** (timestamp, nullable) - Date de dernière modification
+
+### Table de Jointure
+
+```sql
+CREATE TABLE "UserTenants" (
+    "UserId" UUID NOT NULL,
+    "TenantId" UUID NOT NULL,
+    "Role" VARCHAR(100) NOT NULL,
+    "Scope" VARCHAR(200) NOT NULL,
+    "CreatedAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+    "UpdatedAt" TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT "PK_UserTenants" PRIMARY KEY ("UserId", "TenantId"),
+    CONSTRAINT "FK_UserTenants_Users" FOREIGN KEY ("UserId") REFERENCES "users"("id") ON DELETE CASCADE,
+    CONSTRAINT "FK_UserTenants_Tenants" FOREIGN KEY ("TenantId") REFERENCES "tenants"("id") ON DELETE CASCADE
+);
+
+CREATE INDEX "IX_UserTenants_UserId" ON "UserTenants" ("UserId");
+CREATE INDEX "IX_UserTenants_TenantId" ON "UserTenants" ("TenantId");
+```
+
+### Endpoints de Gestion
+
+**Ajouter un tenant à un utilisateur:**
+```bash
+POST /api/users/{userId}/tenants
+{
+  "tenantId": "guid",
+  "role": "admin",
+  "scope": "full_access"
+}
+```
+
+**Modifier le role/scope:**
+```bash
+PUT /api/users/{userId}/tenants/{tenantId}
+{
+  "role": "manager",
+  "scope": "department_sales"
+}
+```
+
+**Supprimer l'accès:**
+```bash
+DELETE /api/users/{userId}/tenants/{tenantId}
+```
+
+### Génération des Claims JWT
+
+Lors de la connexion sur un tenant spécifique, le JWT contient **uniquement** les claims de ce tenant:
+
+```json
+{
+  "sub": "user-guid",
+  "email": "user@example.com",
+  "tenant_id": "tenant-guid",
+  "tenant_role": "admin",
+  "tenant_scope": "full_access"
+}
+```
+
+Si l'utilisateur se connecte sur un autre tenant, il recevra un JWT différent avec les role/scope de ce tenant.
+
+### Exemple Multi-Tenant
+
+**Consultant travaillant pour 3 clients:**
+
+```json
+{
+  "email": "consultant@agency.com",
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "tenants": [
+    {
+      "tenantId": "client-a-guid",
+      "role": "architect",
+      "scope": "project_alpha"
+    },
+    {
+      "tenantId": "client-b-guid",
+      "role": "developer",
+      "scope": "project_beta"
+    },
+    {
+      "tenantId": "client-c-guid",
+      "role": "reviewer",
+      "scope": "all_projects"
+    }
+  ]
+}
+```
+
+Lors de la connexion:
+- Sur `client-a` → JWT avec `tenant_role: "architect"` et `tenant_scope: "project_alpha"`
+- Sur `client-b` → JWT avec `tenant_role: "developer"` et `tenant_scope: "project_beta"`
+- Sur `client-c` → JWT avec `tenant_role: "reviewer"` et `tenant_scope: "all_projects"`
+
+### Règles de Validation
+
+1. **Role et Scope obligatoires** - Ne peuvent pas être vides
+2. **Pas de doublons** - Un utilisateur ne peut pas être associé deux fois au même tenant
+3. **Strings libres** - Aucune validation stricte sur les valeurs (définis par l'app tierce)
+4. **Isolation contextuelle** - Les JWT ne contiennent que les claims du tenant de connexion
+
 ## Synchronisation Tenant ↔ Client
 
 ### Logique de synchronisation

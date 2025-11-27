@@ -34,6 +34,10 @@ public class Tenant : AggregateRoot
     public string Timezone { get; private set; } = "Europe/Paris";
     public string Currency { get; private set; } = "EUR";
 
+    // URLs associated with this tenant (e.g., "acme-corp-example-com", "acme-corp-fr")
+    private readonly List<string> _urls = new();
+    public IReadOnlyList<string> Urls => _urls.AsReadOnly();
+
     // Allowed return URLs for OAuth2/OIDC
     private readonly List<string> _allowedReturnUrls = new();
     public IReadOnlyList<string> AllowedReturnUrls => _allowedReturnUrls.AsReadOnly();
@@ -142,6 +146,58 @@ public class Tenant : AggregateRoot
             Currency = currency;
 
         UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void AddUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            throw new ArgumentException("URL cannot be empty", nameof(url));
+
+        var normalizedUrl = url.ToLowerInvariant().Trim();
+        if (!_urls.Contains(normalizedUrl))
+        {
+            _urls.Add(normalizedUrl);
+            UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    public void RemoveUrl(string url)
+    {
+        var normalizedUrl = url.ToLowerInvariant().Trim();
+        _urls.Remove(normalizedUrl);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public bool HasUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return false;
+
+        var normalizedUrl = url.ToLowerInvariant().Trim();
+        return _urls.Contains(normalizedUrl);
+    }
+
+    public bool IsValidForAcrValue(string acrValue)
+    {
+        if (string.IsNullOrWhiteSpace(acrValue))
+            return false;
+
+        var normalizedAcrValue = acrValue.ToLowerInvariant().Trim();
+        
+        // Check if acr_value matches any tenant URL
+        if (_urls.Contains(normalizedAcrValue))
+            return true;
+
+        // Check if acr_value is part of any allowed return URL
+        return _allowedReturnUrls.Any(returnUrl => 
+        {
+            if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri))
+            {
+                var host = uri.Host.Replace(".", "-").ToLowerInvariant();
+                return host == normalizedAcrValue || normalizedAcrValue.Contains(host);
+            }
+            return false;
+        });
     }
 
     public void AddAllowedReturnUrl(string returnUrl)

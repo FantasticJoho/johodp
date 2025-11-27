@@ -3,6 +3,8 @@ namespace Johodp.Domain.Users.Aggregates;
 using Common;
 using Events;
 using ValueObjects;
+using Entities;
+using Johodp.Domain.Tenants.ValueObjects;
 
 public class UserStatus : Enumeration
 {
@@ -35,9 +37,12 @@ public class User : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    // Multi-tenancy - supports multiple tenants
-    private readonly List<string> _tenantIds = new();
-    public IReadOnlyList<string> TenantIds => _tenantIds.AsReadOnly();
+    // Multi-tenancy - supports multiple tenants with role and scope per tenant
+    private readonly List<UserTenant> _userTenants = new();
+    public IReadOnlyList<UserTenant> UserTenants => _userTenants.AsReadOnly();
+    
+    // Convenience property to get tenant IDs
+    public IReadOnlyList<TenantId> TenantIds => _userTenants.Select(ut => ut.TenantId).ToList().AsReadOnly();
 
     // Relations
     public ScopeId? ScopeId { get; private set; }
@@ -52,7 +57,7 @@ public class User : AggregateRoot
 
     private User() { }
 
-    public static User Create(string email, string firstName, string lastName, string? tenantId = null, bool createAsPending = false)
+    public static User Create(string email, string firstName, string lastName, TenantId? tenantId = null, bool createAsPending = false)
     {
         var user = new User
         {
@@ -65,11 +70,8 @@ public class User : AggregateRoot
             CreatedAt = DateTime.UtcNow
         };
 
-        // Add tenant if provided
-        if (!string.IsNullOrWhiteSpace(tenantId))
-        {
-            user._tenantIds.Add(tenantId);
-        }
+        // Note: Tenant will be added via AddTenant method with role and scope
+        // tenantId parameter kept for backward compatibility in events
 
         if (createAsPending)
         {
@@ -78,7 +80,7 @@ public class User : AggregateRoot
                 user.Email.Value,
                 user.FirstName,
                 user.LastName,
-                tenantId
+                tenantId?.Value
             ));
         }
         else
@@ -94,27 +96,59 @@ public class User : AggregateRoot
         return user;
     }
 
-    public void AddTenant(string tenantId)
+    public void AddTenant(TenantId tenantId, string role, string scope)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            throw new ArgumentException("Tenant ID cannot be empty", nameof(tenantId));
+        if (tenantId == null)
+            throw new ArgumentNullException(nameof(tenantId));
 
-        if (_tenantIds.Contains(tenantId))
-            return;
+        if (_userTenants.Any(ut => ut.TenantId.Value == tenantId.Value))
+            throw new InvalidOperationException($"User already belongs to tenant {tenantId.Value}");
 
-        _tenantIds.Add(tenantId);
+        var userTenant = UserTenant.Create(Id, tenantId, role, scope);
+        _userTenants.Add(userTenant);
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void RemoveTenant(string tenantId)
+    public void RemoveTenant(TenantId tenantId)
     {
-        _tenantIds.Remove(tenantId);
-        UpdatedAt = DateTime.UtcNow;
+        if (tenantId == null)
+            throw new ArgumentNullException(nameof(tenantId));
+
+        var existing = _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
+        if (existing != null)
+        {
+            _userTenants.Remove(existing);
+            UpdatedAt = DateTime.UtcNow;
+        }
     }
 
-    public bool BelongsToTenant(string tenantId)
+    public bool BelongsToTenant(TenantId tenantId)
     {
-        return _tenantIds.Contains(tenantId);
+        if (tenantId == null)
+            return false;
+
+        return _userTenants.Any(ut => ut.TenantId.Value == tenantId.Value);
+    }
+
+    public UserTenant? GetTenantContext(TenantId tenantId)
+    {
+        if (tenantId == null)
+            return null;
+
+        return _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
+    }
+
+    public void UpdateTenantRoleAndScope(TenantId tenantId, string role, string scope)
+    {
+        if (tenantId == null)
+            throw new ArgumentNullException(nameof(tenantId));
+
+        var userTenant = _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
+        if (userTenant == null)
+            throw new InvalidOperationException($"User does not belong to tenant {tenantId.Value}");
+
+        userTenant.Update(role, scope);
+        UpdatedAt = DateTime.UtcNow;
     }
 
     public void ConfirmEmail()

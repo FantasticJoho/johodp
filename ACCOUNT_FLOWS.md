@@ -376,8 +376,14 @@ public class User : AggregateRoot
     public bool EmailConfirmed { get; private set; }
     public DateTime CreatedAt { get; private set; }
     
-    private readonly List<string> _tenantIds = new();
-    public IReadOnlyList<string> TenantIds => _tenantIds.AsReadOnly();
+    private readonly List<UserTenant> _userTenants = new();
+    public IReadOnlyList<UserTenant> UserTenants => _userTenants.AsReadOnly();
+    
+    // Computed property pour compatibilité
+    public IReadOnlyList<TenantId> TenantIds => _userTenants
+        .Select(ut => ut.TenantId)
+        .ToList()
+        .AsReadOnly();
     
     /// Creates user in pending activation state
     public static User Create(
@@ -398,10 +404,8 @@ public class User : AggregateRoot
             CreatedAt = DateTime.UtcNow
         };
         
-        if (!string.IsNullOrWhiteSpace(tenantId))
-        {
-            user._tenantIds.Add(tenantId);
-        }
+        // Note: Les tenants sont maintenant ajoutés via AddTenant(tenantId, role, scope)
+        // après validation par l'application tierce
         
         if (createAsPending)
         {

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Johodp.Infrastructure.Persistence.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Johodp.Infrastructure.Migrations
 {
     [DbContext(typeof(JohodpDbContext))]
-    partial class JohodpDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251126225551_RefactorUserTenantToTenantIdAndAddTenantUrls")]
+    partial class RefactorUserTenantToTenantIdAndAddTenantUrls
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -332,41 +335,6 @@ namespace Johodp.Infrastructure.Migrations
                     b.ToTable("users", "dbo");
                 });
 
-            modelBuilder.Entity("Johodp.Domain.Users.Entities.UserTenant", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("UserId", "TenantId");
-
-                    b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_UserTenants_TenantId");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_UserTenants_UserId");
-
-                    b.ToTable("UserTenants", "dbo");
-                });
-
             modelBuilder.Entity("UserPermissions", b =>
                 {
                     b.Property<Guid>("PermissionsId")
@@ -397,6 +365,21 @@ namespace Johodp.Infrastructure.Migrations
                     b.ToTable("UserRoles", "dbo");
                 });
 
+            modelBuilder.Entity("UserTenants", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("UserId", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("UserTenants", "dbo");
+                });
+
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
                 {
                     b.HasOne("Johodp.Domain.Users.Aggregates.Scope", "Scope")
@@ -404,15 +387,6 @@ namespace Johodp.Infrastructure.Migrations
                         .HasForeignKey("ScopeId");
 
                     b.Navigation("Scope");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Entities.UserTenant", b =>
-                {
-                    b.HasOne("Johodp.Domain.Users.Aggregates.User", null)
-                        .WithMany("UserTenants")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("UserPermissions", b =>
@@ -445,9 +419,19 @@ namespace Johodp.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
+            modelBuilder.Entity("UserTenants", b =>
                 {
-                    b.Navigation("UserTenants");
+                    b.HasOne("Johodp.Domain.Tenants.Aggregates.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Johodp.Domain.Users.Aggregates.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

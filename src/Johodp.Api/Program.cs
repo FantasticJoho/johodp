@@ -2,59 +2,31 @@ using Johodp.Api.Extensions;
 using Johodp.Api.Middleware;
 using Serilog;
 using Scalar.AspNetCore;
-using Swashbuckle.AspNetCore.SwaggerGen;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add Serilog with enrichment for production readiness
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .Enrich.WithProperty("Application", "Johodp")
-    .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
-    .CreateLogger();
+// ============================================================================
+// LOGGING CONFIGURATION
+// ============================================================================
+ConfigureLogging(builder);
 
-builder.Host.UseSerilog();
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
+ConfigureAuthentication(builder.Services);
 
-// Add services
-builder.Services.AddAuthentication(options =>
-    {
-        // Ensure the Identity cookie is used as the default authentication/sign-in scheme
-        options.DefaultAuthenticateScheme = "Identity.Application";
-        options.DefaultSignInScheme = "Identity.Application";
-        options.DefaultChallengeScheme = "Identity.Application";
-    })
-    .AddCookie("Identity.Application", options =>
-    {
-        options.LoginPath = "/account/login";
-        options.LogoutPath = "/account/logout";
-        options.AccessDeniedPath = "/account/accessdenied";
-        options.ExpireTimeSpan = TimeSpan.FromDays(7);
-        options.SlidingExpiration = true;
-        // Development-friendly cookie settings so the cookie is visible on localhost HTTP
-        options.Cookie.Name = ".AspNetCore.Identity.Application";
-        options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
-    })
-    .AddCookie("Cookies", options =>
-    {
-        options.LoginPath = "/account/login";
-        options.LogoutPath = "/account/logout";
-        options.AccessDeniedPath = "/account/accessdenied";
-        options.ExpireTimeSpan = TimeSpan.FromDays(7);
-        options.SlidingExpiration = true;
-    });
-
+// ============================================================================
+// MVC & API CONFIGURATION
+// ============================================================================
 builder.Services.AddControllers();
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen();
 
-// Health Checks
+// ============================================================================
+// HEALTH CHECKS
+// ============================================================================
 builder.Services.AddHealthChecks()
     .AddNpgSql(
         builder.Configuration.GetConnectionString("DefaultConnection")!,
@@ -64,189 +36,71 @@ builder.Services.AddHealthChecks()
         "identityserver",
         tags: new[] { "identityserver", "ready" });
 
+// ============================================================================
+// INFRASTRUCTURE SERVICES (Database, Repositories, IdentityServer, etc.)
+// ============================================================================
 builder.Services.AddInfrastructureServices(builder.Configuration, builder.Environment);
 
+// ============================================================================
+// BUILD APPLICATION
+// ============================================================================
 var app = builder.Build();
+
+// ============================================================================
+// STATIC FILES
+// ============================================================================
 app.UseStaticFiles();
 app.UseDefaultFiles();
-// Apply migrations automatically on startup (development/staging)
-// Comment out in production - use init-db.ps1 script instead
+
+// ============================================================================
+// DATABASE MIGRATIONS (Development Only)
+// ============================================================================
 if (app.Environment.IsDevelopment())
 {
-    using (var scope = app.Services.CreateScope())
-    {
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        
-        try
-        {
-            // Apply JohodpDbContext migrations (11 migrations)
-            var johodpDb = scope.ServiceProvider.GetRequiredService<Johodp.Infrastructure.Persistence.DbContext.JohodpDbContext>();
-            logger.LogInformation("Applying JohodpDbContext migrations...");
-            johodpDb.Database.Migrate();
-            logger.LogInformation("✅ JohodpDbContext migrations applied successfully");
-            
-            // Apply PersistedGrantDbContext migrations (1 migration for IdentityServer)
-            var persistedGrantDb = scope.ServiceProvider.GetRequiredService<Duende.IdentityServer.EntityFramework.DbContexts.PersistedGrantDbContext>();
-            logger.LogInformation("Applying PersistedGrantDbContext migrations...");
-            persistedGrantDb.Database.Migrate();
-            logger.LogInformation("✅ PersistedGrantDbContext migrations applied successfully");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "❌ An error occurred while migrating the database");
-            throw;
-        }
-    }
+    ApplyDatabaseMigrations(app);
 }
 
-// Add request logging middleware for production monitoring
-app.UseSerilogRequestLogging(options =>
-{
-    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
-    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
-    {
-        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
-        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
-        diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
-        if (httpContext.User?.Identity?.IsAuthenticated == true)
-        {
-            diagnosticContext.Set("UserEmail", httpContext.User.FindFirst("email")?.Value);
-            diagnosticContext.Set("UserId", httpContext.User.FindFirst("sub")?.Value);
-        }
-    };
-});
+// ============================================================================
+// MIDDLEWARE PIPELINE
+// ============================================================================
+ConfigureMiddlewarePipeline(app);
 
-// Global exception handler for production-ready error handling
-app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
-
-// Ensure HTTPS redirection
-app.UseHttpsRedirection();
-
+// ============================================================================
+// SWAGGER / SCALAR UI (Development Only)
+// ============================================================================
 if (app.Environment.IsDevelopment())
 {
- app.UseSwagger(opt => opt.RouteTemplate = "openapi/{documentName}.json");
-   app.MapScalarApiReference(
-    opt => {
-        opt.Title = "WebApi with Scalar Example";
-        opt.Theme = ScalarTheme.BluePlanet;
-        opt.DefaultHttpClient = new(ScalarTarget.Http, ScalarClient.Http11);
-        opt.HideModels = true;
-        opt.ShowSidebar = true;
-        opt.CustomCss = @"
-            /* Hide Share and Generate SDK buttons - even on localhost */
-            button:has-text('Generate SDKs'),
-            button:has-text('Share'),
-            [data-testid='share-button'],
-            [data-testid='generate-sdk-button'],
-            button[title*='Share'],
-            button[title*='SDK'],
-            button[aria-label*='Generate'],
-            button[aria-label*='Share'],
-            .scalar-card-button,
-            .scalar-api-client-button {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-            }
-            /* Additional selector to target sidebar items */
-            [class*='generate'] button,
-            [class*='share'] button {
-                display: none !important;
-            }
-            /* Hide OpenAPI Client sidebar button */
-            button[class*='sidebar']:has-text('Client'),
-            [class*='sidebar'] button:has-text('Client'),
-            [class*='sidebar'] [class*='client'],
-            nav button[aria-label*='Client'],
-            aside button[aria-label*='Client'],
-            .sidebar-button,
-            button[data-sidebar-trigger] {
-                display: none !important;
-                visibility: hidden !important;
-            }
-        ";
-    }
-);
+    ConfigureSwaggerUI(app);
 }
 
+// ============================================================================
+// ROUTING & CORS
+// ============================================================================
 app.UseRouting();
-
-// Allow SPA origin to send credentials (cookies) during local development
 app.UseCors("AllowSpa");
 
-// Authentication must run before IdentityServer so its endpoints can see the
-// authenticated user (cookie) and avoid redirecting to login unnecessarily.
+// ============================================================================
+// AUTHENTICATION & AUTHORIZATION
+// ============================================================================
 app.UseAuthentication();
-
-// IdentityServer middleware exposes the OIDC endpoints (discovery, authorize, token...)
 app.UseIdentityServer();
-
 app.UseAuthorization();
 
+// ============================================================================
+// HEALTH CHECK ENDPOINTS
+// ============================================================================
+ConfigureHealthCheckEndpoints(app);
 
-// Health Check Endpoints
-app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = _ => false, // Aucune vérification, juste "l'app répond"
-    ResponseWriter = async (context, report) =>
-    {
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsync(
-            System.Text.Json.JsonSerializer.Serialize(new
-            {
-                status = "Healthy",
-                timestamp = DateTime.UtcNow,
-                description = "Application is alive"
-            }));
-    }
-});
-
-app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = check => check.Tags.Contains("ready"), // Vérifie DB + IdentityServer
-    ResponseWriter = async (context, report) =>
-    {
-        context.Response.ContentType = "application/json";
-        var result = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            status = report.Status.ToString(),
-            timestamp = DateTime.UtcNow,
-            duration = report.TotalDuration,
-            checks = report.Entries.Select(e => new
-            {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                duration = e.Value.Duration,
-                description = e.Value.Description,
-                exception = e.Value.Exception?.Message
-            })
-        });
-        await context.Response.WriteAsync(result);
-    }
-});
-
-app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    ResponseWriter = async (context, report) =>
-    {
-        context.Response.ContentType = "application/json";
-        var result = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            status = report.Status.ToString(),
-            timestamp = DateTime.UtcNow,
-            version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
-        });
-        await context.Response.WriteAsync(result);
-    }
-});
-
-// Top-level route registrations (recommended)
+// ============================================================================
+// CONTROLLER ENDPOINTS
+// ============================================================================
 app.MapControllers();
 app.MapDefaultControllerRoute();
 
 
-
+// ============================================================================
+// APPLICATION STARTUP
+// ============================================================================
 try
 {
     Log.Information("Starting Johodp Identity Provider application");
@@ -264,4 +118,221 @@ finally
 {
     Log.Information("Shutting down Johodp Identity Provider");
     Log.CloseAndFlush();
+}
+
+// ============================================================================
+// LOCAL FUNCTIONS (Configuration Helpers)
+// ============================================================================
+
+static void ConfigureLogging(WebApplicationBuilder builder)
+{
+    // Bootstrap logger for startup
+    Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.Information()
+        .MinimumLevel.Override("Microsoft.AspNetCore", Serilog.Events.LogEventLevel.Warning)
+        .MinimumLevel.Override("Microsoft.EntityFrameworkCore", Serilog.Events.LogEventLevel.Warning)
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "Johodp")
+        .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
+        .CreateLogger();
+
+    builder.Services.AddHttpContextAccessor();
+    
+    // Configure Serilog with tenant/client enrichment
+    builder.Host.UseSerilog((ctx, services, cfg) =>
+    {
+        cfg.ReadFrom.Configuration(ctx.Configuration)
+           .MinimumLevel.Information()
+           .Enrich.FromLogContext()
+           .Enrich.WithProperty("Application", "Johodp")
+           .Enrich.With(new Johodp.Api.Logging.TenantClientEnricher(services.GetRequiredService<IHttpContextAccessor>()))
+           .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}] {TenantId} {ClientId} [{SourceContext}] {Message:lj}{NewLine}{Exception}");
+    });
+}
+
+static void ConfigureAuthentication(IServiceCollection services)
+{
+    services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = "Identity.Application";
+        options.DefaultSignInScheme = "Identity.Application";
+        options.DefaultChallengeScheme = "Identity.Application";
+    })
+    .AddCookie("Identity.Application", options =>
+    {
+        options.LoginPath = "/account/login";
+        options.LogoutPath = "/account/logout";
+        options.AccessDeniedPath = "/account/accessdenied";
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+        options.Cookie.Name = ".AspNetCore.Identity.Application";
+        options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+    })
+    .AddCookie("Cookies", options =>
+    {
+        options.LoginPath = "/account/login";
+        options.LogoutPath = "/account/logout";
+        options.AccessDeniedPath = "/account/accessdenied";
+        options.ExpireTimeSpan = TimeSpan.FromDays(7);
+        options.SlidingExpiration = true;
+    });
+}
+
+static void ApplyDatabaseMigrations(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    try
+    {
+        // Apply JohodpDbContext migrations
+        var johodpDb = scope.ServiceProvider.GetRequiredService<Johodp.Infrastructure.Persistence.DbContext.JohodpDbContext>();
+        logger.LogInformation("Applying JohodpDbContext migrations...");
+        johodpDb.Database.Migrate();
+        logger.LogInformation("✅ JohodpDbContext migrations applied successfully");
+        
+        // Apply PersistedGrantDbContext migrations (IdentityServer)
+        var persistedGrantDb = scope.ServiceProvider.GetRequiredService<Duende.IdentityServer.EntityFramework.DbContexts.PersistedGrantDbContext>();
+        logger.LogInformation("Applying PersistedGrantDbContext migrations...");
+        persistedGrantDb.Database.Migrate();
+        logger.LogInformation("✅ PersistedGrantDbContext migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "❌ An error occurred while migrating the database");
+        throw;
+    }
+}
+
+static void ConfigureMiddlewarePipeline(WebApplication app)
+{
+    // Request logging for monitoring
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+            diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
+            if (httpContext.User?.Identity?.IsAuthenticated == true)
+            {
+                diagnosticContext.Set("UserEmail", httpContext.User.FindFirst("email")?.Value);
+                diagnosticContext.Set("UserId", httpContext.User.FindFirst("sub")?.Value);
+            }
+        };
+    });
+
+    // Global exception handler
+    app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
+    // HTTPS redirection
+    app.UseHttpsRedirection();
+}
+
+static void ConfigureSwaggerUI(WebApplication app)
+{
+    app.UseSwagger(opt => opt.RouteTemplate = "openapi/{documentName}.json");
+    app.MapScalarApiReference(opt =>
+    {
+        opt.Title = "Johodp Identity Provider API";
+        opt.Theme = ScalarTheme.BluePlanet;
+        opt.DefaultHttpClient = new(ScalarTarget.Http, ScalarClient.Http11);
+        opt.HideModels = true;
+        opt.ShowSidebar = true;
+        opt.CustomCss = @"
+            /* Hide Share and Generate SDK buttons */
+            button:has-text('Generate SDKs'),
+            button:has-text('Share'),
+            [data-testid='share-button'],
+            [data-testid='generate-sdk-button'],
+            button[title*='Share'],
+            button[title*='SDK'],
+            button[aria-label*='Generate'],
+            button[aria-label*='Share'],
+            .scalar-card-button,
+            .scalar-api-client-button {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+            }
+            [class*='generate'] button,
+            [class*='share'] button {
+                display: none !important;
+            }
+            button[class*='sidebar']:has-text('Client'),
+            [class*='sidebar'] button:has-text('Client'),
+            [class*='sidebar'] [class*='client'],
+            nav button[aria-label*='Client'],
+            aside button[aria-label*='Client'],
+            .sidebar-button,
+            button[data-sidebar-trigger] {
+                display: none !important;
+                visibility: hidden !important;
+            }
+        ";
+    });
+}
+
+static void ConfigureHealthCheckEndpoints(WebApplication app)
+{
+    // Liveness probe - just checks if the app is running
+    app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = _ => false,
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync(
+                System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    status = "Healthy",
+                    timestamp = DateTime.UtcNow,
+                    description = "Application is alive"
+                }));
+        }
+    });
+
+    // Readiness probe - checks database and IdentityServer
+    app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+            var result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = report.Status.ToString(),
+                timestamp = DateTime.UtcNow,
+                duration = report.TotalDuration,
+                checks = report.Entries.Select(e => new
+                {
+                    name = e.Key,
+                    status = e.Value.Status.ToString(),
+                    duration = e.Value.Duration,
+                    description = e.Value.Description,
+                    exception = e.Value.Exception?.Message
+                })
+            });
+            await context.Response.WriteAsync(result);
+        }
+    });
+
+    // General health endpoint
+    app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+    {
+        ResponseWriter = async (context, report) =>
+        {
+            context.Response.ContentType = "application/json";
+            var result = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                status = report.Status.ToString(),
+                timestamp = DateTime.UtcNow,
+                version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+            });
+            await context.Response.WriteAsync(result);
+        }
+    });
 }

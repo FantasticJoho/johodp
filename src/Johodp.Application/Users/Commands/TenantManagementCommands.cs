@@ -2,11 +2,14 @@ namespace Johodp.Application.Users.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Tenants.ValueObjects;
 
 public class AddUserToTenantCommand
 {
     public Guid UserId { get; set; }
-    public string TenantId { get; set; } = string.Empty;
+    public TenantId TenantId { get; set; } = null!;
+    public string Role { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
 }
 
 public class AddUserToTenantCommandHandler
@@ -36,13 +39,13 @@ public class AddUserToTenantCommandHandler
         }
 
         // Verify tenant exists
-        var tenant = await _tenantRepository.GetByNameAsync(command.TenantId);
+        var tenant = await _tenantRepository.GetByIdAsync(command.TenantId);
         if (tenant == null)
         {
-            throw new InvalidOperationException($"Tenant '{command.TenantId}' not found");
+            throw new InvalidOperationException($"Tenant with ID '{command.TenantId.Value}' not found");
         }
 
-        user.AddTenant(command.TenantId);
+        user.AddTenant(command.TenantId, command.Role, command.Scope);
         await _userRepository.UpdateAsync(user);
         await _unitOfWork.SaveChangesAsync();
     }
@@ -51,7 +54,7 @@ public class AddUserToTenantCommandHandler
 public class RemoveUserFromTenantCommand
 {
     public Guid UserId { get; set; }
-    public string TenantId { get; set; } = string.Empty;
+    public TenantId TenantId { get; set; } = null!;
 }
 
 public class RemoveUserFromTenantCommandHandler

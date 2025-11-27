@@ -19,7 +19,7 @@ public interface IUserActivationService
         string email,
         string firstName,
         string lastName,
-        string? tenantId = null);
+        Guid? tenantId = null);
 
     /// <summary>
     /// Active un compte utilisateur avec le token fourni
