@@ -58,9 +58,19 @@ public class Tenant : AggregateRoot
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Tenant name cannot be empty", nameof(name));
+        
+        if (name.Length > 100)
+            throw new ArgumentException("Tenant name cannot exceed 100 characters", nameof(name));
+        
+        // Validate tenant name format (lowercase alphanumeric and hyphens only)
+        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-z0-9-]+$"))
+            throw new ArgumentException("Tenant name must contain only lowercase letters, numbers, and hyphens", nameof(name));
 
         if (string.IsNullOrWhiteSpace(displayName))
             throw new ArgumentException("Display name cannot be empty", nameof(displayName));
+        
+        if (displayName.Length > 200)
+            throw new ArgumentException("Display name cannot exceed 200 characters", nameof(displayName));
 
         var tenant = new Tenant
         {

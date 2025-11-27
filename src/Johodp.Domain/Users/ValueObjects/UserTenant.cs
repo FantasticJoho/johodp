@@ -1,12 +1,14 @@
-namespace Johodp.Domain.Users.Entities;
+namespace Johodp.Domain.Users.ValueObjects;
 
-using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Common;
 using Johodp.Domain.Tenants.ValueObjects;
 
 /// <summary>
-/// Represents the relationship between a User and a Tenant with tenant-specific role and scope
+/// Value Object representing the relationship between a User and a Tenant with tenant-specific role and scope.
+/// Identity is determined by the combination of (UserId, TenantId).
+/// Role and Scope are free-form strings provided by external applications (not references to Role/Scope aggregates).
 /// </summary>
-public class UserTenant
+public class UserTenant : ValueObject
 {
     public UserId UserId { get; private set; }
     public TenantId TenantId { get; private set; }
@@ -75,5 +77,12 @@ public class UserTenant
     {
         UpdateRole(role);
         UpdateScope(scope);
+    }
+
+    protected override IEnumerable<object?> GetEqualityComponents()
+    {
+        yield return UserId;
+        yield return TenantId;
+        // Role and Scope are NOT part of equality - same user+tenant = same identity
     }
 }

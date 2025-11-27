@@ -52,20 +52,10 @@ public class Client : AggregateRoot
     }
 
     /// <summary>
-    /// Calcule les returnUrls autorisées en agrégeant celles de tous les tenants associés
+    /// Returns the tenant IDs associated with this client.
+    /// Redirect URIs aggregation should be done by a Domain Service or Application Service.
     /// </summary>
-    public string[] GetAllowedRedirectUris(Func<string, string[]> getTenantReturnUrls)
-    {
-        var allUrls = _associatedTenantIds
-            .SelectMany(getTenantReturnUrls)
-            .Distinct()
-            .ToArray();
-
-        if (allUrls.Length == 0)
-            throw new InvalidOperationException($"Client {ClientName} has no redirect URIs from associated tenants");
-
-        return allUrls;
-    }
+    public bool HasAssociatedTenants() => _associatedTenantIds.Count > 0;
 
     public void AssociateTenant(string tenantId)
     {

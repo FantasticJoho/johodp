@@ -69,6 +69,9 @@ public class DomainEventProcessor : BackgroundService
 
         foreach (var handler in handlers)
         {
+            if (handler == null)
+                continue;
+
             try
             {
                 var handleMethod = handlerType.GetMethod(nameof(IEventHandler<DomainEvent>.HandleAsync));

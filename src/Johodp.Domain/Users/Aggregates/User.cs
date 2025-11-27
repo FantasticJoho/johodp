@@ -3,7 +3,6 @@ namespace Johodp.Domain.Users.Aggregates;
 using Common;
 using Events;
 using ValueObjects;
-using Entities;
 using Johodp.Domain.Tenants.ValueObjects;
 
 public class UserStatus : Enumeration
@@ -59,12 +58,24 @@ public class User : AggregateRoot
 
     public static User Create(string email, string firstName, string lastName, TenantId? tenantId = null, bool createAsPending = false)
     {
+        if (string.IsNullOrWhiteSpace(firstName))
+            throw new ArgumentException("First name cannot be empty", nameof(firstName));
+        
+        if (firstName.Length > 50)
+            throw new ArgumentException("First name cannot exceed 50 characters", nameof(firstName));
+        
+        if (string.IsNullOrWhiteSpace(lastName))
+            throw new ArgumentException("Last name cannot be empty", nameof(lastName));
+        
+        if (lastName.Length > 50)
+            throw new ArgumentException("Last name cannot exceed 50 characters", nameof(lastName));
+
         var user = new User
         {
             Id = UserId.Create(),
             Email = Email.Create(email),
-            FirstName = firstName,
-            LastName = lastName,
+            FirstName = firstName.Trim(),
+            LastName = lastName.Trim(),
             EmailConfirmed = createAsPending ? false : false,
             Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow

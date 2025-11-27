@@ -2,7 +2,6 @@ namespace Johodp.Infrastructure.Persistence.Configurations;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Johodp.Domain.Users.Entities;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Domain.Tenants.ValueObjects;
 

@@ -2,7 +2,7 @@ namespace Johodp.Infrastructure.Persistence.DbContext;
 
 using Microsoft.EntityFrameworkCore;
 using Johodp.Domain.Users.Aggregates;
-using Johodp.Domain.Users.Entities;
+using Johodp.Domain.Users.ValueObjects;
 using Johodp.Domain.Clients.Aggregates;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Infrastructure.Persistence.Configurations;

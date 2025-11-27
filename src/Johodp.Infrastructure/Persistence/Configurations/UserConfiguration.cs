@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
-using Johodp.Domain.Users.Entities;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.Tenants.ValueObjects;
 
