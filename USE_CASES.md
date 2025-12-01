@@ -8,7 +8,7 @@ Johodp est un Identity Provider multi-tenant basé sur OAuth2/OIDC, conçu pour 
 
 # CHAPITRE 0 : CONCEPTS FONDAMENTAUX
 
-## 🏗️ Modèle de Données : Clients, Tenants et Utilisateurs
+## 🏗️ Modèle de Données : Clients, Tenants, CustomConfigurations et Utilisateurs
 
 ### Qu'est-ce qu'un **Client** ?
 
@@ -21,7 +21,7 @@ Un **Client** représente une **application tierce** qui souhaite utiliser Johod
 - Définit les règles OAuth2 : `RequirePkce`, `RequireClientSecret`, `RequireConsent`
 
 **Métaphore :**
-> Un Client est comme une **entreprise** qui possède un ou plusieurs magasins (tenants). L'entreprise a une identité unique, mais chaque magasin a sa propre adresse et sa propre décoration.
+> Un Client est comme une **entreprise** qui possède un ou plusieurs magasins (tenants). L'entreprise a une identité unique, mais chaque magasin a sa propre adresse et peut choisir sa décoration parmi un catalogue partagé (CustomConfigurations).
 
 **Exemples concrets :**
 - Une application ERP d'entreprise
@@ -43,48 +43,111 @@ Un **Client** représente une **application tierce** qui souhaite utiliser Johod
 
 ---
 
+### Qu'est-ce qu'une **CustomConfiguration** ?
+
+Une **CustomConfiguration** représente une **configuration de branding et de localisation partageable** entre plusieurs tenants. Elle est **complètement indépendante** des Clients et permet de mutualiser des configurations visuelles et linguistiques.
+
+**Caractéristiques techniques :**
+- Identifiée par un `CustomConfigurationId` (GUID) et un `Name` (unique, ex: "corporate-blue")
+- **Indépendante** : n'appartient à aucun Client spécifique
+- **Partageable** : peut être utilisée par plusieurs Tenants (même de Clients différents)
+- Configure le **Branding** :
+  - `PrimaryColor`, `SecondaryColor` (couleurs de la charte graphique)
+  - `LogoUrl` (URL du logo affiché sur les pages d'authentification)
+  - `BackgroundImageUrl` (image de fond personnalisée)
+  - `CustomCss` (CSS personnalisé pour un contrôle total de l'apparence)
+- Configure les **Langues** :
+  - `SupportedLanguages` (liste des langues disponibles, ex: ["fr-FR", "en-US"])
+  - `DefaultLanguage` (langue par défaut, obligatoire)
+- Possède un statut `IsActive` (permet de désactiver temporairement)
+- Horodatée : `CreatedAt`, `UpdatedAt`
+
+**Métaphore :**
+> Une CustomConfiguration est comme un **catalogue de décoration** dans un centre commercial. Plusieurs magasins (Tenants) peuvent choisir le même thème visuel (configuration), et ce catalogue existe indépendamment des entreprises (Clients) qui l'utilisent.
+
+**Exemples concrets :**
+- **Configuration "Corporate Professional"** :
+  - Couleurs : Bleu foncé (#003366) + Gris (#6c757d)
+  - Langues : Français, Anglais
+  - Utilisée par : Tenants de plusieurs applications d'entreprise
+
+- **Configuration "Startup Modern"** :
+  - Couleurs : Orange vif (#ff6b35) + Blanc
+  - CSS custom : Animations modernes, fonts Google
+  - Utilisée par : Plusieurs startups SaaS partageant la même identité visuelle
+
+- **Configuration "Banking Secure"** :
+  - Couleurs : Vert (#28a745) + Or (#ffc107)
+  - Logo : Logo bancaire officiel
+  - Utilisée par : Différents portails bancaires d'une même institution
+
+**Cycle de vie :**
+1. Une application tierce crée une CustomConfiguration via l'API : `POST /api/custom-configurations`
+2. Elle configure le branding (couleurs, logo, CSS) et les langues supportées
+3. La CustomConfiguration est créée avec `IsActive = true`
+4. Elle peut être référencée par **n'importe quel Tenant** (même d'un autre Client)
+5. Les Tenants utilisant cette configuration affichent automatiquement le branding configuré
+6. La configuration peut être mise à jour (`PUT /api/custom-configurations/{id}`)
+7. Les changements sont appliqués instantanément à tous les Tenants qui l'utilisent
+
+**Règles importantes :**
+- ✅ Une CustomConfiguration est **indépendante** (pas de ClientId)
+- ✅ Une CustomConfiguration peut être **partagée** par plusieurs Tenants (relation 1-to-many)
+- ✅ Le `Name` doit être **unique** dans tout le système
+- ✅ Le `DefaultLanguage` est **obligatoire** (validation stricte)
+- ✅ Les `SupportedLanguages` doivent **inclure** le `DefaultLanguage`
+- ✅ Une CustomConfiguration peut exister **sans être utilisée** par aucun Tenant
+- ✅ La suppression d'une CustomConfiguration **échoue** si elle est référencée par des Tenants actifs
+
+---
+
 ### Qu'est-ce qu'un **Tenant** ?
 
 Un **Tenant** représente un **espace isolé** au sein d'un Client. Il permet à l'application tierce de gérer plusieurs clients finaux (B2B), environnements (prod/staging) ou marques (white-label) de manière indépendante.
 
 **Caractéristiques techniques :**
 - Identifié par un `TenantId` (GUID) et un `Name` (ex: "acme-corp-example-com", dérivé de l'URL)
-- Associé à **un seul Client** (relation many-to-1)
+- Associé à **un seul Client** (relation many-to-1 via `ClientName`)
+- **Référence obligatoirement une CustomConfiguration** via `CustomConfigurationId` (relation many-to-1)
 - Configure les **redirect URIs** (`AllowedReturnUrls`) : où l'utilisateur est renvoyé après authentification
 - Configure les **CORS origins** (`AllowedCorsOrigins`) : quels domaines peuvent appeler l'API
-- Stocke le **branding** (logo, couleurs, CSS custom)
-- Stocke les **paramètres régionaux** (langue, timezone, devise)
 - Configure un **endpoint de vérification utilisateur** (webhook) pour valider les inscriptions
+- Configure la **localisation** : `Timezone`, `Currency`, `DateFormat`, `TimeFormat`
 
 **Métaphore :**
-> Un Tenant est comme un **magasin** dans une chaîne. Chaque magasin a sa propre adresse (URL), sa décoration (branding), ses horaires (timezone), et son système de validation d'entrée (webhook).
+> Un Tenant est comme un **magasin** dans une chaîne. Chaque magasin a sa propre adresse (URL), choisit sa décoration dans un catalogue (CustomConfiguration), son fuseau horaire (localisation), et son système de validation d'entrée (webhook).
 
 **Exemples concrets :**
 - **Client = SaaS CRM :**
-  - Tenant 1 : `acme-corp` → Client final ACME Corporation
-  - Tenant 2 : `globex-inc` → Client final Globex Inc
+  - Tenant 1 : `acme-corp` → Client final ACME Corporation, CustomConfiguration "Corporate Professional"
+  - Tenant 2 : `globex-inc` → Client final Globex Inc, CustomConfiguration "Startup Modern"
 - **Client = Application Entreprise :**
-  - Tenant 1 : `production` → Environnement de production
-  - Tenant 2 : `staging` → Environnement de test
+  - Tenant 1 : `production` → Environnement de production, CustomConfiguration "Banking Secure"
+  - Tenant 2 : `staging` → Environnement de test, CustomConfiguration "Banking Secure" (partagée)
 - **Client = Plateforme White-Label :**
-  - Tenant 1 : `brand-a` → Marque A avec logo rouge
-  - Tenant 2 : `brand-b` → Marque B avec logo bleu
+  - Tenant 1 : `brand-a` → Marque A, CustomConfiguration personnalisée "Brand A Style"
+  - Tenant 2 : `brand-b` → Marque B, CustomConfiguration personnalisée "Brand B Style"
 
 **Cycle de vie :**
-1. L'application tierce crée un Tenant via l'API : `POST /api/tenant`
-2. Elle fournit les redirect URIs, CORS origins, branding, localisation et webhook
-3. Le Tenant est automatiquement associé au Client
-4. Le Client devient **visible pour IdentityServer** (agrégation des redirect URIs)
-5. Les utilisateurs peuvent maintenant s'authentifier via ce Tenant
+1. L'application tierce crée d'abord une CustomConfiguration (ou réutilise une existante)
+2. Elle crée ensuite un Tenant via l'API : `POST /api/tenant`
+3. Elle fournit les redirect URIs, CORS origins, CustomConfigurationId, localisation et webhook
+4. Le Tenant est automatiquement associé au Client (via ClientName)
+5. Le Tenant référence la CustomConfiguration (via CustomConfigurationId - **obligatoire**)
+6. Le Client devient **visible pour IdentityServer** (agrégation des redirect URIs)
+7. Les utilisateurs peuvent maintenant s'authentifier via ce Tenant avec le branding de la CustomConfiguration
 
 **Règles importantes :**
 - ✅ Un Tenant appartient à **un seul Client** (pas de partage entre Clients)
+- ✅ Un Tenant **doit référencer** une CustomConfiguration (relation obligatoire)
+- ✅ Plusieurs Tenants peuvent **partager** la même CustomConfiguration (mutualisation)
 - ✅ Un Tenant doit avoir **au moins une redirect URI** (sinon non opérationnel)
 - ✅ Les CORS origins sont des **URIs d'autorité uniquement** (pas de path) :
   - ✅ Valide : `http://localhost:4200`, `https://app.acme.com`
   - ❌ Invalide : `http://localhost:4200/callback`
 - ✅ Le `Name` du Tenant est **dérivé de l'URL** (ex: `https://acme.com` → `acme-com`)
 - ✅ Le **webhook** est appelé à chaque demande d'inscription (validation métier)
+- ✅ La **localisation** (timezone, currency, formats) est spécifique au Tenant (pas dans CustomConfiguration)
 
 **Format `acr_values` :**
 Lors de l'authentification, le Tenant est identifié par le paramètre `acr_values` :
@@ -177,43 +240,55 @@ Un **Utilisateur** représente une **personne physique** qui peut s'authentifier
 ## 🔗 Relations entre Entités
 
 ```
-┌─────────────────┐
-│     Client      │ (Application Tierce)
-│  - ClientId     │ Exemple: "my-erp-app"
-│  - ClientName   │
-│  - ClientSecret │
-└────────┬────────┘
-         │
-         │ 1-to-many
-         │
-         ▼
-┌─────────────────┐
-│     Tenant      │ (Espace Isolé)
-│  - TenantId     │ Exemple: "acme-corp"
-│  - Name         │
-│  - RedirectURIs │
-│  - CORS Origins │
-│  - Branding     │
-│  - Webhook      │
-└────────┬────────┘
-         │
-         │ many-to-many
-         │ (via UserTenant)
-         ▼
-┌─────────────────┐         ┌──────────────────┐
-│   UserTenant    │◄────────│      User        │ (Personne)
-│  - UserId       │         │  - UserId        │ Exemple: "john@acme.com"
-│  - TenantId     │         │  - Email         │
-│  - Role         │         │  - FirstName     │
-│  - Scope        │         │  - Status        │
-│  - CreatedAt    │         │  - PasswordHash  │
-└─────────────────┘         └──────────────────┘
+┌──────────────────────┐
+│       Client         │ (Application Tierce)
+│  - ClientId          │ Exemple: "my-erp-app"
+│  - ClientName        │
+│  - ClientSecret      │
+└──────┬───────────────┘
+       │
+       │ 1-to-many
+       │
+       ▼
+┌──────────────────────┐       ┌──────────────────────┐
+│        Tenant        │──────►│  CustomConfiguration │
+│  - TenantId          │ N:1   │  - ConfigId          │
+│  - Name              │       │  - Name (unique)     │
+│  - ClientName (FK)   │       │  - Branding          │
+│  - CustomConfigId(FK)│       │  - Languages         │
+│  - RedirectURIs      │       │  - IsActive          │
+│  - CORS Origins      │       └──────────────────────┘
+│  - Webhook           │                ▲
+│  - Localization      │                │
+└──────────┬───────────┘                │
+           │                            │
+           │ many-to-many               │ Plusieurs Tenants
+           │ (via UserTenant)           │ peuvent partager
+           │                            │ la même config
+           ▼
+   ┌───────────────────┐         ┌──────────────────┐
+   │   UserTenant      │◄────────│      User        │ (Personne)
+   │  - UserId         │         │  - UserId        │ Exemple: "john@acme.com"
+   │  - TenantId       │         │  - Email         │
+   │  - Role           │         │  - FirstName     │
+   │  - Scope          │         │  - Status        │
+   │  - CreatedAt      │         │  - PasswordHash  │
+   └───────────────────┘         └──────────────────┘
 ```
 
-**Résumé :**
-- **1 Client** → **N Tenants** (un client peut avoir plusieurs espaces)
-- **1 Tenant** → **1 Client** (un espace appartient à un seul client)
+**Relations clés :**
+- **1 Client** → **N Tenants** (un client possède plusieurs tenants)
+- **1 CustomConfiguration** → **N Tenants** (une configuration peut être utilisée par plusieurs tenants)
+- **1 Tenant** → **1 Client** (un tenant appartient à un seul client via ClientName)
+- **1 Tenant** → **1 CustomConfiguration** (chaque tenant doit avoir une configuration - **obligatoire**)
 - **N Users** → **M Tenants** (many-to-many via UserTenant avec Role + Scope)
+- **CustomConfiguration est indépendante** (pas de propriétaire Client)
+
+**Flux de données :**
+1. Une **CustomConfiguration** est créée de manière **indépendante** (n'appartient à aucun Client)
+2. Un **Client** crée un **Tenant** et **doit** lui associer une **CustomConfiguration** existante (obligatoire)
+3. Plusieurs **Tenants** (même de Clients différents) peuvent référencer la même **CustomConfiguration** (mutualisation)
+4. Des **Users** sont associés à des **Tenants** via **UserTenant** avec role/scope spécifiques
 
 ---
 
@@ -221,13 +296,21 @@ Un **Utilisateur** représente une **personne physique** qui peut s'authentifier
 
 ### Séparation des Responsabilités
 - **Client** = Configuration OAuth2 globale (scopes, PKCE, secrets)
-- **Tenant** = Configuration contextuelle (URLs, branding, webhooks)
+- **CustomConfiguration** = Configuration visuelle et linguistique réutilisable (branding + langues)
+- **Tenant** = Configuration contextuelle (URLs, webhook, localisation) + référence à une CustomConfiguration
 - **User** = Identité avec accès multi-tenant + rôles/périmètres
 
 ### Flexibilité
-- Une application peut avoir plusieurs environnements (prod/staging) → 1 Client, 2 Tenants
-- Une plateforme B2B peut gérer plusieurs clients finaux → 1 Client, N Tenants
+- Une application peut avoir plusieurs environnements (prod/staging) → 1 Client, 2 Tenants, 1 CustomConfiguration partagée
+- Une plateforme B2B peut gérer plusieurs clients finaux → 1 Client, N Tenants, chacun avec sa propre CustomConfiguration ou partagée
 - Un utilisateur peut travailler pour plusieurs clients → 1 User, M Tenants
+- **Plusieurs applications peuvent partager le même branding** → N Clients, M Tenants, 1 CustomConfiguration partagée
+
+### Réutilisabilité
+- **CustomConfiguration indépendante** : Peut être créée une fois et réutilisée par plusieurs Tenants
+- **Mutualisation du branding** : Plusieurs Tenants (même de Clients différents) peuvent partager la même charte graphique
+- **Gestion centralisée** : Modifier une CustomConfiguration met à jour instantanément tous les Tenants qui l'utilisent
+- **Catalogue de configurations** : Possibilité de créer un catalogue de CustomConfigurations prédéfinies
 
 ### Sécurité
 - Les redirect URIs sont validées par Tenant (isolation)
@@ -269,23 +352,47 @@ L'application tierce doit pouvoir créer et gérer ses propres configurations OA
 ### Besoin 2 : Permettre à une application tierce de gérer ses espaces clients (tenants)
 
 **Contexte:**
-Une application tierce peut avoir plusieurs clients finaux (B2B) ou plusieurs environnements qui nécessitent des configurations différentes (branding, URLs, règles métier).
+Une application tierce peut avoir plusieurs clients finaux (B2B) ou plusieurs environnements qui nécessitent des configurations différentes (URLs, règles métier, localisation).
 
 **Besoin:**
 L'application tierce doit pouvoir créer des espaces isolés (tenants) pour chacun de ses clients finaux, avec :
 - Des URLs de redirection spécifiques
-- Un branding personnalisé (logo, couleurs)
-- Des paramètres de localisation (langue, timezone, devise)
+- Une référence à une configuration de branding partageable (CustomConfiguration)
+- Des paramètres de localisation (timezone, devise, formats de date/heure)
 
 **Solution:**
 - L'application tierce crée d'abord un client OAuth2 (Besoin 1)
-- Elle crée ensuite un ou plusieurs tenants associés à ce client
-- Chaque tenant a ses propres configurations visuelles et techniques
+- Elle crée ou réutilise une CustomConfiguration pour le branding et les langues
+- Elle crée ensuite un ou plusieurs tenants associés à ce client et à une CustomConfiguration
+- Chaque tenant a ses propres configurations techniques (URLs) et de localisation
 
 **Bénéfices:**
 - Isolation des clients finaux (white-label)
-- Personnalisation de l'expérience utilisateur
+- Mutualisation du branding entre plusieurs tenants
 - Gestion multi-environnement facilitée
+- Localisation spécifique par tenant
+
+---
+
+### Besoin 2bis : Mutualiser les configurations visuelles entre tenants
+
+**Contexte:**
+Plusieurs tenants (même de clients différents) peuvent vouloir partager la même charte graphique pour réduire les coûts de maintenance et garantir une cohérence visuelle.
+
+**Besoin:**
+L'application tierce doit pouvoir créer des configurations de branding réutilisables (CustomConfiguration) qui peuvent être partagées entre plusieurs tenants.
+
+**Solution:**
+- L'application tierce crée une CustomConfiguration indépendante via l'API : `POST /api/custom-configurations`
+- Elle configure le branding (logo, couleurs, CSS) et les langues supportées
+- Plusieurs tenants peuvent référencer la même CustomConfiguration
+- Les modifications de la CustomConfiguration sont automatiquement appliquées à tous les tenants qui l'utilisent
+
+**Bénéfices:**
+- Réduction des coûts de maintenance (une seule configuration à mettre à jour)
+- Cohérence visuelle garantie entre plusieurs tenants
+- Possibilité de créer un catalogue de configurations prédéfinies
+- Flexibilité : chaque tenant peut aussi avoir sa propre CustomConfiguration unique
 
 ---
 
@@ -568,6 +675,63 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 ---
 
+### UC-01bis: Création d'une CustomConfiguration
+
+**Acteur Principal:** Application tierce (authentifiée via client credentials)
+
+**Préconditions:**
+- L'application tierce a un access_token valide avec le scope "johodp.admin" (UC-00 complété)
+- Un nom unique est disponible pour la CustomConfiguration
+
+**Scénario Principal:**
+1. L'application tierce envoie une requête POST `/api/custom-configurations` avec:
+   ```http
+   Authorization: Bearer <access_token>
+   Content-Type: application/json
+   
+   {
+     "name": "corporate-professional",
+     "description": "Configuration pour applications d'entreprise professionnelles",
+     "defaultLanguage": "fr-FR",
+     "branding": {
+       "primaryColor": "#003366",
+       "secondaryColor": "#6c757d",
+       "logoUrl": "https://cdn.example.com/logos/corporate.png",
+       "backgroundImageUrl": "https://cdn.example.com/backgrounds/office.jpg",
+       "customCss": ":root { --border-radius: 8px; }"
+     },
+     "languages": {
+       "supportedLanguages": ["fr-FR", "en-US", "de-DE"],
+       "defaultLanguage": "fr-FR"
+     }
+   }
+   ```
+2. Johodp valide l'access_token (signature, expiration, scope "johodp.admin")
+3. Le système vérifie que le nom est unique
+4. Le système crée l'agrégat `CustomConfiguration` avec:
+   - `Name` (unique, identifiant lisible)
+   - `Description` (optionnelle)
+   - `Branding` (couleurs, logo, image de fond, CSS custom)
+   - `Languages` (langues supportées + langue par défaut)
+   - `IsActive = true`
+5. Le système persiste la configuration
+6. Le système retourne le `CustomConfigurationDto` avec un `CustomConfigurationId` (GUID)
+
+**Règles de Gestion:**
+- RG-CUSTOMCONFIG-01: L'access_token DOIT avoir le scope "johodp.admin"
+- RG-CUSTOMCONFIG-02: Le `Name` doit être unique dans le système
+- RG-CUSTOMCONFIG-03: Le `DefaultLanguage` est obligatoire et doit être dans `SupportedLanguages`
+- RG-CUSTOMCONFIG-04: Une CustomConfiguration peut être créée sans être immédiatement utilisée
+- RG-CUSTOMCONFIG-05: La CustomConfiguration est **indépendante** (pas de ClientId)
+- RG-CUSTOMCONFIG-06: L'action est tracée avec le client_id appelant (audit trail)
+
+**Postconditions:**
+- Une CustomConfiguration est créée et active
+- Elle peut être référencée par n'importe quel Tenant
+- Elle peut être partagée entre plusieurs Tenants (même de Clients différents)
+
+---
+
 ### UC-02: Création d'un Tenant par l'Application Tierce
 
 **Acteur Principal:** Application tierce (authentifiée via client credentials)
@@ -575,6 +739,7 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 **Préconditions:**
 - L'application tierce a un access_token valide avec le scope "johodp.admin" (UC-00)
 - Un client existe déjà (UC-01 complété)
+- Une CustomConfiguration existe déjà (UC-01bis complété) OU sera créée avant
 - Le ClientName du client est connu
 - L'application tierce a configuré un endpoint de vérification utilisateur (webhook)
 
@@ -588,56 +753,61 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
      "name": "acme-corp-example-com",
      "tenantUrl": "https://acme-corp.example.com",
      "displayName": "ACME Corporation",
-     "clientId": "my-app",
+     "clientName": "my-app",
+     "customConfigurationId": "guid-of-custom-config",
      "allowedReturnUrls": ["http://localhost:4200/callback"],
      "allowedCorsOrigins": ["http://localhost:4200"],
      "userVerificationEndpoint": "https://api.acme.com/webhooks/johodp/verify-user",
-     "branding": {
-       "primaryColor": "#007bff",
-       "secondaryColor": "#6c757d",
-       "logoUrl": "https://acme.com/logo.png"
-     },
      "localization": {
-       "defaultLanguage": "fr-FR",
        "timezone": "Europe/Paris",
-       "currency": "EUR"
+       "currency": "EUR",
+       "dateFormat": "dd/MM/yyyy",
+       "timeFormat": "HH:mm"
      }
    }
    ```
 2. Johodp valide l'access_token (signature, expiration, scope "johodp.admin")
 3. Le système vérifie que le client existe
-4. Le système crée l'agrégat `Tenant` avec:
-   - Association bidirectionnelle avec le client
+4. Le système vérifie que la CustomConfiguration existe et est active
+5. Le système crée l'agrégat `Tenant` avec:
+   - Association avec le client (via ClientName)
+   - **Référence obligatoire à la CustomConfiguration** (via CustomConfigurationId)
    - Validation des URLs de redirection (format URI absolu)
    - Validation des CORS origins (format URI autorité uniquement, pas de path)
    - **Stockage de l'endpoint de vérification utilisateur**
-5. Le système met à jour le client pour ajouter le tenant dans `AssociatedTenantIds`
-6. Le système persiste les changements
-7. Le client devient VISIBLE pour IdentityServer (a des redirect URIs)
+   - Configuration de la localisation (timezone, currency, formats)
+6. Le système met à jour le client pour ajouter le tenant dans `AssociatedTenantIds`
+7. Le système persiste les changements
+8. Le client devient VISIBLE pour IdentityServer (a des redirect URIs)
 
 **Règles de Gestion:**
 - RG-TENANT-01: L'access_token DOIT avoir le scope "johodp.admin"
-- RG-TENANT-02: Un tenant DOIT avoir un client associé (ClientId obligatoire)
+- RG-TENANT-02: Un tenant DOIT avoir un client associé (ClientName obligatoire)
 - RG-TENANT-03: Un tenant ne peut être associé qu'à UN SEUL client (relation 1-1)
 - RG-TENANT-04: Le client doit exister AVANT la création du tenant
-- RG-TENANT-05: Un tenant doit avoir au moins une URL de redirection
-- RG-TENANT-06: Les CORS origins doivent être des URIs d'autorité uniquement (pas de path)
+- RG-TENANT-05: **Un tenant DOIT référencer une CustomConfiguration** (CustomConfigurationId obligatoire)
+- RG-TENANT-06: **La CustomConfiguration doit exister et être active**
+- RG-TENANT-07: Un tenant doit avoir au moins une URL de redirection
+- RG-TENANT-08: Les CORS origins doivent être des URIs d'autorité uniquement (pas de path)
   * ✅ Valide: `http://localhost:4200`, `https://app.acme.com`
   * ❌ Invalide: `http://localhost:4200/callback`, `https://app.acme.com/path`
-- RG-TENANT-07: AllowedCorsOrigins géré au niveau Tenant (migration depuis Client)
-- RG-TENANT-08: CustomClientStore agrège CORS depuis tous les tenants associés au client
-- RG-TENANT-09: Un nom de tenant doit être unique dans le système et dérivé de l'URL (ex: `https://acme-corp.example.com` → `acme-corp-example-com`)
-- RG-TENANT-10: **L'endpoint de vérification utilisateur DOIT être une URL HTTPS en production**
-- RG-TENANT-11: **L'endpoint sera appelé pour chaque demande d'inscription**
-- RG-TENANT-12: L'action est tracée avec le client_id appelant (audit trail)
-- RG-TENANT-13: **Le paramètre `acr_values` doit contenir l'URL nettoyée: `acr_values=tenant:acme-corp-example-com`**
+- RG-TENANT-09: AllowedCorsOrigins géré au niveau Tenant (migration depuis Client)
+- RG-TENANT-10: CustomClientStore agrège CORS depuis tous les tenants associés au client
+- RG-TENANT-11: Un nom de tenant doit être unique dans le système et dérivé de l'URL (ex: `https://acme-corp.example.com` → `acme-corp-example-com`)
+- RG-TENANT-12: **L'endpoint de vérification utilisateur DOIT être une URL HTTPS en production**
+- RG-TENANT-13: **L'endpoint sera appelé pour chaque demande d'inscription**
+- RG-TENANT-14: L'action est tracée avec le client_id appelant (audit trail)
+- RG-TENANT-15: **Le paramètre `acr_values` doit contenir l'URL nettoyée: `acr_values=tenant:acme-corp-example-com`**
+- RG-TENANT-16: **Plusieurs Tenants (même de Clients différents) peuvent référencer la même CustomConfiguration**
 
 **Postconditions:**
 - Le tenant est créé et actif
+- Le tenant référence une CustomConfiguration (branding + langues)
 - Le client devient visible pour IdentityServer
 - Les redirect URIs et CORS origins sont agrégés dynamiquement
 - **L'endpoint de vérification utilisateur est enregistré et prêt à être appelé**
 - L'application tierce peut maintenant gérer les inscriptions utilisateur
+- **Le branding de la CustomConfiguration sera appliqué aux pages d'authentification**
 
 ---
 
@@ -1013,33 +1183,37 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 ---
 
-### UC-10: Personnalisation du Branding par Tenant
+### UC-10: Personnalisation du Branding par Tenant (via CustomConfiguration)
 
 **Acteur Principal:** Application SPA
 
 **Préconditions:**
-- Un tenant existe avec du branding configuré
+- Un tenant existe avec une CustomConfiguration configurée
 
 **Scénario Principal:**
 1. La SPA appelle GET `/api/tenant/{tenantId}/branding.css`
 2. Le système récupère le tenant
-3. Le système génère un fichier CSS dynamique avec:
-   - `--primary-color`: Couleur primaire
-   - `--secondary-color`: Couleur secondaire
-   - `--logo-base64`: URL du logo
-   - `--image-base64`: URL de l'image de fond
-   - Custom CSS du tenant
-4. Le système retourne le CSS avec Content-Type: `text/css`
-5. La SPA inclut ce CSS dans sa page de login
+3. Le système récupère la CustomConfiguration associée au tenant (via CustomConfigurationId)
+4. Le système génère un fichier CSS dynamique avec:
+   - `--primary-color`: Couleur primaire de la CustomConfiguration
+   - `--secondary-color`: Couleur secondaire de la CustomConfiguration
+   - `--logo-base64`: URL du logo de la CustomConfiguration
+   - `--image-base64`: URL de l'image de fond de la CustomConfiguration
+   - Custom CSS de la CustomConfiguration
+5. Le système retourne le CSS avec Content-Type: `text/css`
+6. La SPA inclut ce CSS dans sa page de login
 
 **Règles de Gestion:**
 - RG-BRAND-01: Le CSS est généré dynamiquement à chaque requête
 - RG-BRAND-02: Les valeurs par défaut sont utilisées si non configurées
 - RG-BRAND-03: Le custom CSS est injecté après les variables CSS
+- RG-BRAND-04: Le branding provient de la CustomConfiguration (pas du Tenant directement)
+- RG-BRAND-05: Plusieurs Tenants partageant la même CustomConfiguration auront le même branding
 
 **Postconditions:**
-- La page de login affiche le branding du tenant
+- La page de login affiche le branding de la CustomConfiguration
 - L'expérience utilisateur est personnalisée
+- Les modifications de la CustomConfiguration sont appliquées à tous les Tenants qui l'utilisent
 
 ---
 
@@ -1048,31 +1222,39 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 **Acteur Principal:** Application SPA
 
 **Préconditions:**
-- Un tenant existe avec des paramètres de localisation
+- Un tenant existe avec des paramètres de localisation et une CustomConfiguration
 
 **Scénario Principal:**
 1. La SPA appelle GET `/api/tenant/{tenantId}/language`
-2. Le système retourne:
+2. Le système récupère le tenant
+3. Le système récupère la CustomConfiguration associée (pour les langues)
+4. Le système retourne:
    ```json
    {
      "tenantId": "acme-corp",
      "defaultLanguage": "fr-FR",
-     "supportedLanguages": ["fr-FR", "en-US"],
+     "supportedLanguages": ["fr-FR", "en-US", "de-DE"],
      "dateFormat": "dd/MM/yyyy",
      "timeFormat": "HH:mm",
      "timezone": "Europe/Paris",
      "currency": "EUR"
    }
    ```
+   Note: `defaultLanguage` et `supportedLanguages` proviennent de la CustomConfiguration,
+   tandis que `dateFormat`, `timeFormat`, `timezone`, `currency` sont spécifiques au Tenant.
 3. La SPA configure son système i18n avec ces valeurs
 
 **Règles de Gestion:**
-- RG-I18N-01: Le defaultLanguage est obligatoire
-- RG-I18N-02: Les supportedLanguages incluent toujours le defaultLanguage
-- RG-I18N-03: Le timezone et currency ont des valeurs par défaut
+- RG-I18N-01: Le defaultLanguage vient de la CustomConfiguration (obligatoire)
+- RG-I18N-02: Les supportedLanguages viennent de la CustomConfiguration (incluent toujours le defaultLanguage)
+- RG-I18N-03: Le timezone, currency, dateFormat et timeFormat sont spécifiques au Tenant (valeurs par défaut si non configurés)
+- RG-I18N-04: Les informations de langue sont partagées entre Tenants utilisant la même CustomConfiguration
+- RG-I18N-05: Les informations de localisation (formats, timezone) sont propres à chaque Tenant
 
 **Postconditions:**
 - La SPA affiche les dates, heures et montants dans le format du tenant
+- La SPA affiche les langues disponibles de la CustomConfiguration
+- L'expérience utilisateur est localisée selon le Tenant et la CustomConfiguration
 
 ---
 
@@ -1181,12 +1363,13 @@ SPA              IdP (Johodp)         CustomClientStore    Database
 
 ### TEST-01: Workflow Complet SPA
 1. Créer client
-2. Créer tenant avec redirect URIs + CORS
-3. Créer utilisateur en PendingActivation
-4. Activer l'utilisateur
-5. Flux OAuth2 complet avec PKCE
-6. Appel API avec access_token
-7. Renouvellement avec refresh_token
+2. Créer CustomConfiguration (branding + langues)
+3. Créer tenant avec redirect URIs + CORS + référence à CustomConfiguration
+4. Créer utilisateur en PendingActivation
+5. Activer l'utilisateur
+6. Flux OAuth2 complet avec PKCE
+7. Appel API avec access_token
+8. Renouvellement avec refresh_token
 
 ### TEST-02: Multi-Tenant
 1. Créer 2 tenants (tenant-A, tenant-B)
@@ -1203,11 +1386,28 @@ SPA              IdP (Johodp)         CustomClientStore    Database
 4. **⚠️ Tenter requête avec curl depuis n'importe où → Accepté (CORS ne protège pas !)**
 5. **✅ Solution:** Implémenter authentication + authorization pour vraie sécurité
 
-### TEST-04: Branding Dynamique
-1. Créer tenant-A avec logo rouge
-2. Créer tenant-B avec logo bleu
-3. Récupérer `/api/tenant/tenant-A/branding.css` → CSS rouge
-4. Récupérer `/api/tenant/tenant-B/branding.css` → CSS bleu
+### TEST-04: Branding Dynamique (CustomConfiguration Partagée)
+1. Créer custom-config-rouge avec logo rouge
+2. Créer custom-config-bleu avec logo bleu
+3. Créer tenant-A référençant custom-config-rouge
+4. Créer tenant-B référençant custom-config-rouge (même config)
+5. Créer tenant-C référençant custom-config-bleu
+6. Récupérer `/api/tenant/tenant-A/branding.css` → CSS rouge
+7. Récupérer `/api/tenant/tenant-B/branding.css` → CSS rouge (partagé)
+8. Récupérer `/api/tenant/tenant-C/branding.css` → CSS bleu
+9. Modifier custom-config-rouge (changer couleur)
+10. Vérifier tenant-A et tenant-B → Nouvelle couleur appliquée automatiquement
+
+### TEST-05: CustomConfiguration Indépendante
+1. Créer custom-config-1 (pas de Client associé)
+2. Créer client-A
+3. Créer client-B
+4. Créer tenant-A1 (client-A) référençant custom-config-1
+5. Créer tenant-B1 (client-B) référençant custom-config-1 (partage cross-client)
+6. Vérifier que les deux tenants utilisent le même branding
+7. Supprimer custom-config-1 → Doit échouer (tenants actifs l'utilisent)
+8. Désactiver tenant-A1 et tenant-B1
+9. Supprimer custom-config-1 → Succès
 
 ---
 
@@ -1226,8 +1426,10 @@ SPA              IdP (Johodp)         CustomClientStore    Database
 ```mermaid
 flowchart LR
    subgraph Admin[Application Tierce]
-      A0[UC-00: Obtenir access_token (client credentials)] --> A1[UC-01: Créer Client]
-      A1 --> A2[UC-02: Créer Tenant (webhook + branding + i18n)]
+      A0[UC-00: Obtenir access_token client credentials] --> A1[UC-01: Créer Client]
+      A0 --> A1bis[UC-01bis: Créer CustomConfiguration INDÉPENDANTE]
+      A1 --> A2[UC-02: Créer Tenant référence CustomConfig]
+      A1bis --> A2
    end
    A2 --> A3[UC-03: CustomClientStore agrège RedirectUris & CORS]
    A3 --> A4[UC-06: OAuth2 Authorization Code + PKCE]
@@ -1236,9 +1438,9 @@ flowchart LR
    A6 --> A4
    A4 --> A7[UC-07: Appel API protégé]
    A4 --> A8[UC-08: Refresh Token]
-   A2 --> A9[UC-10: Branding CSS]
-   A2 --> A10[UC-11: Localisation]
-   A2 --> A11[UC-09: Multi-tenant (ajout/retrait access)]
+   A2 --> A9[UC-10: Branding CSS via CustomConfig]
+   A2 --> A10[UC-11: Localisation Tenant + Langues CustomConfig]
+   A2 --> A11[UC-09: Multi-tenant ajout/retrait access]
 ```
 
 ### UC-04: Flux d'Onboarding avec Vérification Tierce
