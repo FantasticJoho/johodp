@@ -1,27 +1,35 @@
-### PKCE Flow - Complete OAuth2 Authorization Code + PKCE Workflow
-### This file demonstrates user registration, activation, and the full PKCE flow for obtaining tokens
+### COMPLETE WORKFLOW TEST - Johodp IDP
+### This file demonstrates the COMPLETE workflow from client creation to user authentication
+### Follow steps in order for a clean test
 
-### Variables
+###############################################################################
+### CONFIGURATION VARIABLES
+###############################################################################
+
 @baseUrl = http://localhost:5000
-@clientId = johodp-spa
+@clientName = test-app-spa
 @redirectUri = http://localhost:4200/callback
 @scope = openid profile email johodp.identity johodp.api
 @state = 5a223df34572489a89678a698307af5e
 @nonce = a1f6d229e9ee4aada5652fa77a853f46
 
 # PKCE Parameters (generate these for each flow)
-# code_verifier: random string 43-128 chars (base64url encoded)
-# code_challenge: base64url(SHA256(code_verifier))
 @codeVerifier = dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
 @codeChallenge = E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
 
-# Tenant (optional - use tenant:your-tenant-id or omit for wildcard access)
-@tenantId = acme-corp
-@acrValues = tenant:{{tenantId}}
+# Tenant configuration
+@tenantName = test-tenant-corp
+@tenantDisplayName = Test Tenant Corporation
+@acrValues = tenant:{{tenantName}}
 
-# User credentials (will be set after registration and activation)
-@userEmail = test.user@example2.com
-@userPassword = MySecureP@ssw0rd123!
+# CustomConfiguration
+@customConfigName = test-config-branding
+
+# User credentials
+@userEmail = test.workflow@example.com
+@userFirstName = Test
+@userLastName = Workflow
+@userPassword = SecureP@ssw0rd123!
 
 # Authorization code (will be obtained from Step 2)
 @authorizationCode = DFF80F7186B7E703BFF10D80CF18269F355182A11B2308C9F72B56889AF72AF0-1
@@ -91,24 +99,18 @@ Content-Type: application/json
 ### ADMIN OPERATIONS: TENANT MANAGEMENT
 ###############################################################################
 
-### Create Tenant (REQUIRES existing client)
+### Create Tenant (REQUIRES existing client AND CustomConfiguration)
 # @name createTenant
+# IMPORTANT: customConfigurationId is REQUIRED - create a CustomConfiguration first
+# See admin-operations.http for CustomConfiguration creation examples
 POST {{baseUrl}}/api/tenant
 Content-Type: application/json
 
 {
   "name": "{{tenantId}}",
   "displayName": "ACME Corporation",
-  "defaultLanguage": "en-US",
-  "supportedLanguages": [
-    "en-US",
-    "fr-FR"
-  ],
-  "timezone": "America/New_York",
-  "currency": "USD",
-  "primaryColor": "#0066CC",
-  "secondaryColor": "#003366",
-  "logoUrl": "https://example.com/acme-logo.png",
+  "clientId": "{{clientId}}",
+  "customConfigurationId": "<PUT_YOUR_CUSTOM_CONFIG_ID_HERE>",
   "allowedReturnUrls": [
     "{{redirectUri}}",
     "https://acme.example.com/callback"
@@ -116,8 +118,7 @@ Content-Type: application/json
   "allowedCorsOrigins": [
     "http://localhost:4200",
     "https://acme.example.com"
-  ],
-  "clientId": "{{clientId}}"
+  ]
 }
 
 ### Extract tenantId from creation response
@@ -138,16 +139,7 @@ Content-Type: application/json
 
 {
   "displayName": "ACME Corporation International",
-  "supportedLanguages": [
-    "en-US",
-    "fr-FR",
-    "es-ES"
-  ],
-  "timezone": "America/New_York",
-  "currency": "USD",
-  "primaryColor": "#0066CC",
-  "secondaryColor": "#003366",
-  "logoUrl": "https://example.com/acme-logo-v2.png",
+  "customConfigurationId": "<PUT_YOUR_CUSTOM_CONFIG_ID_HERE>",
   "allowedReturnUrls": [
     "{{redirectUri}}",
     "https://acme.example.com/callback",
@@ -157,9 +149,6 @@ Content-Type: application/json
     "http://localhost:4200",
     "https://acme.example.com",
     "https://app.acme.com"
-  ],
-  "associatedClientIds": [
-    "{{clientId}}"
   ],
   "isActive": true
 }

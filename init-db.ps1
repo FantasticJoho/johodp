@@ -1,7 +1,10 @@
 # Script pour initialiser la base de données avec toutes les migrations
 # Ce script applique les migrations pour les 2 DbContext:
-# 1. JohodpDbContext (12 migrations: users, clients, tenants, roles, permissions + dbo schema)
-# 2. PersistedGrantDbContext (2 migrations: IdentityServer operational store + dbo schema)
+# 1. JohodpDbContext (1 migration InitialCreate: users, clients, tenants, custom_configurations + dbo schema)
+# 2. PersistedGrantDbContext (IdentityServer operational store + dbo schema)
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 Write-Host "=====================================================" -ForegroundColor Cyan
 Write-Host "Initialisation de la base de données Johodp" -ForegroundColor Cyan
@@ -35,9 +38,16 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "" 
 Write-Host "=====================================================" -ForegroundColor Green
-Write-Host "✅ Base de données initialisée avec succès!" -ForegroundColor Green
-Write-Host "   - 12 migrations JohodpDbContext appliquées" -ForegroundColor Green
-Write-Host "   - 2 migrations PersistedGrantDbContext appliquées" -ForegroundColor Green
-Write-Host "   - Total: 14 migrations" -ForegroundColor Green
-Write-Host "   - Toutes les tables sont dans le schéma 'dbo'" -ForegroundColor Green
+Write-Host "OK Base de donnees initialisee avec succes!" -ForegroundColor Green
+Write-Host "   - Migration JohodpDbContext appliquee (InitialCreate)" -ForegroundColor Green
+Write-Host "   - Migrations PersistedGrantDbContext appliquees (IdentityServer)" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
+
+Write-Host ""
+Write-Host "[3/3] Deplacement de __EFMigrationsHistory vers schema dbo..." -ForegroundColor Yellow
+docker exec -i johodp-postgres psql -U postgres -d johodp -c 'ALTER TABLE IF EXISTS public.\"__EFMigrationsHistory\" SET SCHEMA dbo;' 2>$null
+
+Write-Host "" 
+Write-Host "=====================================================" -ForegroundColor Green
+Write-Host "OK Toutes les tables sont dans le schema dbo!" -ForegroundColor Green
 Write-Host "=====================================================" -ForegroundColor Green

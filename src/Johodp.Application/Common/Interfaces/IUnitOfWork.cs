@@ -6,6 +6,7 @@ public interface IUnitOfWork
 {
     IUserRepository Users { get; }
     IClientRepository Clients { get; }
+    ICustomConfigurationRepository CustomConfigurations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task BeginTransactionAsync(CancellationToken cancellationToken = default);

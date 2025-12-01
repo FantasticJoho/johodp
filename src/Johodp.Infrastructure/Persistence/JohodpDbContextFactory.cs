@@ -19,7 +19,8 @@ public class JohodpDbContextFactory : IDesignTimeDbContextFactory<JohodpDbContex
         var optionsBuilder = new DbContextOptionsBuilder<JohodpDbContext>();
         var connectionString = configuration.GetConnectionString("DefaultConnection");
         
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(connectionString, 
+            sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo"));
 
         return new JohodpDbContext(optionsBuilder.Options);
     }

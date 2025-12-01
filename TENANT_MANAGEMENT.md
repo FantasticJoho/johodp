@@ -18,27 +18,15 @@ src/Johodp.Domain/Tenants/Aggregates/Tenant.cs
 - `Name` : Nom unique du tenant (normalisé en minuscules)
 - `DisplayName` : Nom d'affichage
 - `IsActive` : Statut actif/inactif
-- **Branding :**
-  - `PrimaryColor` : Couleur primaire (#hex)
-  - `SecondaryColor` : Couleur secondaire (#hex)
-  - `LogoUrl` : URL ou base64 du logo
-  - `BackgroundImageUrl` : URL ou base64 de l'image de fond
-  - `CustomCss` : CSS personnalisé
-- **Localisation :**
-  - `DefaultLanguage` : Langue par défaut (ex: "fr-FR")
-  - `SupportedLanguages` : Liste des langues supportées
-  - `Timezone` : Fuseau horaire (ex: "Europe/Paris")
-  - `Currency` : Devise (ex: "EUR")
+- **Configuration :**
+  - `CustomConfigurationId` : Référence optionnelle vers CustomConfiguration (branding et langues partagés)
 - **OAuth2/OIDC :**
   - `AllowedReturnUrls` : Liste des URLs de redirection autorisées
   - `AssociatedClientIds` : Liste des clients OAuth2 associés
 
 **Méthodes du domaine :**
 - `Create()` : Création d'un nouveau tenant
-- `UpdateBranding()` : Mise à jour du branding
-- `AddSupportedLanguage()` / `RemoveSupportedLanguage()`
-- `SetDefaultLanguage()`
-- `UpdateLocalization()` : Mise à jour timezone/currency
+- `SetCustomConfiguration()` : Associer une CustomConfiguration (branding et langues)
 - `AddAllowedReturnUrl()` / `RemoveAllowedReturnUrl()`
 - `AddAssociatedClient()` / `RemoveAssociatedClient()`
 - `Activate()` / `Deactivate()`

@@ -36,17 +36,14 @@ public class User : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    // Multi-tenancy - supports multiple tenants with role and scope per tenant
-    private readonly List<UserTenant> _userTenants = new();
-    public IReadOnlyList<UserTenant> UserTenants => _userTenants.AsReadOnly();
-    
-    // Convenience property to get tenant IDs
-    public IReadOnlyList<TenantId> TenantIds => _userTenants.Select(ut => ut.TenantId).ToList().AsReadOnly();
-
+    // Single tenant per user with role and scope
+    public TenantId TenantId { get; private set; } = null!;
+    public string Role { get; private set; } = null!;
+    public string Scope { get; private set; } = null!;
 
     private User() { }
 
-    public static User Create(string email, string firstName, string lastName, TenantId? tenantId = null, bool createAsPending = false)
+    public static User Create(string email, string firstName, string lastName, TenantId tenantId, string role = "user", string scope = "default", bool createAsPending = false)
     {
         if (string.IsNullOrWhiteSpace(firstName))
             throw new ArgumentException("First name cannot be empty", nameof(firstName));
@@ -60,19 +57,28 @@ public class User : AggregateRoot
         if (lastName.Length > 50)
             throw new ArgumentException("Last name cannot exceed 50 characters", nameof(lastName));
 
+        if (tenantId == null)
+            throw new ArgumentNullException(nameof(tenantId), "TenantId is required");
+
+        if (string.IsNullOrWhiteSpace(role))
+            throw new ArgumentException("Role cannot be empty", nameof(role));
+
+        if (string.IsNullOrWhiteSpace(scope))
+            throw new ArgumentException("Scope cannot be empty", nameof(scope));
+
         var user = new User
         {
             Id = UserId.Create(),
             Email = Email.Create(email),
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
+            TenantId = tenantId,
+            Role = role,
+            Scope = scope,
             EmailConfirmed = createAsPending ? false : false,
             Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
-
-        // Note: Tenant will be added via AddTenant method with role and scope
-        // tenantId parameter kept for backward compatibility in events
 
         if (createAsPending)
         {
@@ -81,7 +87,7 @@ public class User : AggregateRoot
                 user.Email.Value,
                 user.FirstName,
                 user.LastName,
-                tenantId?.Value
+                tenantId.Value
             ));
         }
         else
@@ -97,58 +103,24 @@ public class User : AggregateRoot
         return user;
     }
 
-    public void AddTenant(TenantId tenantId, string role, string scope)
-    {
-        if (tenantId == null)
-            throw new ArgumentNullException(nameof(tenantId));
-
-        if (_userTenants.Any(ut => ut.TenantId.Value == tenantId.Value))
-            throw new InvalidOperationException($"User already belongs to tenant {tenantId.Value}");
-
-        var userTenant = UserTenant.Create(Id, tenantId, role, scope);
-        _userTenants.Add(userTenant);
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void RemoveTenant(TenantId tenantId)
-    {
-        if (tenantId == null)
-            throw new ArgumentNullException(nameof(tenantId));
-
-        var existing = _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
-        if (existing != null)
-        {
-            _userTenants.Remove(existing);
-            UpdatedAt = DateTime.UtcNow;
-        }
-    }
-
     public bool BelongsToTenant(TenantId tenantId)
     {
         if (tenantId == null)
             return false;
 
-        return _userTenants.Any(ut => ut.TenantId.Value == tenantId.Value);
+        return TenantId.Value == tenantId.Value;
     }
 
-    public UserTenant? GetTenantContext(TenantId tenantId)
+    public void UpdateRoleAndScope(string role, string scope)
     {
-        if (tenantId == null)
-            return null;
+        if (string.IsNullOrWhiteSpace(role))
+            throw new ArgumentException("Role cannot be empty", nameof(role));
 
-        return _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
-    }
+        if (string.IsNullOrWhiteSpace(scope))
+            throw new ArgumentException("Scope cannot be empty", nameof(scope));
 
-    public void UpdateTenantRoleAndScope(TenantId tenantId, string role, string scope)
-    {
-        if (tenantId == null)
-            throw new ArgumentNullException(nameof(tenantId));
-
-        var userTenant = _userTenants.FirstOrDefault(ut => ut.TenantId.Value == tenantId.Value);
-        if (userTenant == null)
-            throw new InvalidOperationException($"User does not belong to tenant {tenantId.Value}");
-
-        userTenant.Update(role, scope);
+        Role = role;
+        Scope = scope;
         UpdatedAt = DateTime.UtcNow;
     }
 

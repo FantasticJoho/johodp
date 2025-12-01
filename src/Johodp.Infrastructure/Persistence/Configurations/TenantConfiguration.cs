@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 {
@@ -39,21 +40,13 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         builder.Property(t => t.UpdatedAt);
 
-        // Branding
-        builder.Property(t => t.PrimaryColor)
-            .HasMaxLength(50);
-
-        builder.Property(t => t.SecondaryColor)
-            .HasMaxLength(50);
-
-        builder.Property(t => t.LogoUrl)
-            .HasMaxLength(500);
-
-        builder.Property(t => t.BackgroundImageUrl)
-            .HasMaxLength(500);
-
-        builder.Property(t => t.CustomCss)
-            .HasColumnType("text");
+        // CustomConfiguration reference (required)
+        builder.Property(t => t.CustomConfigurationId)
+            .HasConversion(
+                id => id.Value,
+                value => CustomConfigurationId.From(value))
+            .HasColumnName("custom_configuration_id")
+            .IsRequired();
 
         // Notification configuration
         builder.Property(t => t.NotificationUrl)
@@ -68,30 +61,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
             .IsRequired()
             .HasDefaultValue(false);
 
-        // Localization
-        builder.Property(t => t.DefaultLanguage)
-            .IsRequired()
-            .HasMaxLength(10)
-            .HasDefaultValue("fr-FR");
-
-        builder.Property(t => t.Timezone)
-            .IsRequired()
-            .HasMaxLength(50)
-            .HasDefaultValue("Europe/Paris");
-
-        builder.Property(t => t.Currency)
-            .IsRequired()
-            .HasMaxLength(10)
-            .HasDefaultValue("EUR");
-
         // Collections stored as JSON
         builder.Property<List<string>>("_urls")
             .HasColumnName("Urls")
-            .HasColumnType("jsonb")
-            .IsRequired();
-
-        builder.Property<List<string>>("_supportedLanguages")
-            .HasColumnName("SupportedLanguages")
             .HasColumnType("jsonb")
             .IsRequired();
 

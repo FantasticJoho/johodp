@@ -6,13 +6,16 @@
 @tenantUrl = https://test-tenant.example.com
 
 ### 1. Créer un tenant de test
+# IMPORTANT: CustomConfigurationId est OBLIGATOIRE
+# Créez d'abord une CustomConfiguration (voir admin-operations.http)
+@customConfigId = <PUT_YOUR_CUSTOM_CONFIG_ID_HERE>
 POST {{baseUrl}}/api/tenants
 Content-Type: application/json
 
 {
   "name": "{{tenantName}}",
   "displayName": "Test Tenant",
-  "tenantUrl": "{{tenantUrl}}",
+  "customConfigurationId": "{{customConfigId}}",
   "allowedReturnUrls": [
     "{{tenantUrl}}/callback",
     "http://localhost:4200/callback"
@@ -102,7 +105,7 @@ Content-Type: application/json
 {
   "name": "other-tenant-example-com",
   "displayName": "Other Tenant",
-  "tenantUrl": "https://other-tenant.example.com",
+  "customConfigurationId": "{{customConfigId}}",
   "allowedReturnUrls": [
     "https://other-tenant.example.com/callback"
   ],
@@ -174,6 +177,7 @@ Content-Type: application/json
 {
   "name": "oauth-app-example-com",
   "displayName": "OAuth Application",
+  "customConfigurationId": "{{customConfigId}}",
   "tenantUrl": "https://oauth-app.example.com",
   "allowedReturnUrls": [
     "https://oauth-app.example.com/callback",

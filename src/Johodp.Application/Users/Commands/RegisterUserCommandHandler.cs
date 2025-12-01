@@ -20,43 +20,25 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
 
     public async Task<RegisterUserResponse> Handle(RegisterUserCommand request, CancellationToken cancellationToken = default)
     {
-        // Check if email already exists
-        var existingUser = await _unitOfWork.Users.GetByEmailAsync(request.Email);
+        // Check if (email, tenantId) combination already exists
+        var existingUser = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, request.TenantId);
         if (existingUser != null)
-            throw new InvalidOperationException($"User with email {request.Email} already exists");
+            throw new InvalidOperationException($"User with email {request.Email} already exists for this tenant");
 
-        // Determine tenant for the creation event (first tenant or legacy single tenant)
-        var eventTenantId = request.Tenants?.FirstOrDefault()?.TenantId ?? request.TenantId;
-
-        // Create user aggregate (with or without pending status)
+        // Create user aggregate with single tenant, role, and scope
         var user = User.Create(
             request.Email, 
             request.FirstName, 
             request.LastName, 
-            eventTenantId,
+            request.TenantId,
+            request.Role,
+            request.Scope,
             request.CreateAsPending);
-
-        // Add user to multiple tenants with their roles and scopes
-        if (request.Tenants != null && request.Tenants.Any())
-        {
-            foreach (var tenantAssignment in request.Tenants)
-            {
-                user.AddTenant(tenantAssignment.TenantId, tenantAssignment.Role, tenantAssignment.Scope);
-            }
-        }
-        // Legacy support: single tenant
-        else if (request.TenantId != null)
-        {
-            // For backward compatibility, use default role/scope if not specified
-            user.AddTenant(request.TenantId, "user", "default");
-        }
 
         // If not pending and password provided, set it (for direct registration)
         // Note: Password hashing should be handled by UserManager in the API layer
-        // This is just for the domain model
         if (!request.CreateAsPending && !string.IsNullOrEmpty(request.Password))
         {
-            // Password will be hashed by Identity UserManager in the API layer
             user.SetPasswordHash(request.Password);
         }
 

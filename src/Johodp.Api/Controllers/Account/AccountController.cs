@@ -71,15 +71,6 @@ public class AccountController : ControllerBase
             return BadRequest(new { error = "Tenant name is required" });
         }
 
-        // Find user
-        var user = await _userManager.FindByEmailAsync(request.Email);
-
-        if (user == null)
-        {
-            _logger.LogWarning("API login failed - user not found: {Email}", request.Email);
-            return Unauthorized(new { error = "Invalid email or password" });
-        }
-
         // Get tenant by name to retrieve GUID
         var tenant = await _tenantRepository.GetByNameAsync(tenantName);
         if (tenant == null || !tenant.IsActive)
@@ -88,14 +79,21 @@ public class AccountController : ControllerBase
             return Unauthorized(new { error = "Invalid or inactive tenant" });
         }
 
-        // Check tenant access: verify user belongs to requested tenant (by TenantId)
-        bool hasTenantAccess = user.BelongsToTenant(tenant.Id);
-        
-        if (!hasTenantAccess)
+        // Find user by email AND tenant (composite key lookup)
+        var user = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, tenant.Id);
+
+        if (user == null)
         {
-            _logger.LogWarning("API: Tenant access denied for user {Email}. User tenants count: {UserTenantsCount}, Requested tenant: {RequestedTenant}", 
-                request.Email, user.TenantIds.Count, tenant.Id.Value);
-            return Unauthorized(new { error = "User does not have access to this tenant" });
+            _logger.LogWarning("API login failed - user not found for email: {Email} and tenant: {TenantName}", request.Email, tenantName);
+            return Unauthorized(new { error = "Invalid email or password" });
+        }
+
+        // User belongs to exactly one tenant - verify it matches
+        if (!user.BelongsToTenant(tenant.Id))
+        {
+            _logger.LogWarning("API: Tenant mismatch for user {Email}. User tenant: {UserTenant}, Requested tenant: {RequestedTenant}", 
+                request.Email, user.TenantId.Value, tenant.Id.Value);
+            return Unauthorized(new { error = "User does not belong to this tenant" });
         }
 
         // Validate acr_values matches tenant URLs (if acr_values was provided)

@@ -112,31 +112,75 @@ DELETE {{baseUrl}}/api/clients/{{clientId}}
 ### TENANT MANAGEMENT (All endpoints are public - No authentication required)
 ###############################################################################
 
-### Create a new Tenant
+###############################################################################
+### CUSTOM CONFIGURATION MANAGEMENT (Branding & Languages)
+### Note: A CustomConfiguration MUST belong to a Client
+###############################################################################
+
+### Create a CustomConfiguration for a specific Client
+# IMPORTANT: clientId is REQUIRED - each CustomConfiguration belongs to one Client
+@myClientId = <PUT_YOUR_CLIENT_ID_HERE>
+POST {{baseUrl}}/api/custom-configurations
+Content-Type: application/json
+
+{
+  "clientId": "{{myClientId}}",
+  "name": "Enterprise",
+  "description": "Configuration for enterprise clients",
+  "defaultLanguage": "fr-FR",
+  "additionalLanguages": ["en-US", "es-ES"],
+  "primaryColor": "#0066CC",
+  "secondaryColor": "#003366",
+  "logoUrl": "https://example.com/enterprise-logo.png",
+  "backgroundImageUrl": "https://example.com/enterprise-bg.jpg",
+  "customCss": "body { font-family: 'Roboto', sans-serif; }"
+}
+
+### Add an existing CustomConfiguration to a Client
+# This adds the CustomConfiguration to the Client's list (if not already present)
+@existingConfigId = <PUT_CONFIG_ID_HERE>
+POST {{baseUrl}}/api/clients/{{myClientId}}/custom-configurations/{{existingConfigId}}
+
+### Remove a CustomConfiguration from a Client
+# This removes the CustomConfiguration from the Client's list
+DELETE {{baseUrl}}/api/clients/{{myClientId}}/custom-configurations/{{existingConfigId}}
+
+### Get CustomConfiguration by ID
+@customConfigId = a1b2c3d4-e5f6-4890-abcd-123456789abc
+GET {{baseUrl}}/api/custom-configurations/{{customConfigId}}
+
+### Get all CustomConfigurations
+GET {{baseUrl}}/api/custom-configurations
+
+### Update CustomConfiguration
+PUT {{baseUrl}}/api/custom-configurations/{{customConfigId}}
+Content-Type: application/json
+
+{
+  "description": "Updated enterprise configuration",
+  "supportedLanguages": ["fr-FR", "en-US", "de-DE"],
+  "defaultLanguage": "en-US",
+  "primaryColor": "#003366"
+}
+
+###############################################################################
+### TENANT MANAGEMENT (All endpoints are public - No authentication required)
+###############################################################################
+
+### Create a new Tenant (with CustomConfiguration reference)
 # IMPORTANT CONSTRAINTS:
 # 1. A tenant MUST be associated with ONE client (clientId is required)
 # 2. The client MUST already exist in the database before creating the tenant
-# 3. Workflow: Create the client first, then create the tenant referencing that client
+# 3. Workflow: Create the client first, optionally create CustomConfiguration, then create the tenant
 # 4. AllowedReturnUrls AND AllowedCorsOrigins are managed at the Tenant level
+# 5. CustomConfigurationId is OPTIONAL - if provided, tenant will use shared branding/languages
 POST {{baseUrl}}/api/tenant
 Content-Type: application/json
 
 {
   "name": "acme-corp1",
   "displayName": "ACME Corporation",
-  "defaultLanguage": "en-US",
-  "supportedLanguages": [
-    "en-US",
-    "fr-FR",
-    "es-ES"
-  ],
-  "timezone": "America/New_York",
-  "currency": "USD",
-  "primaryColor": "#0066CC",
-  "secondaryColor": "#003366",
-  "logoUrl": "https://example.com/acme-logo.png",
-  "backgroundImageUrl": "https://example.com/acme-bg.jpg",
-  "customCss": "body { font-family: 'Roboto', sans-serif; }",
+  "customConfigurationId": "{{customConfigId}}",
   "allowedReturnUrls": [
     "http://localhost:4200/callback",
     "https://acme.example.com/callback"
@@ -165,17 +209,7 @@ Content-Type: application/json
 
 {
   "displayName": "ACME Corporation International",
-  "supportedLanguages": [
-    "en-US",
-    "fr-FR",
-    "es-ES",
-    "de-DE"
-  ],
-  "timezone": "America/New_York",
-  "currency": "USD",
-  "primaryColor": "#0066CC",
-  "secondaryColor": "#003366",
-  "logoUrl": "https://example.com/acme-logo-v2.png",
+  "customConfigurationId": "{{customConfigId}}",
   "allowedReturnUrls": [
     "http://localhost:4200/callback",
     "https://acme.example.com/callback",
@@ -186,19 +220,8 @@ Content-Type: application/json
     "https://acme.example.com",
     "https://app.acme.com"
   ],
-  "associatedClientIds": [
-    "my-spa-app",
-    "acme-mobile-app",
-    "acme-desktop-app"
-  ],
   "isActive": true
 }
-
-### Get Tenant Branding CSS (Public - No Auth Required)
-GET {{baseUrl}}/api/tenant/{{tenantName}}/branding.css
-
-### Get Tenant Language Settings (Public - No Auth Required)
-GET {{baseUrl}}/api/tenant/{{tenantName}}/language
 
 ### Delete Tenant
 DELETE {{baseUrl}}/api/tenant/{{tenantId}}

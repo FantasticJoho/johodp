@@ -23,18 +23,30 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
             .HasMaxLength(100)
             .IsRequired();
 
-        builder.Property(x => x.AllowedScopes)
+        var allowedScopesProperty = builder.Property(x => x.AllowedScopes)
             .HasConversion(
                 v => string.Join(";", v),
                 v => v.Split(";", StringSplitOptions.RemoveEmptyEntries));
+        
+        allowedScopesProperty.Metadata.SetValueComparer(
+            new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<string[]>(
+                (c1, c2) => c1!.SequenceEqual(c2!),
+                c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                c => c.ToArray()));
 
         // AssociatedTenantIds - liste des tenants associés au client
-        builder.Property<List<string>>("_associatedTenantIds")
+        var associatedTenantsProperty = builder.Property<List<string>>("_associatedTenantIds")
             .HasColumnName("associated_tenant_ids")
             .HasConversion(
                 v => string.Join(";", v),
                 v => v.Split(";", StringSplitOptions.RemoveEmptyEntries).ToList())
             .IsRequired();
+        
+        associatedTenantsProperty.Metadata.SetValueComparer(
+            new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<List<string>>(
+                (c1, c2) => c1!.SequenceEqual(c2!),
+                c => c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                c => c.ToList()));
 
         builder.Property(x => x.RequireClientSecret)
             .HasDefaultValue(true);

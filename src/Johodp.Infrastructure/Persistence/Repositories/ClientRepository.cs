@@ -26,6 +26,11 @@ public class ClientRepository : IClientRepository
             .FirstOrDefaultAsync(c => c.ClientName == clientName);
     }
 
+    public async Task<IEnumerable<Client>> GetAllAsync()
+    {
+        return await _context.Clients.ToListAsync();
+    }
+
     public async Task<Client> AddAsync(Client client)
     {
         await _context.Clients.AddAsync(client);

@@ -7,6 +7,7 @@
 - **Un seul flux** : Register (fusionne Register + Onboarding)
 - **`[ApiController]`** : Hérite de `ControllerBase` au lieu de `Controller`
 - **Suppression** : Views/Account/, ViewModels HTML, endpoints GET/POST avec View()
+- **CustomConfiguration** : Branding et langues gérés dans un agrégat séparé, partageable entre tenants
 
 ---
 

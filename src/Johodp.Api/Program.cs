@@ -19,7 +19,13 @@ ConfigureAuthentication(builder.Services);
 // ============================================================================
 // MVC & API CONFIGURATION
 // ============================================================================
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new Johodp.Api.Extensions.TenantIdJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new Johodp.Api.Extensions.ClientIdJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new Johodp.Api.Extensions.CustomConfigurationIdJsonConverter());
+    });
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

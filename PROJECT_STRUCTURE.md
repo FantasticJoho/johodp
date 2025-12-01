@@ -29,6 +29,20 @@ La couche métier encapsule la logique d'affaires :
 - ✅ `ClientSecret.cs` - Value Object pour le secret client
 - ✅ `ClientCreatedEvent.cs` - Événement déclenché à la création
 
+#### Agrégat CustomConfiguration (Branding et Langues Partagés)
+- ✅ `CustomConfiguration.cs` - Configuration partageable entre plusieurs tenants
+- ✅ `CustomConfigurationId.cs` - Value Object typé pour l'identité
+- ✅ `CustomConfigurationCreatedEvent.cs` - Événement déclenché à la création
+- **Branding** : PrimaryColor, SecondaryColor, LogoUrl, BackgroundImageUrl, CustomCss
+- **Langues** : SupportedLanguages (List<string> BCP47), DefaultLanguage
+
+#### Agrégat Tenant (Isolation Multi-Tenant)
+- ✅ `Tenant.cs` - Espace isolé au sein d'un Client
+- ✅ `TenantId.cs` - Value Object typé pour l'identité tenant
+- ✅ `TenantCreatedEvent.cs` - Événement déclenché à la création
+- **Configuration** : Référence optionnelle vers CustomConfiguration
+- **OAuth2** : AllowedReturnUrls, AllowedCorsOrigins, AssociatedClientIds
+
 ---
 
 ### 🏗️ Couche Application (Johodp.Application)

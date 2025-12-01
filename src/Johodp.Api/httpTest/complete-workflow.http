@@ -1,0 +1,691 @@
+### COMPLETE WORKFLOW TEST - Johodp IDP
+### This file demonstrates the COMPLETE end-to-end workflow from scratch
+### Execute requests in ORDER (top to bottom) for a successful test
+
+###############################################################################
+### CONFIGURATION VARIABLES
+###############################################################################
+
+@baseUrl = http://localhost.fiddler:5000
+@clientName = {{createClient.response.body.clientName}}
+@redirectUri = http://localhost:4200/callback
+@scope = openid profile email johodp.identity johodp.api offline_access
+@state = workflow-state-12345
+@nonce = workflow-nonce-67890
+
+# PKCE Parameters
+@codeVerifier = dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+@codeChallenge = E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+
+# Tenant configuration
+@tenantName = workflow-tenant1
+@tenantDisplayName = Workflow Test Corporation
+
+# CustomConfiguration
+@customConfigName = workflow-branding3
+
+# User credentials
+@userEmail = workflow.test6@example.com
+@userFirstName = Workflow
+@userLastName = TestUser
+@userPassword = SecureP@ssw0rd123!
+
+# Dynamic variables (will be populated from responses - use @name to capture)
+# For testing: you can hardcode IDs here if requests already executed
+@clientId = {{createClient.response.body.id}}
+@customConfigId = {{createCustomConfig.response.body.id}}
+@tenantId = {{createTenant.response.body.id}}
+@userId = {{registerUser.response.body.id}}
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQEHztXJFmxrfLm4qNRotL6x/0En6KZTzHASKn+DKDNmrnO+I05MgUhnzzvqtOLb/NNe5hlVPHugU8nZIpzk0BSjjqi8VpnRhgk6MMSRmt4+lD+cnGcYDrJ2Giv/MlcRQ/tOVekkVvkqDFGjHIRmKMytyDYLlBDCiHVy+tXSi3QQTLDO7/zeAsT0br16piFo6eU=
+@authCode = 95101CB108A5C535A56396301EBE3821E45EF7775DADB5D96E849AE54233D87E-1
+@accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAiLCJuYmYiOjE3NjQ2MTAxMTQsImlhdCI6MTc2NDYxMDExNCwiZXhwIjoxNzY0NjEzNzE0LCJhdWQiOiJqb2hvZHAiLCJzY29wZSI6WyJvcGVuaWQiLCJwcm9maWxlIiwiZW1haWwiLCJqb2hvZHAuaWRlbnRpdHkiLCJqb2hvZHAuYXBpIl0sImFtciI6WyJwd2QiXSwiY2xpZW50X2lkIjoid29ya2Zsb3ctdGVzdC1zcGEtMTc2NDYwODQ2MyIsInN1YiI6ImE3YThlMGI5LWFkMWEtNDcxNi05MDQ5LWQxNWUzMTA5ZWViZiIsImF1dGhfdGltZSI6MTc2NDYwOTkzMSwiaWRwIjoibG9jYWwiLCJlbWFpbCI6IndvcmtmbG93LnRlc3Q1QGV4YW1wbGUuY29tIiwidGVuYW50X2lkIjoiMWZiNzYzMzMtYjg5Zi00ZmYwLTk4MTktYzNkMDFmNzYwNzFiIiwidGVuYW50X3JvbGUiOiJVc2VyIiwidGVuYW50X3Njb3BlIjoiZnVsbF9hY2Nlc3MiLCJzaWQiOiI3Njk1QjI1NzFGOUYxQjYxNjQ0NDlBMzJFRjM5Q0NFRiIsImp0aSI6IjkxNDJCQTREREEyRURDMzIyODFBREQyMzVENzk5NzRBIn0.tgEtbyLput8dFZooaYuwyZSq78BPyvivmeziHRbSltzbju0Z-lFr2HbKAD-xzMuHffU1yK0dApj3DafpgXTaQkp0Rg-mOEScFDYn4BTot16s6iwoTBa72n4pfBca795p2YcquCtGNN5RI35-hfPprtkKf4xh-ZQTVISpy8TQMCXm_KpcScr9_dEId2Bk_2gX5NKUQLHyKu_Y1OrxNyHT-QiHC-X7kgG6xxeVqsqRdyBAsvh-ro6kPjMjaxYlcjjQfjyBNxym_xYpTEUAg89R7npK3Zli1g3d8eVeTmF-cLhySZmrmXnDXW16fBR3MNSnhI3TPDeNdEXegBZ-sZcxhA
+@refreshToken = 
+
+
+###############################################################################
+### STEP 1: CREATE CLIENT
+###############################################################################
+
+### 1.1 Create OAuth2 Client
+# @name createClient
+POST {{baseUrl}}/api/clients
+Content-Type: application/json
+
+{
+  "clientName": "workflow-test-spa-{{$timestamp}}",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access"
+  ],
+  "requireConsent": false,
+  "requireMfa": false
+}
+
+### After execution, copy the 'id' from response to @clientId variable above
+
+### 1.2 Get Client by Name (Verify creation)
+# GET {{baseUrl}}/api/clients/by-name/{{clientName}}
+# Note: Use clientName from createClient response since it's random
+
+
+###############################################################################
+### STEP 2: CREATE CUSTOM CONFIGURATION
+###############################################################################
+
+### 2.1 Create CustomConfiguration for branding
+# @name createCustomConfig
+POST {{baseUrl}}/api/custom-configurations
+Content-Type: application/json
+
+{
+  "name": "{{customConfigName}}-{{$timestamp}}",
+  "description": "Branding configuration for workflow test",
+  "primaryColor": "#007bff",
+  "secondaryColor": "#6c757d",
+  "logoUrl": "https://example.com/logo.png",
+  "backgroundImageUrl": "https://example.com/bg.jpg",
+  "customCss": ".login-page { font-family: Arial; }",
+  "defaultLanguage": "en-US",
+  "additionalLanguages": ["fr-FR", "es-ES"]
+}
+
+### After execution, copy the 'id' from response to @customConfigId variable above
+### Or use the named request: @customConfigId = {{createCustomConfig.response.body.id}}
+
+### 2.2 Get CustomConfiguration by ID (Verify creation)
+GET {{baseUrl}}/api/custom-configurations/{{customConfigId}}
+
+### 2.3 Get CustomConfiguration by Name
+GET {{baseUrl}}/api/custom-configurations/by-name/{{customConfigName}}
+
+### 2.4 Update CustomConfiguration (change colors, logo, languages)
+PUT {{baseUrl}}/api/custom-configurations/{{customConfigId}}
+Content-Type: application/json
+
+{
+  "description": "Updated branding - new color scheme",
+  "primaryColor": "#ff5733",
+  "secondaryColor": "#c70039",
+  "logoUrl": "https://example.com/new-logo.png",
+  "defaultLanguage": "en-US",
+  "supportedLanguages": ["en-US", "fr-FR", "es-ES", "de-DE"]
+}
+
+### 2.5 Get All CustomConfigurations
+GET {{baseUrl}}/api/custom-configurations
+
+### 2.6 Get Active CustomConfigurations
+GET {{baseUrl}}/api/custom-configurations/active
+
+
+###############################################################################
+### STEP 3: CREATE TENANT
+###############################################################################
+
+### 3.1 Create Tenant (links Client + CustomConfiguration)
+# @name createTenant
+# NOTE: Make sure @clientId and @customConfigId are set from previous responses
+# You can check their values by hovering over the variables
+# If empty, manually copy from STEP 1.1 and STEP 2.1 responses
+POST {{baseUrl}}/api/tenant
+Content-Type: application/json
+
+{
+  "name": "{{tenantName}}-{{$timestamp}}",
+  "displayName": "{{tenantDisplayName}}",
+  "clientId": "{{clientId}}",
+  "customConfigurationId": "{{customConfigId}}",
+  "allowedReturnUrls": [
+    "{{redirectUri}}",
+    "http://localhost:4200/auth/callback"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200"
+  ]
+}
+
+### Capture tenant name for later use
+@TenantNameResult = {{createTenant.response.body.name}}
+
+### 3.1b Alternative - Create Tenant with hardcoded IDs (for testing)
+# Replace GUIDs with actual values from STEP 1 and STEP 2 responses
+# POST {{baseUrl}}/api/tenant
+# Content-Type: application/json
+# 
+# {
+#   "name": "{{tenantName}}",
+#   "displayName": "{{tenantDisplayName}}",
+#   "clientId": "e6ba4794-52c1-468a-8ccb-08583e7b2c39",
+#   "customConfigurationId": "12345678-1234-1234-1234-123456789abc",
+#   "allowedReturnUrls": [
+#     "{{redirectUri}}",
+#     "http://localhost:4200/auth/callback"
+#   ],
+#   "allowedCorsOrigins": [
+#     "http://localhost:4200"
+#   ]
+# }
+
+### After execution, copy the 'id' from response to @tenantId variable above
+
+### 3.2 Get Tenant by Name (Verify creation)
+GET {{baseUrl}}/api/tenant/by-name/{{TenantNameResult}}
+
+### 3.3 Get Tenant by ID
+GET {{baseUrl}}/api/tenant/{{tenantId}}
+
+
+###############################################################################
+### STEP 4: UPDATE CLIENT (Associate with Tenant)
+###############################################################################
+
+### 4.1 Update Client to link with Tenant
+PUT {{baseUrl}}/api/clients/{{clientId}}
+Content-Type: application/json
+
+{
+  "clientName": "{{clientName}}",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access"
+  ],
+  "requireConsent": false,
+  "requireMfa": false,
+  "isActive": true
+}
+
+
+###############################################################################
+### STEP 5: UPDATE TENANT
+###############################################################################
+
+### 5.1 Update Tenant (add redirect URIs and CORS)
+PUT {{baseUrl}}/api/tenant/{{tenantId}}
+Content-Type: application/json
+
+{
+  "name": "{{TenantNameResult}}",
+  "displayName": "{{tenantDisplayName}} - Updated",
+  "clientId": "{{clientId}}",
+  "customConfigurationId": "{{customConfigId}}",
+  "allowedReturnUrls": [
+    "{{redirectUri}}",
+    "http://localhost:4200/auth/callback",
+    "http://localhost:4200/silent-refresh"
+  ],
+  "allowedCorsOrigins": [
+    "http://localhost:4200",
+    "http://localhost:3000"
+  ],
+  "isActive": true
+}
+
+### 5.2 Get Tenant Branding CSS
+GET {{baseUrl}}/api/tenant/{{tenantName}}/branding.css
+
+### 5.3 Get Tenant Language Settings
+GET {{baseUrl}}/api/tenant/{{tenantName}}/language
+
+
+###############################################################################
+### STEP 6: USER REGISTRATION (Request)
+###############################################################################
+
+### 6.1 User requests account (sends notification to external app)
+# @name registerUserRequest
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "{{userFirstName}}",
+  "lastName": "{{userLastName}}",
+  "tenantName": "{{TenantNameResult}}"
+}
+
+### Response: 202 Accepted with requestId
+### External app receives notification and validates
+
+
+###############################################################################
+### STEP 7: USER CREATION (External App Approval)
+###############################################################################
+
+### 7.1 External app approves and creates user
+# @name createUser
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "{{userFirstName}}",
+  "lastName": "{{userLastName}}",
+  "tenantId": "{{tenantId}}",
+  "role": "User",
+  "scope": "full_access"
+}
+
+### After execution, copy 'userId' and 'activationToken' from response
+### Copy userId to @userId variable
+### Copy activationToken to @activationToken variable (DEV mode only)
+
+### 7.2 Get User by ID (Verify creation - status should be PendingActivation)
+GET {{baseUrl}}/api/users/{{userId}}
+
+### 7.3 Get User by Email
+GET {{baseUrl}}/api/users/by-email/{{userEmail}}
+
+
+###############################################################################
+### STEP 8: UPDATE USER ROLE AND SCOPE (Optional)
+###############################################################################
+
+### 8.1 Update User Role and Scope
+# Note: User belongs to a single tenant (set during registration)
+# Only role and scope can be updated, tenantId is immutable
+PUT {{baseUrl}}/api/users/{{userId}}
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "{{userFirstName}}",
+  "lastName": "{{userLastName}}",
+  "role": "Admin",
+  "scope": "admin_access"
+}
+
+
+###############################################################################
+### STEP 9: USER ACTIVATION
+###############################################################################
+
+### 9.1 Activate User Account (set password)
+# @name activateUser
+POST {{baseUrl}}/api/auth/activate
+Content-Type: application/json
+
+{
+  "token": "{{activationToken}}",
+  "userId": "afb2ac7b-c973-47fe-8c4c-ca6191370206",
+  "newPassword": "{{userPassword}}",
+  "confirmPassword": "{{userPassword}}"
+}
+
+### 9.2 Verify User is Active
+GET {{baseUrl}}/api/users/{{userId}}
+### Status should now be "Active"
+
+
+###############################################################################
+### STEP 10: USER LOGIN (API)
+###############################################################################
+
+### 10.1 Login via API to get session cookie
+# @name loginUser
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "tenantname": "{{TenantNameResult}}"
+}
+
+### Response: Cookie set for authenticated session
+
+
+###############################################################################
+### STEP 11: OAUTH2 AUTHORIZATION (PKCE Flow)
+###############################################################################
+
+### 11.1 Start Authorization Flow (paste in browser)
+# GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientName}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values=tenant:{{tenantName}}
+
+### 11.2 Authorization with automatic cookie (from login)
+# @name authorize
+GET {{baseUrl}}/connect/authorize?response_type=code&client_id={{clientName}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&state={{state}}&nonce={{nonce}}&acr_values=tenant:{{TenantNameResult}}
+Cookie: {{loginUser.response.headers.Set-Cookie}}
+
+### Copy the 'code' from redirect URL (response will be 302 redirect)
+### Example: http://localhost:4200/callback?code=XXXXX&state=workflow-state-12345
+### Paste the code value below:
+@authCode = CE848620C7AC4F13FE268289C03C87A7818BCA7ABB55F88B37F3F9D2E498F267-1
+
+
+###############################################################################
+### STEP 12: TOKEN EXCHANGE
+###############################################################################
+
+### 12.1 Exchange authorization code for tokens
+# @name getTokens
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&client_id={{clientName}}
+&code={{authCode}}
+&redirect_uri={{redirectUri}}
+&code_verifier={{codeVerifier}}
+
+### Capture tokens from response
+@accessToken = {{getTokens.response.body.access_token}}
+@refreshToken = {{getTokens.response.body.refresh_token}}
+@idToken = {{getTokens.response.body.id_token}}
+
+
+###############################################################################
+### STEP 13: USE ACCESS TOKEN
+###############################################################################
+
+### 13.1 Get User Claims
+GET {{baseUrl}}/account/claims
+Authorization: Bearer {{accessToken}}
+
+### 13.2 Get UserInfo (OIDC standard)
+GET {{baseUrl}}/connect/userinfo
+Authorization: Bearer {{accessToken}}
+
+### 13.3 Introspect Token
+POST {{baseUrl}}/connect/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}
+&client_id={{clientName}}
+
+
+###############################################################################
+### STEP 14: REFRESH TOKEN
+###############################################################################
+
+### 14.1 Get new access token using refresh token
+# @name refreshTokenResponse
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&client_id={{clientName}}
+&refresh_token={{refreshToken}}
+
+### Capture new tokens
+@accessToken = {{refreshTokenResponse.response.body.access_token}}
+@refreshToken = {{refreshTokenResponse.response.body.refresh_token}}
+
+
+###############################################################################
+### STEP 15: USER MANAGEMENT OPERATIONS
+###############################################################################
+
+### 15.1 Update User Role/Scope
+# Note: tenantId cannot be changed after user creation
+PUT {{baseUrl}}/api/users/{{userId}}
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "{{userFirstName}}",
+  "lastName": "{{userLastName}}",
+  "role": "Admin",
+  "scope": "admin_access"
+}
+
+### 15.2 Get All Users (Admin operation)
+GET {{baseUrl}}/api/users
+
+### 15.3 Search Users by Email
+GET {{baseUrl}}/api/users/search?email={{userEmail}}
+
+### 15.4 Deactivate User
+POST {{baseUrl}}/api/users/{{userId}}/deactivate
+
+### 15.5 Reactivate User
+POST {{baseUrl}}/api/users/{{userId}}/activate
+
+
+###############################################################################
+### STEP 16: TENANT MANAGEMENT OPERATIONS
+###############################################################################
+
+### 16.1 Get All Tenants
+GET {{baseUrl}}/api/tenant
+
+### 16.2 Get Tenants for Client
+GET {{baseUrl}}/api/clients/{{clientId}}/tenants
+
+### 16.3 Deactivate Tenant
+POST {{baseUrl}}/api/tenant/{{tenantId}}/deactivate
+
+### 16.4 Reactivate Tenant
+POST {{baseUrl}}/api/tenant/{{tenantId}}/activate
+
+
+###############################################################################
+### STEP 17: CLIENT MANAGEMENT OPERATIONS
+###############################################################################
+
+### 17.1 Get All Clients
+GET {{baseUrl}}/api/clients
+
+### 17.2 Update Client Scopes
+PUT {{baseUrl}}/api/clients/{{clientId}}
+Content-Type: application/json
+
+{
+  "clientName": "{{clientName}}",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access",
+    "custom.scope"
+  ],
+  "requireMfa": true,
+  "isActive": true
+}
+
+### 17.3 Enable MFA for Client
+POST {{baseUrl}}/api/clients/{{clientId}}/enable-mfa
+
+### 17.4 Disable MFA for Client
+POST {{baseUrl}}/api/clients/{{clientId}}/disable-mfa
+
+
+###############################################################################
+### STEP 18: LOGOUT & CLEANUP
+###############################################################################
+
+### 18.1 Revoke Access Token
+POST {{baseUrl}}/connect/revocation
+Content-Type: application/x-www-form-urlencoded
+
+token={{accessToken}}
+&client_id={{clientName}}
+&token_type_hint=access_token
+
+### 18.2 Revoke Refresh Token
+POST {{baseUrl}}/connect/revocation
+Content-Type: application/x-www-form-urlencoded
+
+token={{refreshToken}}
+&client_id={{clientName}}
+&token_type_hint=refresh_token
+
+### 18.3 Logout (End Session)
+GET {{baseUrl}}/connect/endsession?id_token_hint={{accessToken}}&post_logout_redirect_uri={{redirectUri}}
+
+
+###############################################################################
+### STEP 19: CLEANUP (OPTIONAL - Destructive operations)
+###############################################################################
+
+### 19.1 Delete User
+# DELETE {{baseUrl}}/api/users/{{userId}}
+
+### 19.3 Delete Tenant
+# DELETE {{baseUrl}}/api/tenant/{{tenantId}}
+
+### 19.4 Delete CustomConfiguration
+# DELETE {{baseUrl}}/api/custom-configurations/{{customConfigId}}
+
+### 19.5 Delete Client
+# DELETE {{baseUrl}}/api/clients/{{clientId}}
+
+
+###############################################################################
+### DATABASE VERIFICATION QUERIES
+###############################################################################
+
+### Verify Client exists and is active
+# Run this SQL in your PostgreSQL client:
+# SELECT "Id", "ClientName", "IsActive", "associated_tenant_ids" 
+# FROM dbo.clients 
+# WHERE "ClientName" = 'workflow-test-spa-1764604058';
+
+### Verify Tenant exists and has correct clientId
+# SELECT t."Id", t."Name", t."ClientId", c."ClientName"
+# FROM dbo.tenants t
+# LEFT JOIN dbo.clients c ON t."ClientId"::text = c."Id"::text
+# WHERE t."Name" = 'workflow-tenant1';
+
+### Verify User exists with correct TenantId
+# SELECT u."Id", u."Email", u."TenantId", u."Role", u."Scope", u."Status"
+# FROM dbo.users u
+# WHERE u."Email" = 'workflow.test1@example.com';
+
+### Full workflow verification (all entities linked)
+# SELECT 
+#   c."ClientName",
+#   t."Name" as "TenantName",
+#   u."Email",
+#   u."Role",
+#   u."Scope",
+#   u."Status"
+# FROM dbo.clients c
+# LEFT JOIN dbo.tenants t ON t."ClientId"::text = c."Id"::text
+# LEFT JOIN dbo.users u ON u."TenantId" = t."Id"
+# WHERE c."ClientName" = 'workflow-test-spa-1764604058'
+#   OR t."Name" = 'workflow-tenant1';
+
+
+###############################################################################
+### ADDITIONAL SCENARIOS
+###############################################################################
+
+### SCENARIO: Create User on Different Tenant
+### Same email can be used on different tenants (separate accounts)
+
+### Create second tenant
+# @name createSecondTenant
+POST {{baseUrl}}/api/tenant
+Content-Type: application/json
+
+{
+  "name": "workflow-tenant-2",
+  "displayName": "Second Workflow Tenant",
+  "clientId": "{{clientId}}",
+  "customConfigurationId": "{{customConfigId}}",
+  "allowedReturnUrls": ["{{redirectUri}}"],
+  "allowedCorsOrigins": ["http://localhost:4200"]
+}
+
+### Create user on second tenant (same email, different account)
+# @name createUserTenant2
+POST {{baseUrl}}/api/users/register
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "firstName": "{{userFirstName}}",
+  "lastName": "{{userLastName}}",
+  "tenantId": "{{createSecondTenant.response.body.id}}",
+  "role": "Reader",
+  "scope": "read_only"
+}
+
+### Note: This creates a SEPARATE account with the same email
+### Each tenant has its own user account with independent password and permissions
+
+
+### SCENARIO: Password Reset Flow
+
+### Request password reset
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+### Reset password with token (from email)
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "token": "RESET_TOKEN_FROM_EMAIL",
+  "newPassword": "NewSecureP@ssw0rd456!",
+  "confirmPassword": "NewSecureP@ssw0rd456!"
+}
+
+
+### SCENARIO: OIDC Discovery
+
+### Get OpenID Connect configuration
+GET {{baseUrl}}/.well-known/openid-configuration
+
+### Get JWKS (public keys for token validation)
+GET {{baseUrl}}/.well-known/openid-configuration/jwks
+
+
+###############################################################################
+### NOTES & WORKFLOW SUMMARY
+###############################################################################
+
+# Complete Workflow Order:
+# 1. Create Client (OAuth2 application)
+# 2. Create CustomConfiguration (branding/languages) - INDEPENDENT entity
+# 3. Create Tenant (links Client + CustomConfiguration + URLs)
+# 4. Update Client (associate with tenant - optional)
+# 5. Update Tenant (add more URLs/CORS)
+# 6. User Registration Request (user submits form)
+# 7. User Creation (external app approves)
+# 8. Update User Role/Scope (optional)
+# 9. User Activation (user sets password)
+# 10. User Login (get session cookie)
+# 11. OAuth2 Authorization (PKCE flow starts)
+# 12. Token Exchange (get access/refresh tokens)
+# 13. Use Access Token (call protected APIs)
+# 14. Refresh Token (get new access token)
+# 15-19. Management & Cleanup operations
+
+# Architecture Summary:
+# Client (1) → (N) Tenants
+# CustomConfiguration (INDEPENDENT) - not owned by any Client
+# CustomConfiguration (1) → (N) Tenants (via customConfigurationId in Tenant)
+# Tenant (1) → (1) Client (via clientId in Tenant)
+# Tenant (1) → (1) CustomConfiguration (REQUIRED)
+# User (N) → (1) Tenant (via tenantId in User - required, immutable)
+# User has role and scope directly (no junction table)
+
+# Key Points:
+# - CustomConfiguration is INDEPENDENT (not owned by any Client)
+# - Multiple Tenants can share the SAME CustomConfiguration (even from different Clients)
+# - Tenant MUST reference a Client (via clientId - required field)
+# - Tenant MUST reference a CustomConfiguration (via customConfigurationId - required field)
+# - Each User belongs to ONE tenant only (tenantId is required and immutable)
+# - Same email can create separate accounts on different tenants
+# - Email uniqueness is per tenant (composite unique key: Email + TenantId)
+# - Role and Scope are stored directly in User entity (can be updated)
+# - PKCE is used for security (code_verifier + code_challenge)
+# - Tokens expire: access_token (1h), refresh_token (15 days)
+
+###############################################################################

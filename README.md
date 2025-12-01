@@ -84,9 +84,11 @@ Le projet suit une architecture en couches basée sur les principes DDD :
 **Agrégats:**
 - `User` : Utilisateur avec rôles, permissions, et tenant
 - `Client` : Application cliente OAuth2/OIDC
+- `CustomConfiguration` : Configuration de branding et langues partagée entre tenants
+- `Tenant` : Tenant avec isolation multi-tenant, référence une CustomConfiguration (optionnel)
 
 **Value Objects:**
-- `UserId`, `Email`, `ClientId`, `ClientSecret`, `ScopeId`, `PermissionName`
+- `UserId`, `Email`, `ClientId`, `ClientSecret`, `ScopeId`, `PermissionName`, `CustomConfigurationId`, `TenantId`
 
 **Domain Events:**
 - `UserRegisteredEvent`, `UserEmailConfirmedEvent`, `ClientCreatedEvent`
@@ -186,17 +188,22 @@ Configuration et personnalisation par tenant (branding, langue, format).
 | `GET /api/tenant/{tenantId}/branding.css` | GET | Génère un fichier CSS personnalisé avec couleurs, logo et images du tenant (variables CSS) | Non requise |
 | `GET /api/tenant/{tenantId}/language` | GET | Retourne les préférences linguistiques du tenant (langue, format date/heure, timezone, devise) | Non requise |
 
-**Réponse Branding CSS:**
-```css
-:root {
-    --primary-color: #667eea;
-    --secondary-color: #764ba2;
-    --font-primary-color: #333333;
-    --font-secondary-color: #666666;
-    --logo-base64: url('data:image/png;base64,...');
-    --image-base64: url('data:image/png;base64,...');
+**Réponse CustomConfiguration:**
+```json
+{
+  "id": "a1b2c3d4-...",
+  "name": "Enterprise",
+  "description": "Configuration for enterprise clients",
+  "isActive": true,
+  "primaryColor": "#667eea",
+  "secondaryColor": "#764ba2",
+  "logoUrl": "https://cdn.example.com/logo.png",
+  "supportedLanguages": ["fr-FR", "en-US", "es-ES"],
+  "defaultLanguage": "fr-FR"
 }
 ```
+
+**Note:** Un Tenant peut référencer une CustomConfiguration via `customConfigurationId` pour partager le branding et les langues avec d'autres tenants.
 
 **Réponse Language:**
 ```json
@@ -393,6 +400,62 @@ Support complet du flux **Client Credentials** pour l'authentification machine-t
 
 📖 **[Configuration OAuth2 Client Credentials →](INSTALL.md#configuration-oauth2-client-credentials)**  
 📖 **[Configuration IdP externe →](INSTALL.md#configuration-idp-externe)**
+
+### 🔄 Refresh Tokens
+
+Pour obtenir un **refresh token** lors de l'authentification OAuth2, vous devez :
+
+1. **Inclure le scope `offline_access`** dans la demande d'autorisation :
+   ```
+   scope=openid profile email johodp.identity johodp.api offline_access
+   ```
+
+2. **Configurer le client** pour autoriser `offline_access` dans `allowedScopes` :
+   ```json
+   {
+     "clientName": "my-spa-app",
+     "allowedScopes": [
+       "openid",
+       "profile", 
+       "email",
+       "johodp.identity",
+       "johodp.api",
+       "offline_access"
+     ]
+   }
+   ```
+
+3. **Réponse du token endpoint** inclura alors le refresh token :
+   ```json
+   {
+     "access_token": "eyJhbGc...",
+     "id_token": "eyJhbGc...",
+     "refresh_token": "CfDJ8II...",
+     "expires_in": 3600,
+     "token_type": "Bearer",
+     "scope": "openid profile email johodp.identity johodp.api offline_access"
+   }
+   ```
+
+4. **Utiliser le refresh token** pour obtenir un nouveau access token :
+   ```bash
+   POST /connect/token
+   Content-Type: application/x-www-form-urlencoded
+
+   grant_type=refresh_token
+   &client_id=my-spa-app
+   &refresh_token=CfDJ8II...
+   ```
+
+**Configuration par défaut :**
+- **Durée de vie access token :** 1 heure (3600 secondes)
+- **Durée de vie ID token :** 5 minutes (300 secondes)
+- **Durée de vie refresh token :** 15 jours (1 296 000 secondes, sliding expiration)
+- **Usage unique :** Chaque refresh token ne peut être utilisé qu'une fois. Un nouveau refresh token est émis à chaque renouvellement.
+
+**Configuration :** Ces durées sont définies dans `src/Johodp.Infrastructure/IdentityServer/CustomClientStore.cs` (lignes 142-146)
+
+📖 **[Exemple complet dans complete-workflow.http →](src/Johodp.Api/httpTest/complete-workflow.http)**
 
 ## 🏢 Multi-tenancy
 

@@ -23,14 +23,10 @@ public class DomainUserClaimsPrincipalFactory : IUserClaimsPrincipalFactory<User
         identity.AddClaim(new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"));
         identity.AddClaim(new Claim(ClaimTypes.Email, user.Email.Value));
 
-        // Note: System roles and permissions removed
-        // Tenant-specific roles/scopes are handled by IdentityServerProfileService
-
-        // Add all tenant IDs as separate claims
-        foreach (var tenantId in user.TenantIds)
-        {
-            identity.AddClaim(new Claim("tenantid", tenantId.ToString()));
-        }
+        // Add tenant ID and role/scope
+        identity.AddClaim(new Claim("tenantid", user.TenantId.Value.ToString()));
+        identity.AddClaim(new Claim(ClaimTypes.Role, user.Role));
+        identity.AddClaim(new Claim("scope", user.Scope));
 
         var principal = new ClaimsPrincipal(identity);
         return Task.FromResult(principal);

@@ -4,6 +4,7 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 public class UpdateTenantCommand : IRequest<TenantDto>
 {
@@ -45,48 +46,16 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             tenant.UpdateDisplayName(dto.DisplayName);
         }
 
-        // Update branding
-        if (dto.PrimaryColor != null || dto.SecondaryColor != null || 
-            dto.LogoUrl != null || dto.BackgroundImageUrl != null || dto.CustomCss != null)
+        // Update CustomConfiguration reference (required if provided)
+        if (dto.CustomConfigurationId.HasValue)
         {
-            tenant.UpdateBranding(
-                dto.PrimaryColor,
-                dto.SecondaryColor,
-                dto.LogoUrl,
-                dto.BackgroundImageUrl,
-                dto.CustomCss);
-        }
-
-        // Update default language
-        if (dto.DefaultLanguage != null)
-        {
-            tenant.SetDefaultLanguage(dto.DefaultLanguage);
-        }
-
-        // Update supported languages (replace all)
-        if (dto.SupportedLanguages != null)
-        {
-            // Remove languages not in the new list
-            var currentLanguages = tenant.SupportedLanguages.ToList();
-            foreach (var lang in currentLanguages)
+            if (dto.CustomConfigurationId.Value == Guid.Empty)
             {
-                if (!dto.SupportedLanguages.Contains(lang) && lang != tenant.DefaultLanguage)
-                {
-                    tenant.RemoveSupportedLanguage(lang);
-                }
+                throw new InvalidOperationException("CustomConfigurationId cannot be empty. A tenant must have a valid CustomConfiguration.");
             }
 
-            // Add new languages
-            foreach (var lang in dto.SupportedLanguages)
-            {
-                tenant.AddSupportedLanguage(lang);
-            }
-        }
-
-        // Update localization
-        if (dto.Timezone != null || dto.Currency != null)
-        {
-            tenant.UpdateLocalization(dto.Timezone, dto.Currency);
+            tenant.SetCustomConfiguration(
+                Domain.CustomConfigurations.ValueObjects.CustomConfigurationId.From(dto.CustomConfigurationId.Value));
         }
 
         // Update return URLs (replace all)
@@ -129,7 +98,13 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             // Validate that the client exists if not empty
             if (!string.IsNullOrWhiteSpace(dto.ClientId))
             {
-                var client = await _clientRepository.GetByNameAsync(dto.ClientId);
+                if (!Guid.TryParse(dto.ClientId, out var clientGuid))
+                {
+                    throw new InvalidOperationException($"ClientId '{dto.ClientId}' is not a valid GUID.");
+                }
+                
+                var clientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(clientGuid);
+                var client = await _clientRepository.GetByIdAsync(clientId);
                 if (client == null)
                 {
                     throw new InvalidOperationException($"Client '{dto.ClientId}' does not exist. Please create the client first.");
@@ -146,22 +121,30 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
                 // Remove tenant from old client
                 if (!string.IsNullOrWhiteSpace(oldClientId))
                 {
-                    var oldClient = await _clientRepository.GetByNameAsync(oldClientId);
-                    if (oldClient != null)
+                    if (Guid.TryParse(oldClientId, out var oldClientGuid))
                     {
-                        oldClient.DissociateTenant(tenant.Id.Value.ToString());
-                        await _clientRepository.UpdateAsync(oldClient);
+                        var oldClientId_ValueObject = Johodp.Domain.Clients.ValueObjects.ClientId.From(oldClientGuid);
+                        var oldClient = await _clientRepository.GetByIdAsync(oldClientId_ValueObject);
+                        if (oldClient != null)
+                        {
+                            oldClient.DissociateTenant(tenant.Id.Value.ToString());
+                            await _clientRepository.UpdateAsync(oldClient);
+                        }
                     }
                 }
 
                 // Add tenant to new client
                 if (!string.IsNullOrWhiteSpace(tenant.ClientId))
                 {
-                    var newClient = await _clientRepository.GetByNameAsync(tenant.ClientId);
-                    if (newClient != null && !newClient.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
+                    if (Guid.TryParse(tenant.ClientId, out var newClientGuid))
                     {
-                        newClient.AssociateTenant(tenant.Id.Value.ToString());
-                        await _clientRepository.UpdateAsync(newClient);
+                        var newClientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(newClientGuid);
+                        var newClient = await _clientRepository.GetByIdAsync(newClientId);
+                        if (newClient != null && !newClient.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
+                        {
+                            newClient.AssociateTenant(tenant.Id.Value.ToString());
+                            await _clientRepository.UpdateAsync(newClient);
+                        }
                     }
                 }
             }
@@ -205,15 +188,7 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             IsActive = tenant.IsActive,
             CreatedAt = tenant.CreatedAt,
             UpdatedAt = tenant.UpdatedAt,
-            PrimaryColor = tenant.PrimaryColor,
-            SecondaryColor = tenant.SecondaryColor,
-            LogoUrl = tenant.LogoUrl,
-            BackgroundImageUrl = tenant.BackgroundImageUrl,
-            CustomCss = tenant.CustomCss,
-            DefaultLanguage = tenant.DefaultLanguage,
-            SupportedLanguages = tenant.SupportedLanguages.ToList(),
-            Timezone = tenant.Timezone,
-            Currency = tenant.Currency,
+            CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
             ClientId = tenant.ClientId

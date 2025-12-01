@@ -48,9 +48,11 @@ sequenceDiagram
 
     U->>Browser: Accès formulaire inscription
     Browser->>IDP: GET /account/onboarding<br/>?acr_values=tenant:acme<br/>&return_url=...
-    IDP->>DB: Récupérer config Tenant "acme"
-    DB-->>IDP: Tenant { branding, NotificationUrl }
-    IDP-->>Browser: Formulaire avec branding tenant
+    IDP->>DB: Récupérer Tenant "acme" et sa CustomConfiguration
+    DB-->>IDP: Tenant { CustomConfigurationId, NotificationUrl }
+    IDP->>DB: Récupérer CustomConfiguration
+    DB-->>IDP: CustomConfiguration { branding, langues }
+    IDP-->>Browser: Formulaire avec branding de CustomConfiguration
     Browser-->>U: Affichage formulaire personnalisé
 
     U->>Browser: Remplit et soumet formulaire
@@ -86,9 +88,9 @@ sequenceDiagram
         U->>Browser: Clique sur lien dans email
         Browser->>IDP: GET /account/activate<br/>?token=...&userId=...&tenant=acme
         
-        IDP->>DB: Récupérer User + Tenant
-        DB-->>IDP: User, Tenant branding
-        IDP-->>Browser: Formulaire mot de passe<br/>avec branding tenant
+        IDP->>DB: Récupérer User + Tenant + CustomConfiguration
+        DB-->>IDP: User, Tenant, CustomConfiguration branding
+        IDP-->>Browser: Formulaire mot de passe<br/>avec branding CustomConfiguration
         Browser-->>U: Formulaire activation
         
         U->>Browser: Définit mot de passe

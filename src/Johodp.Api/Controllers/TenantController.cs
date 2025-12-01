@@ -229,40 +229,15 @@ public class TenantController : ControllerBase
                 return NotFound("/* Tenant not found */");
             }
 
+            // Branding is now managed via CustomConfiguration
+            // Return a basic CSS or redirect to CustomConfiguration endpoint
             var css = $@"/* Branding CSS for Tenant: {tenantId} */
+/* Branding is managed via CustomConfiguration. Please use the CustomConfiguration API. */
 
 :root {{
-    --primary-color: {tenant.PrimaryColor ?? "#667eea"};
-    --secondary-color: {tenant.SecondaryColor ?? "#764ba2"};
-    --font-primary-color: #333333;
-    --font-secondary-color: #666666;
-    --logo-base64: url('{tenant.LogoUrl ?? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}');
-    --image-base64: url('{tenant.BackgroundImageUrl ?? "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}');
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
 }}
-
-{tenant.CustomCss ?? @"/* Apply branding */
-body {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-    color: var(--font-primary-color);
-}
-
-.login-logo {
-    background-image: var(--logo-base64);
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-.btn-primary {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
-    color: #ffffff;
-}
-
-.btn-primary:hover {
-    background-color: var(--secondary-color);
-    border-color: var(--secondary-color);
-}"}
 ";
 
             return Content(css, "text/css");
@@ -302,15 +277,12 @@ body {
                 return NotFound(new { error = "Tenant not found" });
             }
 
+            // Language preferences are now managed via CustomConfiguration
             var language = new
             {
                 tenantId = tenantId,
-                defaultLanguage = tenant.DefaultLanguage,
-                supportedLanguages = tenant.SupportedLanguages,
-                dateFormat = "dd/MM/yyyy",
-                timeFormat = "HH:mm",
-                timezone = tenant.Timezone,
-                currency = tenant.Currency
+                customConfigurationId = tenant.CustomConfigurationId,
+                message = "Language settings are now managed via CustomConfiguration. Please use the CustomConfiguration API."
             };
 
             return Ok(language);

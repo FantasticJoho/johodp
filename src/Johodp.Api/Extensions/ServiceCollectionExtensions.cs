@@ -38,7 +38,11 @@ public static class ServiceCollectionExtensions
         
         services.AddDbContext<JohodpDbContext>(options =>
             options.UseNpgsql(dataSource,
-                npgsqlOptions => npgsqlOptions.MigrationsAssembly("Johodp.Infrastructure")));
+                npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly("Johodp.Infrastructure");
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
+                }));
 
         // ====================================================================
         // REPOSITORIES & DATA ACCESS
@@ -46,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserRepository, Johodp.Infrastructure.Persistence.Repositories.UserRepository>();
         services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
         services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+        services.AddScoped<ICustomConfigurationRepository, Johodp.Infrastructure.Persistence.Repositories.CustomConfigurationRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // ====================================================================
@@ -83,10 +88,6 @@ public static class ServiceCollectionExtensions
         // MFA Authentication Service (client-specific multi-factor authentication)
         services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
 
-        // Legacy command handlers (TODO: Convert to IRequestHandler pattern)
-        services.AddScoped<Johodp.Application.Users.Commands.AddUserToTenantCommandHandler>();
-        services.AddScoped<Johodp.Application.Users.Commands.RemoveUserFromTenantCommandHandler>();
-
         // ====================================================================
         // IDENTITYSERVER CONFIGURATION
         // ====================================================================
@@ -116,7 +117,11 @@ public static class ServiceCollectionExtensions
             {
                 options.ConfigureDbContext = b =>
                     b.UseNpgsql(connectionString,
-                        sql => sql.MigrationsAssembly("Johodp.Infrastructure"));
+                        sql =>
+                        {
+                            sql.MigrationsAssembly("Johodp.Infrastructure");
+                            sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
+                        });
                 
                 // Use 'dbo' schema for IdentityServer tables (consistent with JohodpDbContext)
                 options.DefaultSchema = "dbo";

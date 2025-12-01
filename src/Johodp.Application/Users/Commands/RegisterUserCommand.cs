@@ -3,13 +3,6 @@ namespace Johodp.Application.Users.Commands;
 using Johodp.Application.Common.Mediator;
 using Johodp.Domain.Tenants.ValueObjects;
 
-public class UserTenantAssignment
-{
-    public TenantId TenantId { get; set; } = null!;
-    public string Role { get; set; } = string.Empty;
-    public string Scope { get; set; } = string.Empty;
-}
-
 public class RegisterUserCommand : IRequest<RegisterUserResponse>
 {
     public string Email { get; set; } = null!;
@@ -17,14 +10,19 @@ public class RegisterUserCommand : IRequest<RegisterUserResponse>
     public string LastName { get; set; } = null!;
     
     /// <summary>
-    /// Legacy single tenant support (deprecated - use Tenants instead)
+    /// TenantId is required - user belongs to a single tenant
     /// </summary>
-    public TenantId? TenantId { get; set; }
+    public TenantId TenantId { get; set; } = null!;
     
     /// <summary>
-    /// List of tenant assignments with role and scope per tenant
+    /// Role assigned to the user (provided by external application)
     /// </summary>
-    public List<UserTenantAssignment>? Tenants { get; set; }
+    public string Role { get; set; } = "user";
+    
+    /// <summary>
+    /// Scope assigned to the user (provided by external application)
+    /// </summary>
+    public string Scope { get; set; } = "default";
     
     public bool CreateAsPending { get; set; } = false;
     public string? Password { get; set; }

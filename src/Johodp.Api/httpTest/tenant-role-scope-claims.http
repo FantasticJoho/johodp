@@ -6,12 +6,15 @@
 @redirectUri = http://localhost:4200/callback
 
 ### 1. Créer un tenant
+# IMPORTANT: Créez d'abord une CustomConfiguration (voir admin-operations.http)
+@customConfigId = <PUT_YOUR_CUSTOM_CONFIG_ID_HERE>
 POST {{baseUrl}}/api/tenants
 Content-Type: application/json
 
 {
   "name": "company-a-example-com",
   "displayName": "Company A",
+  "customConfigurationId": "{{customConfigId}}",
   "tenantUrl": "https://company-a.example.com",
   "allowedReturnUrls": [
     "https://company-a.example.com/callback",
@@ -40,6 +43,7 @@ Content-Type: application/json
 {
   "name": "company-b-example-com",
   "displayName": "Company B",
+  "customConfigurationId": "{{customConfigId}}",
   "tenantUrl": "https://company-b.example.com",
   "allowedReturnUrls": [
     "https://company-b.example.com/callback",

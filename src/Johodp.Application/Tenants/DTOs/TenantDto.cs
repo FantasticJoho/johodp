@@ -9,18 +9,8 @@ public class TenantDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
-    // Branding
-    public string? PrimaryColor { get; set; }
-    public string? SecondaryColor { get; set; }
-    public string? LogoUrl { get; set; }
-    public string? BackgroundImageUrl { get; set; }
-    public string? CustomCss { get; set; }
-
-    // Localization
-    public string DefaultLanguage { get; set; } = "fr-FR";
-    public List<string> SupportedLanguages { get; set; } = new();
-    public string Timezone { get; set; } = "Europe/Paris";
-    public string Currency { get; set; } = "EUR";
+    // Reference to CustomConfiguration (required)
+    public Guid CustomConfigurationId { get; set; }
 
     // OAuth2/OIDC
     public List<string> AllowedReturnUrls { get; set; } = new();
@@ -32,15 +22,7 @@ public class CreateTenantDto
 {
     public string Name { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
-    public string? DefaultLanguage { get; set; }
-    public List<string>? SupportedLanguages { get; set; }
-    public string? PrimaryColor { get; set; }
-    public string? SecondaryColor { get; set; }
-    public string? LogoUrl { get; set; }
-    public string? BackgroundImageUrl { get; set; }
-    public string? CustomCss { get; set; }
-    public string? Timezone { get; set; }
-    public string? Currency { get; set; }
+    public Guid CustomConfigurationId { get; set; } // Required reference to CustomConfiguration
     public List<string>? AllowedReturnUrls { get; set; }
     public List<string>? AllowedCorsOrigins { get; set; }
     public string ClientId { get; set; } = string.Empty;
@@ -49,15 +31,7 @@ public class CreateTenantDto
 public class UpdateTenantDto
 {
     public string? DisplayName { get; set; }
-    public string? PrimaryColor { get; set; }
-    public string? SecondaryColor { get; set; }
-    public string? LogoUrl { get; set; }
-    public string? BackgroundImageUrl { get; set; }
-    public string? CustomCss { get; set; }
-    public string? DefaultLanguage { get; set; }
-    public List<string>? SupportedLanguages { get; set; }
-    public string? Timezone { get; set; }
-    public string? Currency { get; set; }
+    public Guid? CustomConfigurationId { get; set; } // Can be updated, but if provided must be valid
     public List<string>? AllowedReturnUrls { get; set; }
     public List<string>? AllowedCorsOrigins { get; set; }
     public string? ClientId { get; set; }

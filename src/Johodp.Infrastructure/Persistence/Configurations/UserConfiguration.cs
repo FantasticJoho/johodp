@@ -57,17 +57,35 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
-        // Multi-tenancy - One-to-Many relationship with UserTenant entity
-        builder.HasMany(x => x.UserTenants)
-            .WithOne()
-            .HasForeignKey(ut => ut.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
+        // Single tenant with role and scope
+        builder.Property(x => x.TenantId)
+            .HasConversion(
+                v => v.Value,
+                v => TenantId.From(v))
+            .IsRequired();
 
-        // Ignore the computed TenantIds property (derived from UserTenants)
-        builder.Ignore(x => x.TenantIds);
+        builder.Property(x => x.Role)
+            .HasMaxLength(100)
+            .IsRequired();
 
-        // Note: ScopeId, Roles, Permissions removed from User aggregate
-        // Authorization is now handled via UserTenant.Role and UserTenant.Scope
+        builder.Property(x => x.Scope)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        // Foreign key to Tenant
+        builder.HasOne<Tenant>()
+            .WithMany()
+            .HasForeignKey(x => x.TenantId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Composite unique index on (Email, TenantId)
+        builder.HasIndex(x => new { x.Email, x.TenantId })
+            .IsUnique()
+            .HasDatabaseName("IX_users_Email_TenantId");
+
+        // Index on TenantId for queries
+        builder.HasIndex(x => x.TenantId)
+            .HasDatabaseName("IX_users_TenantId");
 
         // Ignore computed property and domain events
         builder.Ignore(x => x.IsActive);

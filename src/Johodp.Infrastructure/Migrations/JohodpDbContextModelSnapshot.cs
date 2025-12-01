@@ -71,6 +71,78 @@ namespace Johodp.Infrastructure.Migrations
                     b.ToTable("clients", "dbo");
                 });
 
+            modelBuilder.Entity("Johodp.Domain.CustomConfigurations.Aggregates.CustomConfiguration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BackgroundImageUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("background_image_url");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CustomCss")
+                        .HasColumnType("text")
+                        .HasColumnName("custom_css");
+
+                    b.Property<string>("DefaultLanguage")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("default_language");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("LogoUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("logo_url");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PrimaryColor")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("primary_color");
+
+                    b.Property<string>("SecondaryColor")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("secondary_color");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("_supportedLanguages")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("supported_languages");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("custom_configurations", "dbo");
+                });
+
             modelBuilder.Entity("Johodp.Domain.Tenants.Aggregates.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -80,10 +152,6 @@ namespace Johodp.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("BackgroundImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
                     b.Property<string>("ClientId")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -91,22 +159,9 @@ namespace Johodp.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("EUR");
-
-                    b.Property<string>("CustomCss")
-                        .HasColumnType("text");
-
-                    b.Property<string>("DefaultLanguage")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("fr-FR");
+                    b.Property<Guid>("CustomConfigurationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("custom_configuration_id");
 
                     b.Property<string>("DisplayName")
                         .IsRequired()
@@ -117,10 +172,6 @@ namespace Johodp.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
-
-                    b.Property<string>("LogoUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -136,21 +187,6 @@ namespace Johodp.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
-                    b.Property<string>("PrimaryColor")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("SecondaryColor")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Timezone")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasDefaultValue("Europe/Paris");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -164,11 +200,6 @@ namespace Johodp.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("AllowedReturnUrls");
 
-                    b.Property<List<string>>("_supportedLanguages")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("SupportedLanguages");
-
                     b.Property<List<string>>("_urls")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -180,102 +211,6 @@ namespace Johodp.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("tenants", "dbo");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Permission", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("permissions", "dbo");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("RequiresMFA")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
-                    b.HasKey("Id");
-
-                    b.ToTable("roles", "dbo");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Aggregates.Scope", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("scopes", "dbo");
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
@@ -316,33 +251,6 @@ namespace Johodp.Infrastructure.Migrations
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
-                    b.Property<Guid?>("ScopeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ScopeId");
-
-                    b.ToTable("users", "dbo");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Entities.UserTenant", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Role")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -353,101 +261,34 @@ namespace Johodp.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("UserId", "TenantId");
+                    b.HasKey("Id");
 
                     b.HasIndex("TenantId")
-                        .HasDatabaseName("IX_UserTenants_TenantId");
+                        .HasDatabaseName("IX_users_TenantId");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("IX_UserTenants_UserId");
+                    b.HasIndex("Email", "TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_users_Email_TenantId");
 
-                    b.ToTable("UserTenants", "dbo");
-                });
-
-            modelBuilder.Entity("UserPermissions", b =>
-                {
-                    b.Property<Guid>("PermissionsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("PermissionsId", "UserId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserPermissions", "dbo");
-                });
-
-            modelBuilder.Entity("UserRoles", b =>
-                {
-                    b.Property<Guid>("RolesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("RolesId", "UserId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserRoles", "dbo");
+                    b.ToTable("users", "dbo");
                 });
 
             modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
                 {
-                    b.HasOne("Johodp.Domain.Users.Aggregates.Scope", "Scope")
+                    b.HasOne("Johodp.Domain.Tenants.Aggregates.Tenant", null)
                         .WithMany()
-                        .HasForeignKey("ScopeId");
-
-                    b.Navigation("Scope");
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Entities.UserTenant", b =>
-                {
-                    b.HasOne("Johodp.Domain.Users.Aggregates.User", null)
-                        .WithMany("UserTenants")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("UserPermissions", b =>
-                {
-                    b.HasOne("Johodp.Domain.Users.Aggregates.Permission", null)
-                        .WithMany()
-                        .HasForeignKey("PermissionsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Johodp.Domain.Users.Aggregates.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("UserRoles", b =>
-                {
-                    b.HasOne("Johodp.Domain.Users.Aggregates.Role", null)
-                        .WithMany()
-                        .HasForeignKey("RolesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Johodp.Domain.Users.Aggregates.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Johodp.Domain.Users.Aggregates.User", b =>
-                {
-                    b.Navigation("UserTenants");
                 });
 #pragma warning restore 612, 618
         }

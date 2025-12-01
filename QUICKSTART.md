@@ -16,13 +16,66 @@ dotnet restore
 
 ### 3. Appliquer les migrations (Windows)
 
+**⚠️ IMPORTANT : Première Installation (Approche Hybride Recommandée)**
+
+Pour la **première installation**, utilisez le script hybride qui initialise le schéma via SQL puis applique les migrations EF Core :
+
 ```powershell
-.\init-db.ps1
+.\init-db-hybrid.ps1
 ```
 
-Ou sur Linux/Mac :
+Pour les **migrations ultérieures**, vous pouvez utiliser directement EF Core :
+
+```powershell
+dotnet ef database update -p src/Johodp.Infrastructure -s src/Johodp.Api --context JohodpDbContext
+```
+
+Ou sur Linux/Mac (première installation) :
 ```bash
-./init-db.sh
+chmod +x init-db-hybrid.sh
+./init-db-hybrid.sh
+```
+
+**Pourquoi cette approche ?**
+
+EF Core crée `__EFMigrationsHistory` dans le schéma `public` par défaut. L'approche hybride :
+1. Crée d'abord le schéma `dbo` et `__EFMigrationsHistory` via SQL (`init-schema.sql`)
+2. Applique ensuite les migrations EF Core normalement
+
+Cela garantit que toutes les tables sont dans `dbo` tout en conservant le workflow EF Core standard. Voir `MIGRATIONS_STRATEGY.md` pour plus de détails.
+
+**Alternative : Approche SQL Pure**
+
+Si vous préférez gérer toutes les migrations via SQL :
+
+```powershell
+.\init-db-sql.ps1
+```
+
+### 3.1. Générer les scripts SQL des migrations (optionnel)
+
+Pour générer les scripts SQL sans les appliquer immédiatement :
+
+#### Pour JohodpDbContext (tables métiers) :
+```powershell
+dotnet ef migrations script -p src/Johodp.Infrastructure -s src/Johodp.Api --context JohodpDbContext --output migration-johodp.sql
+```
+
+#### Pour PersistedGrantDbContext (IdentityServer) :
+```powershell
+dotnet ef migrations script -p src/Johodp.Infrastructure -s src/Johodp.Api --context PersistedGrantDbContext --output migration-identityserver.sql
+```
+
+#### Options utiles :
+```powershell
+# Script idempotent (peut être exécuté plusieurs fois sans erreur)
+dotnet ef migrations script --idempotent -p src/Johodp.Infrastructure -s src/Johodp.Api --context JohodpDbContext --output migration-johodp-idempotent.sql
+
+# Script pour une plage de migrations spécifique
+dotnet ef migrations script FromMigration ToMigration -p src/Johodp.Infrastructure -s src/Johodp.Api --context JohodpDbContext
+
+# Script depuis une migration jusqu'à la dernière
+dotnet ef migrations script 20251201081926_InitialCreate -p src/Johodp.Infrastructure -s src/Johodp.Api --context JohodpDbContext
 ```
 
 ### 4. Lancer l'API
@@ -74,12 +127,16 @@ L'application démarrera sur `https://localhost:5001`
 ### Agrégats
 - **User** : Gère l'enregistrement, la confirmation d'email, la désactivation
 - **Client** : Gère les applications OAuth2/OIDC
+- **CustomConfiguration** : Configuration de branding et langues partagée entre tenants
+- **Tenant** : Isolation multi-tenant, référence optionnelle vers CustomConfiguration
 
 ### Value Objects
 - **Email** : Validation d'email intégrée
 - **UserId** : Identifiant utilisateur typé
 - **ClientId** : Identifiant client typé
 - **ClientSecret** : Secret client typé
+- **CustomConfigurationId** : Identifiant configuration typé
+- **TenantId** : Identifiant tenant typé
 
 ### Domain Events
 - **UserRegisteredEvent** : Publié lors de la création d'un utilisateur

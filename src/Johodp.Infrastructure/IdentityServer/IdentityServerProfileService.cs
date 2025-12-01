@@ -56,7 +56,7 @@ public class IdentityServerProfileService : IProfileService
             return;
         }
         
-        _logger.LogInformation("Building claims for user: {Email}, tenants: {TenantCount}", user.Email.Value, user.UserTenants.Count);
+        _logger.LogInformation("Building claims for user: {Email}, tenant: {TenantId}", user.Email.Value, user.TenantId.Value);
 
         var claims = new List<Claim>
         {
@@ -67,39 +67,13 @@ public class IdentityServerProfileService : IProfileService
             new Claim("email_verified", user.EmailConfirmed.ToString().ToLowerInvariant())
         };
 
-        // Extract tenant from subject claims (set during login)
-        var tenantIdClaim = context.Subject.FindFirst("tenant_id")?.Value;
+        // Add tenant-specific claims (user belongs to single tenant)
+        claims.Add(new Claim("tenant_id", user.TenantId.Value.ToString()));
+        claims.Add(new Claim("tenant_role", user.Role));
+        claims.Add(new Claim("tenant_scope", user.Scope));
         
-        if (!string.IsNullOrEmpty(tenantIdClaim) && Guid.TryParse(tenantIdClaim, out var tenantGuid))
-        {
-            var tenantId = TenantId.From(tenantGuid);
-            var userTenant = user.GetTenantContext(tenantId);
-            
-            if (userTenant != null)
-            {
-                // Add tenant-specific claims for the requested tenant only
-                claims.Add(new Claim("tenant_id", userTenant.TenantId.Value.ToString()));
-                claims.Add(new Claim("tenant_role", userTenant.Role));
-                claims.Add(new Claim("tenant_scope", userTenant.Scope));
-                
-                _logger.LogInformation("Added tenant-specific claims for user {Email}: tenant={TenantId}, role={Role}, scope={Scope}",
-                    user.Email.Value, userTenant.TenantId.Value, userTenant.Role, userTenant.Scope);
-            }
-            else
-            {
-                _logger.LogWarning("User {Email} requested tenant {TenantId} but does not have access", 
-                    user.Email.Value, tenantGuid);
-            }
-        }
-        else
-        {
-            // No specific tenant requested - add all tenant IDs (but not role/scope to avoid confusion)
-            _logger.LogInformation("No specific tenant claim found, adding all tenant IDs for user {Email}", user.Email.Value);
-            foreach (var userTenant in user.UserTenants)
-            {
-                claims.Add(new Claim("tenant_id", userTenant.TenantId.Value.ToString()));
-            }
-        }
+        _logger.LogInformation("Added tenant-specific claims for user {Email}: tenant={TenantId}, role={Role}, scope={Scope}",
+            user.Email.Value, user.TenantId.Value, user.Role, user.Scope);
 
         // Note: System-level Scope/Role/Permission aggregates removed
         // All authorization is now handled via UserTenant.Role and UserTenant.Scope (strings)

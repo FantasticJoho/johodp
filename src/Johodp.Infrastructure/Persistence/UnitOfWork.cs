@@ -9,6 +9,7 @@ public class UnitOfWork : IUnitOfWork
     private readonly JohodpDbContext _context;
     private IUserRepository? _userRepository;
     private IClientRepository? _clientRepository;
+    private ICustomConfigurationRepository? _customConfigurationRepository;
 
     public UnitOfWork(JohodpDbContext context)
     {
@@ -17,6 +18,7 @@ public class UnitOfWork : IUnitOfWork
 
     public IUserRepository Users => _userRepository ??= new UserRepository(_context);
     public IClientRepository Clients => _clientRepository ??= new ClientRepository(_context);
+    public ICustomConfigurationRepository CustomConfigurations => _customConfigurationRepository ??= new CustomConfigurationRepository(_context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

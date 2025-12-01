@@ -2,6 +2,7 @@ namespace Johodp.Domain.Tenants.Aggregates;
 
 using Johodp.Domain.Common;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 /// <summary>
 /// Tenant aggregate representing a multi-tenant configuration
@@ -15,24 +16,13 @@ public class Tenant : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    // Branding
-    public string? PrimaryColor { get; private set; }
-    public string? SecondaryColor { get; private set; }
-    public string? LogoUrl { get; private set; }
-    public string? BackgroundImageUrl { get; private set; }
-    public string? CustomCss { get; private set; }
+    // Reference to CustomConfiguration for branding and localization (required)
+    public CustomConfigurationId CustomConfigurationId { get; private set; } = null!;
 
     // Notification configuration (pour l'application tierce)
     public string? NotificationUrl { get; private set; }
     public string? ApiKey { get; private set; }
     public bool NotifyOnAccountRequest { get; private set; }
-
-    // Languages and localization
-    private readonly List<string> _supportedLanguages = new();
-    public IReadOnlyList<string> SupportedLanguages => _supportedLanguages.AsReadOnly();
-    public string DefaultLanguage { get; private set; } = "fr-FR";
-    public string Timezone { get; private set; } = "Europe/Paris";
-    public string Currency { get; private set; } = "EUR";
 
     // URLs associated with this tenant (e.g., "acme-corp-example-com", "acme-corp-fr")
     private readonly List<string> _urls = new();
@@ -54,8 +44,11 @@ public class Tenant : AggregateRoot
     public static Tenant Create(
         string name,
         string displayName,
-        string defaultLanguage = "fr-FR")
+        CustomConfigurationId customConfigurationId)
     {
+        if (customConfigurationId == null)
+            throw new ArgumentNullException(nameof(customConfigurationId), "CustomConfigurationId is required");
+
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Tenant name cannot be empty", nameof(name));
         
@@ -77,84 +70,20 @@ public class Tenant : AggregateRoot
             Id = TenantId.Create(),
             Name = name.ToLowerInvariant(), // Normalize tenant name
             DisplayName = displayName,
-            DefaultLanguage = defaultLanguage,
+            CustomConfigurationId = customConfigurationId,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
 
-        // Add default supported language
-        tenant._supportedLanguages.Add(defaultLanguage);
-
         return tenant;
     }
 
-    public void UpdateBranding(
-        string? primaryColor = null,
-        string? secondaryColor = null,
-        string? logoUrl = null,
-        string? backgroundImageUrl = null,
-        string? customCss = null)
+    public void SetCustomConfiguration(CustomConfigurationId customConfigurationId)
     {
-        if (primaryColor != null)
-            PrimaryColor = primaryColor;
+        if (customConfigurationId == null)
+            throw new ArgumentNullException(nameof(customConfigurationId), "CustomConfigurationId is required");
 
-        if (secondaryColor != null)
-            SecondaryColor = secondaryColor;
-
-        if (logoUrl != null)
-            LogoUrl = logoUrl;
-
-        if (backgroundImageUrl != null)
-            BackgroundImageUrl = backgroundImageUrl;
-
-        if (customCss != null)
-            CustomCss = customCss;
-
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void AddSupportedLanguage(string languageCode)
-    {
-        if (string.IsNullOrWhiteSpace(languageCode))
-            throw new ArgumentException("Language code cannot be empty", nameof(languageCode));
-
-        if (!_supportedLanguages.Contains(languageCode))
-        {
-            _supportedLanguages.Add(languageCode);
-            UpdatedAt = DateTime.UtcNow;
-        }
-    }
-
-    public void RemoveSupportedLanguage(string languageCode)
-    {
-        if (languageCode == DefaultLanguage)
-            throw new InvalidOperationException("Cannot remove the default language");
-
-        _supportedLanguages.Remove(languageCode);
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void SetDefaultLanguage(string languageCode)
-    {
-        if (string.IsNullOrWhiteSpace(languageCode))
-            throw new ArgumentException("Language code cannot be empty", nameof(languageCode));
-
-        // Ensure the language is supported
-        if (!_supportedLanguages.Contains(languageCode))
-            AddSupportedLanguage(languageCode);
-
-        DefaultLanguage = languageCode;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    public void UpdateLocalization(string? timezone = null, string? currency = null)
-    {
-        if (timezone != null)
-            Timezone = timezone;
-
-        if (currency != null)
-            Currency = currency;
-
+        CustomConfigurationId = customConfigurationId;
         UpdatedAt = DateTime.UtcNow;
     }
 

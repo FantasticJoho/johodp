@@ -3,14 +3,32 @@
 
 @baseUrl = http://localhost:5000
 
-### 1. Créer le premier tenant
+### 1. Créer une CustomConfiguration (OBLIGATOIRE pour les tenants)
+# IMPORTANT: Vous devez d'abord créer un Client et utiliser son ID ici
+# Chaque Tenant DOIT référencer une CustomConfiguration pour le branding et les langues
+@myClientId = <PUT_YOUR_CLIENT_ID_HERE>
+POST {{baseUrl}}/api/custom-configurations
+Content-Type: application/json
+
+{
+  "clientId": "{{myClientId}}",
+  "name": "SharedConfig",
+  "description": "Configuration partagée pour tous les tenants de test",
+  "defaultLanguage": "fr-FR",
+  "additionalLanguages": ["en-US"],
+  "primaryColor": "#0066CC"
+}
+
+@sharedConfigId = <GUID_FROM_STEP_1>
+
+### 2. Créer le premier tenant
 POST {{baseUrl}}/api/tenants
 Content-Type: application/json
 
 {
   "name": "tenant-a-example-com",
   "displayName": "Tenant A",
-  "tenantUrl": "https://tenant-a.example.com",
+  "customConfigurationId": "{{sharedConfigId}}",
   "allowedReturnUrls": [
     "https://tenant-a.example.com/callback",
     "http://localhost:4200/callback"
@@ -21,9 +39,9 @@ Content-Type: application/json
   ]
 }
 
-@tenantAId = <GUID_FROM_STEP_1>
+@tenantAId = <GUID_FROM_STEP_2>
 
-### 2. Ajouter URL au Tenant A
+### 3. Ajouter URL au Tenant A
 POST {{baseUrl}}/api/tenants/{{tenantAId}}/urls
 Content-Type: application/json
 
@@ -31,14 +49,14 @@ Content-Type: application/json
   "url": "tenant-a-example-com"
 }
 
-### 3. Créer le deuxième tenant
+### 4. Créer le deuxième tenant (partage la même CustomConfiguration)
 POST {{baseUrl}}/api/tenants
 Content-Type: application/json
 
 {
   "name": "tenant-b-example-com",
   "displayName": "Tenant B",
-  "tenantUrl": "https://tenant-b.example.com",
+  "customConfigurationId": "{{sharedConfigId}}",
   "allowedReturnUrls": [
     "https://tenant-b.example.com/callback",
     "http://localhost:4200/callback"
@@ -49,9 +67,9 @@ Content-Type: application/json
   ]
 }
 
-@tenantBId = <GUID_FROM_STEP_3>
+@tenantBId = <GUID_FROM_STEP_4>
 
-### 4. Ajouter URL au Tenant B
+### 5. Ajouter URL au Tenant B
 POST {{baseUrl}}/api/tenants/{{tenantBId}}/urls
 Content-Type: application/json
 
@@ -59,14 +77,14 @@ Content-Type: application/json
   "url": "tenant-b-example-com"
 }
 
-### 5. Créer le troisième tenant
+### 6. Créer le troisième tenant (partage la même CustomConfiguration)
 POST {{baseUrl}}/api/tenants
 Content-Type: application/json
 
 {
   "name": "tenant-c-example-com",
   "displayName": "Tenant C",
-  "tenantUrl": "https://tenant-c.example.com",
+  "customConfigurationId": "{{sharedConfigId}}",
   "allowedReturnUrls": [
     "https://tenant-c.example.com/callback",
     "http://localhost:4200/callback"
@@ -77,9 +95,9 @@ Content-Type: application/json
   ]
 }
 
-@tenantCId = <GUID_FROM_STEP_5>
+@tenantCId = <GUID_FROM_STEP_6>
 
-### 6. Ajouter URL au Tenant C
+### 7. Ajouter URL au Tenant C
 POST {{baseUrl}}/api/tenants/{{tenantCId}}/urls
 Content-Type: application/json
 
@@ -91,7 +109,7 @@ Content-Type: application/json
 ### ✅ CRÉATION MULTI-TENANT EN UN SEUL APPEL
 ###
 
-### 7. Créer un utilisateur associé à 3 tenants avec roles et scopes différents
+### 8. Créer un utilisateur associé à 3 tenants avec roles et scopes différents
 POST {{baseUrl}}/api/users/register
 Content-Type: application/json
 
@@ -118,14 +136,14 @@ Content-Type: application/json
   ]
 }
 
-@multiUserId = <GUID_FROM_STEP_7>
+@multiUserId = <GUID_FROM_STEP_8>
 
-### 8. Vérifier l'utilisateur créé
+### 9. Vérifier l'utilisateur créé
 GET {{baseUrl}}/api/users/{{multiUserId}}
 
 # Devrait montrer 3 associations de tenants avec leurs roles et scopes
 
-### 9. ✅ TEST: Login sur Tenant A - devrait avoir role=admin, scope=full_access
+### 10. ✅ TEST: Login sur Tenant A - devrait avoir role=admin, scope=full_access
 POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-a-example-com
 Content-Type: application/json
 
@@ -136,7 +154,7 @@ Content-Type: application/json
 
 # Note: Remplacer "MotDePasseActivation" par le mot de passe défini lors de l'activation
 
-### 10. ✅ TEST: Login sur Tenant B - devrait avoir role=manager, scope=department_sales
+### 11. ✅ TEST: Login sur Tenant B - devrait avoir role=manager, scope=department_sales
 POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-b-example-com
 Content-Type: application/json
 
@@ -145,7 +163,7 @@ Content-Type: application/json
   "password": "MotDePasseActivation"
 }
 
-### 11. ✅ TEST: Login sur Tenant C - devrait avoir role=viewer, scope=read_only
+### 12. ✅ TEST: Login sur Tenant C - devrait avoir role=viewer, scope=read_only
 POST {{baseUrl}}/api/auth/login?acr_values=tenant:tenant-c-example-com
 Content-Type: application/json
 

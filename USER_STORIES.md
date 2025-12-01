@@ -123,19 +123,221 @@ DELETE /api/clients/550e8400-e29b-41d4-a716-446655440000
 
 ---
 
-## 🏢 Epic 2: Gestion des Tenants
+## 🎨 Epic 2: Gestion des CustomConfigurations
 
-### US-2.1: Créer un Tenant avec Client Obligatoire (DOIT AVOIR)
+### US-2.1: Créer une CustomConfiguration Indépendante (DOIT AVOIR)
 **En tant qu'** administrateur système  
-**Je veux** créer un tenant associé à un client existant  
-**Afin de** configurer les redirections et le branding pour une organisation
+**Je veux** créer une configuration de branding et de langues réutilisable  
+**Afin de** pouvoir la partager entre plusieurs tenants
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/custom-configurations` avec CreateCustomConfigurationDto
+- [ ] Le système génère un CustomConfigurationId unique (GUID)
+- [ ] Le champ name est OBLIGATOIRE et doit être unique
+- [ ] Le champ defaultLanguage est OBLIGATOIRE
+- [ ] Le système crée la configuration avec IsActive=true
+- [ ] La configuration N'APPARTIENT À AUCUN CLIENT (indépendante)
+- [ ] Je peux configurer le branding: primaryColor, secondaryColor, logoUrl, backgroundImageUrl, customCss
+- [ ] Je peux configurer les langues: supportedLanguages[] et defaultLanguage
+- [ ] Le defaultLanguage DOIT être dans supportedLanguages
+- [ ] Le système refuse si le name existe déjà (409 Conflict)
+- [ ] La configuration peut être créée sans être immédiatement utilisée par un tenant
+
+**Tests d'acceptation:**
+```http
+POST /api/custom-configurations
+{
+  "name": "corporate-professional",
+  "description": "Configuration pour applications d'entreprise",
+  "defaultLanguage": "fr-FR",
+  "branding": {
+    "primaryColor": "#003366",
+    "secondaryColor": "#6c757d",
+    "logoUrl": "https://cdn.example.com/logos/corporate.png",
+    "backgroundImageUrl": "https://cdn.example.com/backgrounds/office.jpg",
+    "customCss": ":root { --border-radius: 8px; }"
+  },
+  "languages": {
+    "supportedLanguages": ["fr-FR", "en-US", "de-DE"],
+    "defaultLanguage": "fr-FR"
+  }
+}
+→ 201 Created avec CustomConfigurationDto
+```
+
+**DoD:**
+- Code implémenté dans CustomConfigurationsController.Create()
+- Tests unitaires pour CreateCustomConfigurationCommand
+- Validation de l'unicité du name
+- Validation du defaultLanguage dans supportedLanguages
+- Tests d'intégration avec base de données
+- Documentation API mise à jour
+
+---
+
+### US-2.2: Consulter une CustomConfiguration par ID (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer les détails d'une CustomConfiguration  
+**Afin de** vérifier sa configuration
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/custom-configurations/{id}`
+- [ ] Le système retourne le CustomConfigurationDto avec tous les détails
+- [ ] Le système retourne 404 si la configuration n'existe pas
+- [ ] Le branding et les langues sont inclus dans la réponse
+
+**Tests d'acceptation:**
+```http
+GET /api/custom-configurations/550e8400-e29b-41d4-a716-446655440000
+→ 200 OK avec CustomConfigurationDto
+```
+
+---
+
+### US-2.3: Consulter une CustomConfiguration par Nom (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** récupérer une CustomConfiguration par son nom  
+**Afin de** la trouver rapidement sans connaître son GUID
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/custom-configurations/by-name/{name}`
+- [ ] Le système retourne le CustomConfigurationDto correspondant
+- [ ] Le système retourne 404 si le name n'existe pas
+- [ ] L'endpoint est accessible publiquement (AllowAnonymous)
+
+**Tests d'acceptation:**
+```http
+GET /api/custom-configurations/by-name/corporate-professional
+→ 200 OK avec CustomConfigurationDto
+```
+
+---
+
+### US-2.4: Lister toutes les CustomConfigurations (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** lister toutes les configurations disponibles  
+**Afin de** avoir une vue d'ensemble du catalogue
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/custom-configurations`
+- [ ] Le système retourne une liste de CustomConfigurationDto
+- [ ] Les configurations inactives sont incluses
+- [ ] La liste peut être vide si aucune configuration existe
+
+**Tests d'acceptation:**
+```http
+GET /api/custom-configurations
+→ 200 OK avec liste de CustomConfigurationDto
+```
+
+---
+
+### US-2.5: Lister les CustomConfigurations Actives (DEVRAIT AVOIR)
+**En tant qu'** application tierce  
+**Je veux** lister uniquement les configurations actives  
+**Afin de** proposer un catalogue de configurations disponibles
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/custom-configurations/active`
+- [ ] Le système retourne uniquement les configurations avec IsActive=true
+- [ ] Le système retourne une liste vide si aucune configuration active
+
+**Tests d'acceptation:**
+```http
+GET /api/custom-configurations/active
+→ 200 OK avec liste de CustomConfigurationDto actives
+```
+
+---
+
+### US-2.6: Mettre à Jour une CustomConfiguration (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** modifier une CustomConfiguration  
+**Afin de** ajuster le branding ou les langues supportées
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer PUT `/api/custom-configurations/{id}` avec UpdateCustomConfigurationDto
+- [ ] Le système met à jour description si fournie
+- [ ] Le système met à jour le branding si fourni
+- [ ] Le système met à jour les langues si fournies
+- [ ] Le système valide que defaultLanguage est dans supportedLanguages
+- [ ] Le système retourne 404 si la configuration n'existe pas
+- [ ] Les modifications sont appliquées instantanément à tous les Tenants utilisant cette configuration
+
+**Tests d'acceptation:**
+```http
+PUT /api/custom-configurations/550e8400-e29b-41d4-a716-446655440000
+{
+  "branding": {
+    "primaryColor": "#0000ff"
+  },
+  "languages": {
+    "supportedLanguages": ["fr-FR", "en-US", "es-ES"]
+  }
+}
+→ 200 OK avec CustomConfigurationDto mis à jour
+```
+
+---
+
+### US-2.7: Activer/Désactiver une CustomConfiguration (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** activer ou désactiver une CustomConfiguration  
+**Afin de** contrôler sa disponibilité sans la supprimer
+
+**Critères d'acceptation:**
+- [ ] Je peux envoyer POST `/api/custom-configurations/{id}/activate`
+- [ ] Je peux envoyer POST `/api/custom-configurations/{id}/deactivate`
+- [ ] Le système met à jour IsActive en conséquence
+- [ ] Les Tenants référençant une configuration désactivée conservent leur référence
+- [ ] Une configuration désactivée ne peut pas être assignée à de nouveaux Tenants
+
+**Tests d'acceptation:**
+```http
+POST /api/custom-configurations/550e8400-e29b-41d4-a716-446655440000/deactivate
+→ 200 OK
+```
+
+---
+
+### US-2.8: Supprimer une CustomConfiguration (DEVRAIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** supprimer une CustomConfiguration obsolète  
+**Afin de** nettoyer le catalogue
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler DELETE `/api/custom-configurations/{id}`
+- [ ] Le système vérifie qu'aucun Tenant actif ne référence cette configuration
+- [ ] Le système refuse la suppression si des Tenants l'utilisent (409 Conflict)
+- [ ] Le système retourne 204 No Content en cas de succès
+- [ ] Le système retourne 404 si la configuration n'existe pas
+
+**Tests d'acceptation:**
+```http
+DELETE /api/custom-configurations/550e8400-e29b-41d4-a716-446655440000
+→ 204 No Content (si aucun Tenant ne l'utilise)
+→ 409 Conflict (si des Tenants l'utilisent)
+```
+
+---
+
+## 🏢 Epic 3: Gestion des Tenants
+
+### US-3.1: Créer un Tenant avec Client et CustomConfiguration Obligatoires (DOIT AVOIR)
+**En tant qu'** administrateur système  
+**Je veux** créer un tenant associé à un client et une CustomConfiguration existants  
+**Afin de** configurer les redirections, le webhook et la localisation pour une organisation
 
 **Critères d'acceptation:**
 - [ ] Je peux envoyer POST `/api/tenant` avec CreateTenantDto
-- [ ] Le champ clientId est OBLIGATOIRE
+- [ ] Le champ clientName est OBLIGATOIRE
+- [ ] Le champ customConfigurationId est OBLIGATOIRE
 - [ ] Le système vérifie que le client existe avant création
+- [ ] Le système vérifie que la CustomConfiguration existe et est active
 - [ ] Le système refuse si le client n'existe pas (400 Bad Request)
-- [ ] Le système crée l'association bidirectionnelle (Tenant ↔ Client)
+- [ ] Le système refuse si la CustomConfiguration n'existe pas ou est inactive (400 Bad Request)
+- [ ] Le système crée l'association Tenant → Client (via clientName)
+- [ ] Le système crée la référence Tenant → CustomConfiguration (via customConfigurationId)
 - [ ] Le système valide les AllowedReturnUrls (format URI absolu)
 - [ ] Le système valide les AllowedCorsOrigins (format autorité uniquement)
 - [ ] Le tenant doit avoir au moins une URL de redirection
@@ -143,6 +345,9 @@ DELETE /api/clients/550e8400-e29b-41d4-a716-446655440000
 - [ ] Je peux définir `userVerificationEndpoint` (webhook) pour la validation d'inscription
 - [ ] `userVerificationEndpoint` DOIT être HTTPS en production
 - [ ] Le système stocke le webhook et l'utilise lors des demandes d'onboarding (Ref UC-04)
+- [ ] Je configure la localisation (timezone, currency, dateFormat, timeFormat) spécifique au Tenant
+- [ ] Le branding (couleurs, logo) provient de la CustomConfiguration référencée
+- [ ] Plusieurs Tenants peuvent référencer la même CustomConfiguration (partage)
 
 **Tests d'acceptation:**
 ```http
@@ -151,14 +356,21 @@ POST /api/tenant
   "name": "acme-corp-example-com",
   "tenantUrl": "https://acme-corp.example.com",
   "displayName": "ACME Corporation",
-  "clientId": "my-spa-app",
+  "clientName": "my-spa-app",
+  "customConfigurationId": "550e8400-e29b-41d4-a716-446655440000",
   "allowedReturnUrls": ["http://localhost:4200/callback"],
   "allowedCorsOrigins": ["http://localhost:4200"],
-  "primaryColor": "#ff0000",
-  "logoUrl": "https://acme.com/logo.png"
+  "userVerificationEndpoint": "https://api.acme.com/webhooks/johodp/verify-user",
+  "localization": {
+    "timezone": "Europe/Paris",
+    "currency": "EUR",
+    "dateFormat": "dd/MM/yyyy",
+    "timeFormat": "HH:mm"
+  }
 }
 → 201 Created avec TenantDto
 # Note: 'name' est dérivé de 'tenantUrl' (https://acme-corp.example.com → acme-corp-example-com)
+# Le branding (couleurs, logo) sera chargé depuis la CustomConfiguration référencée
 ```
 
 **DoD:**
@@ -170,7 +382,7 @@ POST /api/tenant
 
 ---
 
-### US-2.2: Consulter Tous les Tenants (DOIT AVOIR)
+### US-3.2: Consulter Tous les Tenants (DOIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** lister tous les tenants  
 **Afin de** avoir une vue d'ensemble du système
@@ -189,7 +401,7 @@ GET /api/tenant
 
 ---
 
-### US-2.3: Consulter un Tenant par ID (DOIT AVOIR)
+### US-3.3: Consulter un Tenant par ID (DOIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** récupérer les détails d'un tenant par son ID  
 **Afin de** vérifier sa configuration complète
@@ -197,9 +409,10 @@ GET /api/tenant
 **Critères d'acceptation:**
 - [ ] Je peux appeler GET `/api/tenant/{id}`
 - [ ] Le système retourne le TenantDto avec tous les détails
-- [ ] Les informations de branding sont incluses
+- [ ] Le customConfigurationId est inclus (référence à la configuration de branding)
+- [ ] Les informations de localisation sont incluses (timezone, currency, formats)
 - [ ] Les AllowedReturnUrls et AllowedCorsOrigins sont inclus
-- [ ] Le ClientId associé est inclus
+- [ ] Le ClientName associé est inclus
 - [ ] Le système retourne 404 si le tenant n'existe pas
 
 **Tests d'acceptation:**
@@ -210,7 +423,7 @@ GET /api/tenant/550e8400-e29b-41d4-a716-446655440000
 
 ---
 
-### US-2.4: Consulter un Tenant par Nom (DOIT AVOIR)
+### US-3.4: Consulter un Tenant par Nom (DOIT AVOIR)
 **En tant qu'** application tierce  
 **Je veux** récupérer un tenant par son nom  
 **Afin de** charger sa configuration de branding
@@ -229,19 +442,21 @@ GET /api/tenant/by-name/acme-corp
 
 ---
 
-### US-2.5: Mettre à Jour un Tenant (DEVRAIT AVOIR)
+### US-3.5: Mettre à Jour un Tenant (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** modifier la configuration d'un tenant  
-**Afin de** ajuster le branding ou les URLs de redirection
+**Afin de** ajuster la CustomConfiguration, la localisation ou les URLs de redirection
 
 **Critères d'acceptation:**
 - [ ] Je peux envoyer PUT `/api/tenant/{id}` avec UpdateTenantDto
 - [ ] Le système met à jour displayName si fourni
-- [ ] Le système met à jour le branding (couleurs, logo, CSS) si fourni
+- [ ] Le système met à jour customConfigurationId si fourni (avec validation)
+- [ ] Le système vérifie que la nouvelle CustomConfiguration existe et est active
+- [ ] Le système met à jour la localisation (timezone, currency, formats) si fournie
 - [ ] Le système remplace AllowedReturnUrls si fourni
 - [ ] Le système remplace AllowedCorsOrigins si fourni
-- [ ] Le système met à jour clientId si fourni (avec validation)
-- [ ] Le système gère la dissociation/association du client si clientId change
+- [ ] Le système met à jour clientName si fourni (avec validation)
+- [ ] Le système gère la dissociation/association du client si clientName change
 - [ ] Le système retourne 404 si le tenant n'existe pas
 - [ ] Le système valide que le nouveau client existe
 
@@ -250,15 +465,20 @@ GET /api/tenant/by-name/acme-corp
 PUT /api/tenant/550e8400-e29b-41d4-a716-446655440000
 {
   "displayName": "ACME Corp (Updated)",
+  "customConfigurationId": "660e8400-e29b-41d4-a716-446655440001",
   "allowedReturnUrls": ["http://localhost:4200/callback", "https://app.acme.com/callback"],
-  "primaryColor": "#0000ff"
+  "localization": {
+    "timezone": "America/New_York",
+    "currency": "USD"
+  }
 }
 → 200 OK avec TenantDto mis à jour
+# Note: Le branding (couleurs, logo) sera désormais chargé depuis la nouvelle CustomConfiguration
 ```
 
 ---
 
-### US-2.6: Supprimer un Tenant (DEVRAIT AVOIR)
+### US-3.6: Supprimer un Tenant (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** supprimer un tenant obsolète  
 **Afin de** nettoyer le système
@@ -278,20 +498,22 @@ DELETE /api/tenant/550e8400-e29b-41d4-a716-446655440000
 
 ---
 
-### US-2.7: Récupérer le CSS de Branding d'un Tenant (DOIT AVOIR)
+### US-3.7: Récupérer le CSS de Branding d'un Tenant via CustomConfiguration (DOIT AVOIR)
 **En tant qu'** application SPA  
 **Je veux** récupérer le CSS de branding d'un tenant  
 **Afin de** personnaliser l'apparence de ma page de connexion
 
 **Critères d'acceptation:**
 - [ ] Je peux appeler GET `/api/tenant/{tenantId}/branding.css`
-- [ ] Le système génère un fichier CSS avec des variables CSS
+- [ ] Le système charge le Tenant et récupère sa CustomConfiguration (via customConfigurationId)
+- [ ] Le système génère un fichier CSS avec des variables CSS depuis la CustomConfiguration
 - [ ] Les variables incluent: --primary-color, --secondary-color, --logo-base64, --image-base64
-- [ ] Le customCss du tenant est inclus dans le fichier
+- [ ] Le customCss de la CustomConfiguration est inclus dans le fichier
 - [ ] Le Content-Type de la réponse est "text/css"
 - [ ] Le système retourne 404 si le tenant n'existe pas
 - [ ] L'endpoint est accessible publiquement (AllowAnonymous)
 - [ ] Génération dynamique (pas de cache), valeurs par défaut si absent (Ref UC-10)
+- [ ] Plusieurs Tenants partageant la même CustomConfiguration retournent le même CSS
 
 **Tests d'acceptation:**
 ```http
@@ -301,18 +523,21 @@ GET /api/tenant/acme-corp/branding.css
 
 ---
 
-### US-2.8: Récupérer les Paramètres de Localisation d'un Tenant (DEVRAIT AVOIR)
+### US-3.8: Récupérer les Paramètres de Localisation d'un Tenant (DEVRAIT AVOIR)
 **En tant qu'** application SPA  
 **Je veux** récupérer les paramètres de langue et localisation  
 **Afin de** configurer mon système i18n
 
 **Critères d'acceptation:**
 - [ ] Je peux appeler GET `/api/tenant/{tenantId}/language`
-- [ ] Le système retourne defaultLanguage, supportedLanguages, timezone, currency
-- [ ] Le système retourne également dateFormat et timeFormat
+- [ ] Le système charge le Tenant et récupère sa CustomConfiguration (via customConfigurationId)
+- [ ] Le système retourne defaultLanguage et supportedLanguages depuis la CustomConfiguration
+- [ ] Le système retourne timezone, currency, dateFormat et timeFormat depuis le Tenant
 - [ ] Le système retourne 404 si le tenant n'existe pas
 - [ ] L'endpoint est accessible publiquement (AllowAnonymous)
 - [ ] supportedLanguages inclut toujours defaultLanguage (Ref UC-11)
+- [ ] Les informations de langue sont partagées entre Tenants utilisant la même CustomConfiguration
+- [ ] Les informations de localisation (formats, timezone) sont propres à chaque Tenant
 
 **Tests d'acceptation:**
 ```http
@@ -322,9 +547,9 @@ GET /api/tenant/acme-corp/language
 
 ---
 
-## 👤 Epic 3: Gestion des Utilisateurs
+## 👤 Epic 4: Gestion des Utilisateurs
 
-### US-3.1: Créer un Utilisateur en Attente d'Activation (DOIT AVOIR)
+### US-4.1: Créer un Utilisateur en Attente d'Activation (DOIT AVOIR)
 **En tant qu'** application tierce  
 **Je veux** créer un utilisateur en statut PendingActivation  
 **Afin que** l'utilisateur puisse activer son compte plus tard
@@ -363,7 +588,7 @@ POST /api/users/register
 
 ---
 
-### US-3.2: Consulter un Utilisateur par ID (DOIT AVOIR)
+### US-4.2: Consulter un Utilisateur par ID (DOIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** récupérer les détails d'un utilisateur  
 **Afin de** vérifier son statut et ses informations
@@ -383,7 +608,7 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000
 
 ---
 
-### US-3.3: Ajouter un Utilisateur à un Tenant (DEVRAIT AVOIR)
+### US-4.3: Ajouter un Utilisateur à un Tenant (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** ajouter un utilisateur existant à un tenant  
 **Afin de** lui donner accès à une nouvelle organisation
@@ -407,7 +632,7 @@ POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp-example-c
 
 ---
 
-### US-3.4: Retirer un Utilisateur d'un Tenant (DEVRAIT AVOIR)
+### US-4.4: Retirer un Utilisateur d'un Tenant (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** retirer l'accès d'un utilisateur à un tenant  
 **Afin de** révoquer ses permissions
@@ -430,7 +655,7 @@ DELETE /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp-example
 
 ---
 
-### US-3.5: Consulter les Tenants d'un Utilisateur (DEVRAIT AVOIR)
+### US-4.5: Consulter les Tenants d'un Utilisateur (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
 **Je veux** voir la liste des tenants d'un utilisateur  
 **Afin de** connaître ses accès
@@ -449,9 +674,9 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000/tenants
 
 ---
 
-## 🔐 Epic 4: Onboarding et Activation
+## 🔐 Epic 5: Onboarding et Activation
 
-### US-4.1: Afficher le Formulaire d'Onboarding avec Branding (DOIT AVOIR)
+### US-5.1: Afficher le Formulaire d'Onboarding avec Branding depuis CustomConfiguration (DOIT AVOIR)
 **En tant qu'** utilisateur final  
 **Je veux** voir un formulaire d'inscription personnalisé  
 **Afin de** créer un compte dans l'organisation
@@ -460,10 +685,12 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000/tenants
 - [ ] Je peux accéder à GET `/account/onboarding?acr_values=tenant:acme-corp`
 - [ ] Le système extrait le tenantId depuis acr_values
 - [ ] Le système charge les informations du tenant
-- [ ] Le système affiche le formulaire avec le branding (logo, couleurs)
+- [ ] Le système charge la CustomConfiguration associée au tenant (via customConfigurationId)
+- [ ] Le système affiche le formulaire avec le branding de la CustomConfiguration (logo, couleurs, CSS)
 - [ ] Le formulaire contient: email, firstName, lastName
 - [ ] Le système retourne 400 Bad Request si aucun tenant spécifié
 - [ ] Le système retourne 400 Bad Request si le tenant n'existe pas ou inactif
+- [ ] Plusieurs Tenants utilisant la même CustomConfiguration affichent le même branding
 
 **Tests d'acceptation:**
 ```
@@ -479,7 +706,7 @@ GET /account/onboarding?acr_values=tenant:acme-corp
 
 ---
 
-### US-4.2: Soumettre une Demande d'Onboarding (DOIT AVOIR)
+### US-5.2: Soumettre une Demande d'Onboarding (DOIT AVOIR)
 **En tant qu'** utilisateur final  
 **Je veux** soumettre ma demande de création de compte  
 **Afin que** l'application tierce valide ma demande

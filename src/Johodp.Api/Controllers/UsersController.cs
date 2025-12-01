@@ -22,17 +22,13 @@ public class UsersController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISender _mediator;
     private readonly UserManager<User> _userManager;
-    private readonly AddUserToTenantCommandHandler _addUserToTenantHandler;
-    private readonly RemoveUserFromTenantCommandHandler _removeUserFromTenantHandler;
 
     public UsersController(
         ISender sender,
         ILogger<UsersController> logger,
         IUserRepository userRepository,
         IUnitOfWork unitOfWork,
-        UserManager<User> userManager,
-        AddUserToTenantCommandHandler addUserToTenantHandler,
-        RemoveUserFromTenantCommandHandler removeUserFromTenantHandler)
+        UserManager<User> userManager)
     {
         _sender = sender;
         _mediator = sender;
@@ -40,8 +36,6 @@ public class UsersController : ControllerBase
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
         _userManager = userManager;
-        _addUserToTenantHandler = addUserToTenantHandler;
-        _removeUserFromTenantHandler = removeUserFromTenantHandler;
     }
 
     /// <summary>
@@ -53,9 +47,11 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<RegisterUserResponse>> Register([FromBody] RegisterUserCommand command)
     {
         _logger.LogInformation(
-            "User registration requested for email: {Email}, tenants: {TenantCount}", 
+            "User registration requested for email: {Email}, tenant: {TenantId}, role: {Role}, scope: {Scope}", 
             command.Email, 
-            command.Tenants?.Count ?? (command.TenantId != null ? 1 : 0));
+            command.TenantId.Value,
+            command.Role,
+            command.Scope);
 
         // Force CreateAsPending = true pour les appels API (l'app tierce demande la création)
         command.CreateAsPending = true;
@@ -68,17 +64,19 @@ public class UsersController : ControllerBase
             // (SendActivationEmailHandler) qui écoute UserPendingActivationEvent
             
             _logger.LogInformation(
-                "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation, Tenants: {TenantCount}", 
+                "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation, Tenant: {TenantId}", 
                 command.Email, 
                 result.UserId,
-                command.Tenants?.Count ?? (command.TenantId != null ? 1 : 0));
+                command.TenantId.Value);
 
             return Created($"/api/users/{result.UserId}", new
             {
                 userId = result.UserId,
                 email = result.Email,
                 status = "PendingActivation",
-                tenantCount = command.Tenants?.Count ?? (command.TenantId != null ? 1 : 0),
+                tenantId = command.TenantId.Value,
+                role = command.Role,
+                scope = command.Scope,
                 message = "User created successfully. Activation email will be sent."
             });
         }
@@ -120,148 +118,7 @@ public class UsersController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Add user to a tenant
-    /// </summary>
-    [HttpPost("{userId}/tenants")]
-    public async Task<IActionResult> AddToTenant(Guid userId, [FromBody] AddUserToTenantRequest request)
-    {
-        _logger.LogInformation("Adding user {UserId} to tenant {TenantId}", userId, request.TenantId);
-        
-        try
-        {
-            var command = new AddUserToTenantCommand 
-            { 
-                UserId = userId, 
-                TenantId = TenantId.From(request.TenantId),
-                Role = request.Role,
-                Scope = request.Scope
-            };
-            await _addUserToTenantHandler.Handle(command);
-            
-            _logger.LogInformation("Successfully added user {UserId} to tenant {TenantId}", userId, request.TenantId);
-            return Ok(new { message = "User added to tenant successfully" });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to add user {UserId} to tenant {TenantId}: {Message}", userId, request.TenantId, ex.Message);
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error adding user {UserId} to tenant {TenantId}", userId, request.TenantId);
-            return StatusCode(500, "An error occurred while adding user to tenant");
-        }
-    }
-
-    public class AddUserToTenantRequest
-    {
-        public Guid TenantId { get; set; }
-        public string Role { get; set; } = string.Empty;
-        public string Scope { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Remove user from a tenant
-    /// </summary>
-    [HttpDelete("{userId}/tenants/{tenantId:guid}")]
-    public async Task<IActionResult> RemoveFromTenant(Guid userId, Guid tenantId)
-    {
-        _logger.LogInformation("Removing user {UserId} from tenant {TenantId}", userId, tenantId);
-        
-        try
-        {
-            var command = new RemoveUserFromTenantCommand { UserId = userId, TenantId = TenantId.From(tenantId) };
-            await _removeUserFromTenantHandler.Handle(command);
-            
-            _logger.LogInformation("Successfully removed user {UserId} from tenant {TenantId}", userId, tenantId);
-            return NoContent();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to remove user {UserId} from tenant {TenantId}: {Message}", userId, tenantId, ex.Message);
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error removing user {UserId} from tenant {TenantId}", userId, tenantId);
-            return StatusCode(500, "An error occurred while removing user from tenant");
-        }
-    }
-
-    /// <summary>
-    /// Update user's role and scope for a specific tenant
-    /// </summary>
-    [HttpPut("{userId}/tenants/{tenantId:guid}")]
-    public async Task<IActionResult> UpdateTenantRoleAndScope(Guid userId, Guid tenantId, [FromBody] UpdateTenantRoleAndScopeRequest request)
-    {
-        _logger.LogInformation("Updating role and scope for user {UserId} on tenant {TenantId}: role={Role}, scope={Scope}", 
-            userId, tenantId, request.Role, request.Scope);
-        
-        try
-        {
-            var userIdVO = UserId.From(userId);
-            var user = await _mediator.Send(new GetUserByIdQuery(userId));
-            
-            if (user == null)
-                return NotFound(new { message = $"User with ID '{userId}' not found" });
-
-            // Get domain user to update
-            var domainUser = await _userRepository.GetByIdAsync(userIdVO);
-            if (domainUser == null)
-                return NotFound(new { message = $"User with ID '{userId}' not found" });
-
-            domainUser.UpdateTenantRoleAndScope(TenantId.From(tenantId), request.Role, request.Scope);
-            
-            await _userRepository.UpdateAsync(domainUser);
-            await _unitOfWork.SaveChangesAsync();
-            
-            _logger.LogInformation("Successfully updated role and scope for user {UserId} on tenant {TenantId}", userId, tenantId);
-            return Ok(new { message = "Role and scope updated successfully", role = request.Role, scope = request.Scope });
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to update role/scope for user {UserId} on tenant {TenantId}: {Message}", userId, tenantId, ex.Message);
-            return NotFound(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating role/scope for user {UserId} on tenant {TenantId}", userId, tenantId);
-            return StatusCode(500, "An error occurred while updating role and scope");
-        }
-    }
-
-    public class UpdateTenantRoleAndScopeRequest
-    {
-        public string Role { get; set; } = string.Empty;
-        public string Scope { get; set; } = string.Empty;
-    }
-
-    /// <summary>
-    /// Get user's tenants
-    /// </summary>
-    [HttpGet("{userId}/tenants")]
-    public async Task<ActionResult<List<string>>> GetUserTenants(Guid userId)
-    {
-        _logger.LogInformation("Getting tenants for user {UserId}", userId);
-        
-        try
-        {
-            var user = await _userRepository.GetByIdAsync(Johodp.Domain.Users.ValueObjects.UserId.From(userId));
-            
-            if (user == null)
-            {
-                _logger.LogWarning("User not found: {UserId}", userId);
-                return NotFound(new { message = "User not found" });
-            }
-
-            _logger.LogInformation("User {UserId} belongs to {TenantCount} tenant(s)", userId, user.TenantIds.Count);
-            return Ok(new { userId = userId, tenants = user.TenantIds });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving tenants for user {UserId}", userId);
-            return StatusCode(500, "An error occurred while retrieving user tenants");
-        }
-    }
+    // Note: Multi-tenant user management endpoints removed.
+    // Users now belong to a single tenant with role and scope stored directly in User entity.
+    // To update role/scope, use PATCH/PUT on the user entity itself.
 }

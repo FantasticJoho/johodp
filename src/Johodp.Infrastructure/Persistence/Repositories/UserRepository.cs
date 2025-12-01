@@ -3,6 +3,7 @@ namespace Johodp.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Tenants.ValueObjects;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Infrastructure.Persistence.DbContext;
 
@@ -25,6 +26,13 @@ public class UserRepository : IUserRepository
         var emailVo = Johodp.Domain.Users.ValueObjects.Email.Create(email);
         return await _context.Users
             .FirstOrDefaultAsync(u => u.Email == emailVo);
+    }
+
+    public async Task<User?> GetByEmailAndTenantAsync(string email, TenantId tenantId)
+    {
+        var emailVo = Johodp.Domain.Users.ValueObjects.Email.Create(email);
+        return await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == emailVo && u.TenantId == tenantId);
     }
 
     public async Task<User> AddAsync(User user)
