@@ -239,42 +239,89 @@ Un **Utilisateur** représente une **personne physique** qui peut s'authentifier
 
 ## 🔗 Relations entre Entités
 
+```mermaid
+erDiagram
+    CLIENT ||--o{ TENANT : "possède (1:N)"
+    CUSTOM_CONFIGURATION ||--o{ TENANT : "est utilisée par (1:N)"
+    TENANT ||--o{ USER_TENANT : "a (1:N)"
+    USER ||--o{ USER_TENANT : "a (1:N)"
+    
+    CLIENT {
+        uuid ClientId PK
+        string ClientName UK "Exemple: my-erp-app"
+        string ClientSecret
+        string[] AllowedScopes
+        bool RequireConsent
+        bool RequireMfa
+        bool IsActive
+        datetime CreatedAt
+    }
+    
+    CUSTOM_CONFIGURATION {
+        uuid CustomConfigurationId PK
+        string Name UK "Unique, ex: corporate-professional"
+        string Description
+        string PrimaryColor "Branding"
+        string SecondaryColor "Branding"
+        string LogoUrl "Branding"
+        string BackgroundImageUrl "Branding"
+        string CustomCss "Branding"
+        string DefaultLanguage "Obligatoire"
+        string[] SupportedLanguages "Langues"
+        bool IsActive
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
+    
+    TENANT {
+        uuid TenantId PK
+        string Name UK "Dérivé URL, ex: acme-corp-example-com"
+        string DisplayName
+        uuid ClientId FK "OBLIGATOIRE"
+        uuid CustomConfigurationId FK "OBLIGATOIRE"
+        string[] AllowedReturnUrls "URLs"
+        string[] AllowedCorsOrigins "URLs"
+        string WebhookUrl "Vérification utilisateur"
+        string Timezone "Localisation"
+        string Currency "Localisation"
+        string DateFormat "Localisation"
+        string TimeFormat "Localisation"
+        bool IsActive
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
+    
+    USER {
+        uuid UserId PK
+        string Email UK "Unique dans le système"
+        string FirstName
+        string LastName
+        string PasswordHash
+        string Status "PendingActivation|Active"
+        bool EmailConfirmed
+        bool MfaEnabled
+        datetime CreatedAt
+        datetime UpdatedAt
+        datetime ActivatedAt
+    }
+    
+    USER_TENANT {
+        uuid UserId FK,PK
+        uuid TenantId FK,PK
+        string Role "Obligatoire, ex: admin, user, manager"
+        string Scope "Obligatoire, ex: full_access, read_only"
+        datetime CreatedAt
+        datetime UpdatedAt
+    }
 ```
-┌──────────────────────┐
-│       Client         │ (Application Tierce)
-│  - ClientId          │ Exemple: "my-erp-app"
-│  - ClientName        │
-│  - ClientSecret      │
-└──────┬───────────────┘
-       │
-       │ 1-to-many
-       │
-       ▼
-┌──────────────────────┐       ┌──────────────────────┐
-│        Tenant        │──────►│  CustomConfiguration │
-│  - TenantId          │ N:1   │  - ConfigId          │
-│  - Name              │       │  - Name (unique)     │
-│  - ClientName (FK)   │       │  - Branding          │
-│  - CustomConfigId(FK)│       │  - Languages         │
-│  - RedirectURIs      │       │  - IsActive          │
-│  - CORS Origins      │       └──────────────────────┘
-│  - Webhook           │                ▲
-│  - Localization      │                │
-└──────────┬───────────┘                │
-           │                            │
-           │ many-to-many               │ Plusieurs Tenants
-           │ (via UserTenant)           │ peuvent partager
-           │                            │ la même config
-           ▼
-   ┌───────────────────┐         ┌──────────────────┐
-   │   UserTenant      │◄────────│      User        │ (Personne)
-   │  - UserId         │         │  - UserId        │ Exemple: "john@acme.com"
-   │  - TenantId       │         │  - Email         │
-   │  - Role           │         │  - FirstName     │
-   │  - Scope          │         │  - Status        │
-   │  - CreatedAt      │         │  - PasswordHash  │
-   └───────────────────┘         └──────────────────┘
-```
+
+**Légende des Relations :**
+- **Client (1) → (N) Tenant** : Un Client possède plusieurs Tenants
+- **CustomConfiguration (1) → (N) Tenant** : Une CustomConfiguration peut être partagée par plusieurs Tenants (même de Clients différents)
+- **Tenant (N) → (1) Client** : Chaque Tenant appartient à un seul Client (via ClientId - obligatoire)
+- **Tenant (N) → (1) CustomConfiguration** : Chaque Tenant doit référencer une CustomConfiguration (via CustomConfigurationId - obligatoire)
+- **User (N) ↔ (M) Tenant** : Relation many-to-many via UserTenant avec Role + Scope par association
+- **CustomConfiguration est INDÉPENDANTE** : N'appartient à aucun Client, peut être réutilisée librement
 
 **Relations clés :**
 - **1 Client** → **N Tenants** (un client possède plusieurs tenants)
