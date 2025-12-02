@@ -250,33 +250,42 @@ GET /api/custom-configurations/active
 
 ---
 
-### US-2.6: Mettre à Jour une CustomConfiguration (DEVRAIT AVOIR)
+### US-2.6: Mettre à Jour une CustomConfiguration (DOIT AVOIR) ✅
 **En tant qu'** administrateur système  
 **Je veux** modifier une CustomConfiguration  
 **Afin de** ajuster le branding ou les langues supportées
 
 **Critères d'acceptation:**
-- [ ] Je peux envoyer PUT `/api/custom-configurations/{id}` avec UpdateCustomConfigurationDto
-- [ ] Le système met à jour description si fournie
-- [ ] Le système met à jour le branding si fourni
-- [ ] Le système met à jour les langues si fournies
-- [ ] Le système valide que defaultLanguage est dans supportedLanguages
-- [ ] Le système retourne 404 si la configuration n'existe pas
-- [ ] Les modifications sont appliquées instantanément à tous les Tenants utilisant cette configuration
+- [x] Je peux envoyer PUT `/api/custom-configurations/{id}` avec UpdateCustomConfigurationDto
+- [x] Le système met à jour description si fournie
+- [x] Le système met à jour le branding si fourni (primaryColor, secondaryColor, logoUrl, backgroundImageUrl, customCss)
+- [x] Le système met à jour defaultLanguage si fourni
+- [x] Le système met à jour les supportedLanguages si fournies
+- [x] Le système valide que defaultLanguage est dans supportedLanguages
+- [x] Le système retourne 404 si la configuration n'existe pas
+- [x] Le système retourne 200 OK avec le CustomConfigurationDto mis à jour
+- [x] Les modifications sont appliquées instantanément à tous les Tenants utilisant cette configuration
+- [x] L'update est partiel (nullable fields) - seuls les champs fournis sont modifiés
 
 **Tests d'acceptation:**
 ```http
 PUT /api/custom-configurations/550e8400-e29b-41d4-a716-446655440000
 {
-  "branding": {
-    "primaryColor": "#0000ff"
-  },
-  "languages": {
-    "supportedLanguages": ["fr-FR", "en-US", "es-ES"]
-  }
+  "description": "Updated branding - new color scheme",
+  "primaryColor": "#ff5733",
+  "secondaryColor": "#c70039",
+  "logoUrl": "https://example.com/new-logo.png",
+  "defaultLanguage": "en-US",
+  "supportedLanguages": ["en-US", "fr-FR", "es-ES", "de-DE"]
 }
 → 200 OK avec CustomConfigurationDto mis à jour
 ```
+
+**Implémentation:**
+- ✅ UpdateCustomConfigurationCommand créé dans `src/Johodp.Application/CustomConfigurations/Commands/`
+- ✅ Handler implémenté avec validation et logique de mise à jour
+- ✅ PUT endpoint ajouté à `CustomConfigurationsController.cs`
+- ✅ Tests HTTP ajoutés dans `complete-workflow.http` (STEP 2.4)
 
 ---
 
@@ -442,23 +451,24 @@ GET /api/tenant/by-name/acme-corp
 
 ---
 
-### US-3.5: Mettre à Jour un Tenant (DEVRAIT AVOIR)
+### US-3.5: Mettre à Jour un Tenant (DOIT AVOIR) ✅
 **En tant qu'** administrateur système  
 **Je veux** modifier la configuration d'un tenant  
 **Afin de** ajuster la CustomConfiguration, la localisation ou les URLs de redirection
 
 **Critères d'acceptation:**
-- [ ] Je peux envoyer PUT `/api/tenant/{id}` avec UpdateTenantDto
-- [ ] Le système met à jour displayName si fourni
-- [ ] Le système met à jour customConfigurationId si fourni (avec validation)
-- [ ] Le système vérifie que la nouvelle CustomConfiguration existe et est active
-- [ ] Le système met à jour la localisation (timezone, currency, formats) si fournie
-- [ ] Le système remplace AllowedReturnUrls si fourni
-- [ ] Le système remplace AllowedCorsOrigins si fourni
-- [ ] Le système met à jour clientName si fourni (avec validation)
-- [ ] Le système gère la dissociation/association du client si clientName change
-- [ ] Le système retourne 404 si le tenant n'existe pas
-- [ ] Le système valide que le nouveau client existe
+- [x] Je peux envoyer PUT `/api/tenant/{id}` avec UpdateTenantDto
+- [x] Le système met à jour displayName si fourni
+- [x] Le système met à jour customConfigurationId si fourni (avec validation)
+- [x] Le système vérifie que la nouvelle CustomConfiguration existe et est active
+- [x] Le système met à jour la localisation (timezone, currency, formats) si fournie
+- [x] Le système remplace AllowedReturnUrls si fourni
+- [x] Le système remplace AllowedCorsOrigins si fourni
+- [x] Le système met à jour clientName si fourni (avec validation)
+- [x] Le système gère la dissociation/association du client si clientName change
+- [x] Le système retourne 404 si le tenant n'existe pas
+- [x] Le système valide que le nouveau client existe
+- [x] Le système retourne 200 OK avec le TenantDto mis à jour
 
 **Tests d'acceptation:**
 ```http
@@ -475,6 +485,11 @@ PUT /api/tenant/550e8400-e29b-41d4-a716-446655440000
 → 200 OK avec TenantDto mis à jour
 # Note: Le branding (couleurs, logo) sera désormais chargé depuis la nouvelle CustomConfiguration
 ```
+
+**Implémentation:**
+- ✅ UpdateTenantCommand créé dans `src/Johodp.Application/Tenants/Commands/`
+- ✅ Handler implémenté avec validation et logique de mise à jour
+- ✅ PUT endpoint déjà présent dans `TenantController.cs`
 
 ---
 
