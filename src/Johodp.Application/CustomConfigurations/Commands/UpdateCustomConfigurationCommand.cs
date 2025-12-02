@@ -2,16 +2,17 @@ namespace Johodp.Application.CustomConfigurations.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
-public class UpdateCustomConfigurationCommand : IRequest<CustomConfigurationDto>
+public class UpdateCustomConfigurationCommand : IRequest<Result<CustomConfigurationDto>>
 {
     public Guid Id { get; set; }
     public UpdateCustomConfigurationDto Data { get; set; } = null!;
 }
 
-public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCustomConfigurationCommand, CustomConfigurationDto>
+public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCustomConfigurationCommand, Result<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
@@ -24,7 +25,7 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CustomConfigurationDto> Handle(UpdateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<CustomConfigurationDto>> Handle(UpdateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
     {
         var dto = command.Data;
         var configId = CustomConfigurationId.From(command.Id);
@@ -32,7 +33,11 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
         // Get existing configuration
         var customConfig = await _repository.GetByIdAsync(configId);
         if (customConfig == null)
-            throw new InvalidOperationException($"CustomConfiguration with ID '{command.Id}' not found");
+        {
+            return Result<CustomConfigurationDto>.Failure(Error.NotFound(
+                "CUSTOM_CONFIG_NOT_FOUND",
+                $"CustomConfiguration with ID '{command.Id}' not found"));
+        }
 
         // Update branding (colors, logo, images, CSS)
         customConfig.UpdateBranding(
@@ -45,7 +50,7 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
         // Update default language if provided
         if (!string.IsNullOrWhiteSpace(dto.DefaultLanguage))
         {
-            customConfig.UpdateDefaultLanguage(dto.DefaultLanguage);
+            customConfig.SetDefaultLanguage(dto.DefaultLanguage);
         }
 
         // Update description if provided
@@ -83,7 +88,7 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         // Return DTO
-        return new CustomConfigurationDto
+        return Result<CustomConfigurationDto>.Success(new CustomConfigurationDto
         {
             Id = customConfig.Id.Value,
             Name = customConfig.Name,
@@ -98,6 +103,6 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
             CustomCss = customConfig.CustomCss,
             DefaultLanguage = customConfig.DefaultLanguage,
             SupportedLanguages = customConfig.SupportedLanguages.ToList()
-        };
+        });
     }
 }

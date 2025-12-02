@@ -2,17 +2,18 @@ namespace Johodp.Application.Tenants.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
-public class UpdateTenantCommand : IRequest<TenantDto>
+public class UpdateTenantCommand : IRequest<Result<TenantDto>>
 {
     public Guid TenantId { get; set; }
     public UpdateTenantDto Data { get; set; } = null!;
 }
 
-public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, TenantDto>
+public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
     private readonly IClientRepository _clientRepository;
@@ -28,14 +29,16 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<TenantDto> Handle(UpdateTenantCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<TenantDto>> Handle(UpdateTenantCommand command, CancellationToken cancellationToken = default)
     {
         var tenantId = TenantId.From(command.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);
 
         if (tenant == null)
         {
-            throw new InvalidOperationException($"Tenant with ID '{command.TenantId}' not found");
+            return Result<TenantDto>.Failure(Error.NotFound(
+                "TENANT_NOT_FOUND",
+                $"Tenant with ID '{command.TenantId}' not found"));
         }
 
         var dto = command.Data;
@@ -51,7 +54,9 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         {
             if (dto.CustomConfigurationId.Value == Guid.Empty)
             {
-                throw new InvalidOperationException("CustomConfigurationId cannot be empty. A tenant must have a valid CustomConfiguration.");
+                return Result<TenantDto>.Failure(Error.Validation(
+                    "EMPTY_CUSTOM_CONFIG",
+                    "CustomConfigurationId cannot be empty. A tenant must have a valid CustomConfiguration."));
             }
 
             tenant.SetCustomConfiguration(
@@ -100,14 +105,18 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
             {
                 if (!Guid.TryParse(dto.ClientId, out var clientGuid))
                 {
-                    throw new InvalidOperationException($"ClientId '{dto.ClientId}' is not a valid GUID.");
+                    return Result<TenantDto>.Failure(Error.Validation(
+                        "INVALID_CLIENT_ID",
+                        $"ClientId '{dto.ClientId}' is not a valid GUID."));
                 }
                 
                 var clientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(clientGuid);
                 var client = await _clientRepository.GetByIdAsync(clientId);
                 if (client == null)
                 {
-                    throw new InvalidOperationException($"Client '{dto.ClientId}' does not exist. Please create the client first.");
+                    return Result<TenantDto>.Failure(Error.NotFound(
+                        "CLIENT_NOT_FOUND",
+                        $"Client '{dto.ClientId}' does not exist. Please create the client first."));
                 }
             }
 
@@ -167,7 +176,7 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, T
         // via the CustomClientStore. No need to manually sync returnUrls to clients when they change.
         // The dynamic aggregation happens at runtime when IdentityServer loads the client.
 
-        return MapToDto(tenant);
+        return Result<TenantDto>.Success(MapToDto(tenant));
     }
 
     private async Task UpdateAssociatedClientsAsync(Domain.Tenants.Aggregates.Tenant tenant)

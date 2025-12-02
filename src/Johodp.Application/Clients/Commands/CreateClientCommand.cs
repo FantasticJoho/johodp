@@ -2,15 +2,16 @@ namespace Johodp.Application.Clients.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.Aggregates;
 
-public class CreateClientCommand : IRequest<ClientDto>
+public class CreateClientCommand : IRequest<Result<ClientDto>>
 {
     public CreateClientDto Data { get; set; } = null!;
 }
 
-public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, ClientDto>
+public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, Result<ClientDto>>
 {
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -23,7 +24,7 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ClientDto> Handle(CreateClientCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<ClientDto>> Handle(CreateClientCommand command, CancellationToken cancellationToken = default)
     {
         var dto = command.Data;
 
@@ -31,7 +32,9 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
         var existingClient = await _clientRepository.GetByNameAsync(dto.ClientName);
         if (existingClient != null)
         {
-            throw new InvalidOperationException($"A client with name '{dto.ClientName}' already exists");
+            return Result<ClientDto>.Failure(Error.Conflict(
+                "CLIENT_ALREADY_EXISTS",
+                $"A client with name '{dto.ClientName}' already exists"));
         }
 
         // Create client aggregate
@@ -45,7 +48,7 @@ public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, C
         await _clientRepository.AddAsync(client);
         await _unitOfWork.SaveChangesAsync();
 
-        return MapToDto(client);
+        return Result<ClientDto>.Success(MapToDto(client));
     }
 
     private static ClientDto MapToDto(Client client)

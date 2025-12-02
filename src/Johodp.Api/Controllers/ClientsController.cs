@@ -8,6 +8,8 @@ using Johodp.Application.Clients.Commands;
 using Johodp.Application.Clients.Queries;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.ValueObjects;
+using Johodp.Application.Common.Results;
+using Johodp.Api.Extensions;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -42,13 +44,16 @@ public class ClientsController : ControllerBase
         try
         {
             var command = new CreateClientCommand { Data = dto };
-            var client = await _sender.Send(command);
+            var result = await _sender.Send(command);
+            
+            if (!result.IsSuccess)
+                return result.ToActionResult();
             
             _logger.LogInformation(
                 "Successfully created client {ClientId} with {TenantCount} associated tenant(s)",
-                client.Id, client.AssociatedTenantIds.Count);
+                result.Value.Id, result.Value.AssociatedTenantIds.Count);
 
-            return CreatedAtAction(nameof(GetClient), new { clientId = client.Id }, client);
+            return CreatedAtAction(nameof(GetClient), new { clientId = result.Value.Id }, result.Value);
         }
         catch (InvalidOperationException ex)
         {
@@ -78,13 +83,16 @@ public class ClientsController : ControllerBase
         try
         {
             var command = new UpdateClientCommand { ClientId = clientId, Data = dto };
-            var client = await _sender.Send(command);
+            var result = await _sender.Send(command);
+            
+            if (!result.IsSuccess)
+                return result.ToActionResult();
             
             _logger.LogInformation(
                 "Successfully updated client {ClientId}. Associated tenants: {TenantCount}, Active: {IsActive}",
-                client.Id, client.AssociatedTenantIds.Count, client.IsActive);
+                result.Value.Id, result.Value.AssociatedTenantIds.Count, result.Value.IsActive);
 
-            return Ok(client);
+            return result.ToActionResult();
         }
         catch (InvalidOperationException ex)
         {
@@ -110,16 +118,14 @@ public class ClientsController : ControllerBase
         
         try
         {
-            var client = await _sender.Send(new GetClientByIdQuery { ClientId = clientId });
+            var result = await _sender.Send(new GetClientByIdQuery { ClientId = clientId });
             
-            if (client == null)
+            if (result.IsSuccess)
             {
-                _logger.LogWarning("Client not found: {ClientId}", clientId);
-                return NotFound(new { error = "Client not found" });
+                _logger.LogInformation("Retrieved client: {ClientName}", result.Value.ClientName);
             }
-
-            _logger.LogInformation("Retrieved client: {ClientName}", client.ClientName);
-            return Ok(client);
+            
+            return result.ToActionResult();
         }
         catch (Exception ex)
         {
@@ -138,16 +144,14 @@ public class ClientsController : ControllerBase
         
         try
         {
-            var client = await _sender.Send(new GetClientByNameQuery { ClientName = clientName });
+            var result = await _sender.Send(new GetClientByNameQuery { ClientName = clientName });
             
-            if (client == null)
+            if (result.IsSuccess)
             {
-                _logger.LogWarning("Client not found: {ClientName}", clientName);
-                return NotFound(new { error = "Client not found" });
+                _logger.LogInformation("Retrieved client: {ClientId}", result.Value.Id);
             }
-
-            _logger.LogInformation("Retrieved client: {ClientId}", client.Id);
-            return Ok(client);
+            
+            return result.ToActionResult();
         }
         catch (Exception ex)
         {

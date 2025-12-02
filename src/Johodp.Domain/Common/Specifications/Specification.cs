@@ -43,4 +43,40 @@ public abstract class Specification<T> where T : class
     {
         OrderByDescending = orderByDescendingExpression;
     }
+
+    /// <summary>
+    /// Combines this specification with another using AND logic
+    /// </summary>
+    public Specification<T> And(Specification<T> specification)
+    {
+        return new AndSpecification<T>(this, specification);
+    }
+
+    /// <summary>
+    /// Combines this specification with another using OR logic
+    /// </summary>
+    public Specification<T> Or(Specification<T> specification)
+    {
+        return new OrSpecification<T>(this, specification);
+    }
+
+    /// <summary>
+    /// Negates this specification
+    /// </summary>
+    public Specification<T> Not()
+    {
+        return new NotSpecification<T>(this);
+    }
+
+    /// <summary>
+    /// Checks if the specification is satisfied by the given entity
+    /// </summary>
+    public bool IsSatisfiedBy(T entity)
+    {
+        if (Criteria is null)
+            return true;
+
+        var predicate = Criteria.Compile();
+        return predicate(entity);
+    }
 }

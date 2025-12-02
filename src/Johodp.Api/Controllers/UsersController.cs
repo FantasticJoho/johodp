@@ -10,6 +10,8 @@ using Johodp.Application.Common.Mediator;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Application.Common.Results;
+using Johodp.Api.Extensions;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -60,19 +62,22 @@ public class UsersController : ControllerBase
         {
             var result = await _sender.Send(command);
             
+            if (!result.IsSuccess)
+                return result.ToActionResult();
+            
             // L'email d'activation sera envoyé automatiquement via l'Event Handler
             // (SendActivationEmailHandler) qui écoute UserPendingActivationEvent
             
             _logger.LogInformation(
                 "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation, Tenant: {TenantId}", 
                 command.Email, 
-                result.UserId,
+                result.Value.UserId,
                 command.TenantId.Value);
 
-            return Created($"/api/users/{result.UserId}", new
+            return Created($"/api/users/{result.Value.UserId}", new
             {
-                userId = result.UserId,
-                email = result.Email,
+                userId = result.Value.UserId,
+                email = result.Value.Email,
                 status = "PendingActivation",
                 tenantId = command.TenantId.Value,
                 role = command.Role,
@@ -103,13 +108,13 @@ public class UsersController : ControllerBase
         {
             var query = new GetUserByIdQuery(userId);
             var result = await _sender.Send(query);
-            _logger.LogDebug("User found: {UserId}, Email: {Email}", userId, result.Email);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException ex)
-        {
-            _logger.LogWarning("User not found: {UserId}", userId);
-            return NotFound(new { message = ex.Message });
+            
+            if (result.IsSuccess)
+            {
+                _logger.LogDebug("User found: {UserId}, Email: {Email}", userId, result.Value.Email);
+            }
+            
+            return result.ToActionResult();
         }
         catch (Exception ex)
         {

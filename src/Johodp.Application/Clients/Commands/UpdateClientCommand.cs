@@ -2,16 +2,17 @@ namespace Johodp.Application.Clients.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.ValueObjects;
 
-public class UpdateClientCommand : IRequest<ClientDto>
+public class UpdateClientCommand : IRequest<Result<ClientDto>>
 {
     public Guid ClientId { get; set; }
     public UpdateClientDto Data { get; set; } = null!;
 }
 
-public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, ClientDto>
+public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, Result<ClientDto>>
 {
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -24,14 +25,16 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<ClientDto> Handle(UpdateClientCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<ClientDto>> Handle(UpdateClientCommand command, CancellationToken cancellationToken = default)
     {
         var clientId = ClientId.From(command.ClientId);
         var client = await _clientRepository.GetByIdAsync(clientId);
 
         if (client == null)
         {
-            throw new InvalidOperationException($"Client with ID '{command.ClientId}' not found");
+            return Result<ClientDto>.Failure(Error.NotFound(
+                "CLIENT_NOT_FOUND",
+                $"Client with ID '{command.ClientId}' not found"));
         }
 
         var dto = command.Data;
@@ -101,7 +104,7 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, C
         await _clientRepository.UpdateAsync(client);
         await _unitOfWork.SaveChangesAsync();
 
-        return MapToDto(client);
+        return Result<ClientDto>.Success(MapToDto(client));
     }
 
     private static ClientDto MapToDto(Domain.Clients.Aggregates.Client client)

@@ -2,15 +2,16 @@ namespace Johodp.Application.CustomConfigurations.Commands;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.Aggregates;
 
-public class CreateCustomConfigurationCommand : IRequest<CustomConfigurationDto>
+public class CreateCustomConfigurationCommand : IRequest<Result<CustomConfigurationDto>>
 {
     public CreateCustomConfigurationDto Data { get; set; } = null!;
 }
 
-public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCustomConfigurationCommand, CustomConfigurationDto>
+public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCustomConfigurationCommand, Result<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
@@ -23,14 +24,18 @@ public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCus
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<CustomConfigurationDto> Handle(CreateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
+    public async Task<Result<CustomConfigurationDto>> Handle(CreateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
     {
         var dto = command.Data;
 
         // Verify uniqueness
         var existing = await _repository.GetByNameAsync(dto.Name);
         if (existing != null)
-            throw new InvalidOperationException($"A CustomConfiguration with name '{dto.Name}' already exists");
+        {
+            return Result<CustomConfigurationDto>.Failure(Error.Conflict(
+                "CUSTOM_CONFIG_ALREADY_EXISTS",
+                $"A CustomConfiguration with name '{dto.Name}' already exists"));
+        }
 
         // Create aggregate
         var customConfig = CustomConfiguration.Create(
@@ -62,7 +67,7 @@ public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCus
         await _repository.AddAsync(customConfig);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return MapToDto(customConfig);
+        return Result<CustomConfigurationDto>.Success(MapToDto(customConfig));
     }
 
     private static CustomConfigurationDto MapToDto(CustomConfiguration customConfig)

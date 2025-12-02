@@ -4,8 +4,9 @@ using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 
-public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, RegisterUserResponse>
+public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, Result<RegisterUserResponse>>
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDomainEventPublisher _domainEventPublisher;
@@ -18,12 +19,16 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         _domainEventPublisher = domainEventPublisher;
     }
 
-    public async Task<RegisterUserResponse> Handle(RegisterUserCommand request, CancellationToken cancellationToken = default)
+    public async Task<Result<RegisterUserResponse>> Handle(RegisterUserCommand request, CancellationToken cancellationToken = default)
     {
         // Check if (email, tenantId) combination already exists
         var existingUser = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, request.TenantId);
         if (existingUser != null)
-            throw new InvalidOperationException($"User with email {request.Email} already exists for this tenant");
+        {
+            return Result<RegisterUserResponse>.Failure(Error.Conflict(
+                "USER_ALREADY_EXISTS",
+                $"User with email {request.Email} already exists for this tenant"));
+        }
 
         // Create user aggregate with single tenant, role, and scope
         var user = User.Create(
@@ -54,10 +59,10 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         // Clear events after publishing
         user.ClearDomainEvents();
 
-        return new RegisterUserResponse
+        return Result<RegisterUserResponse>.Success(new RegisterUserResponse
         {
             UserId = user.Id.Value,
             Email = user.Email.Value
-        };
+        });
     }
 }

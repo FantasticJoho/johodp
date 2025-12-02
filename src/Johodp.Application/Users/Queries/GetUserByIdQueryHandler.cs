@@ -4,8 +4,9 @@ using Johodp.Application.Users.DTOs;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 
-public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto>
+public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<UserDto>>
 {
     private readonly IUnitOfWork _unitOfWork;
 
@@ -14,15 +15,19 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<UserDto> Handle(GetUserByIdQuery request, CancellationToken cancellationToken = default)
+    public async Task<Result<UserDto>> Handle(GetUserByIdQuery request, CancellationToken cancellationToken = default)
     {
         var userId = UserId.From(request.UserId);
         var user = await _unitOfWork.Users.GetByIdAsync(userId);
 
         if (user == null)
-            throw new KeyNotFoundException($"User with ID {request.UserId} not found");
+        {
+            return Result<UserDto>.Failure(Error.NotFound(
+                "USER_NOT_FOUND",
+                $"User with ID {request.UserId} not found"));
+        }
 
-        return new UserDto
+        return Result<UserDto>.Success(new UserDto
         {
             Id = user.Id.Value,
             Email = user.Email.Value,
@@ -31,6 +36,6 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, UserDto
             EmailConfirmed = user.EmailConfirmed,
             IsActive = user.IsActive,
             CreatedAt = user.CreatedAt
-        };
+        });
     }
 }

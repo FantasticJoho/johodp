@@ -7,6 +7,9 @@ using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.Commands;
 using Johodp.Application.Tenants.Queries;
 using Johodp.Application.Tenants.DTOs;
+using Johodp.Application.CustomConfigurations.Queries;
+using Johodp.Application.Common.Results;
+using Johodp.Api.Extensions;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -61,16 +64,14 @@ public class TenantController : ControllerBase
         
         try
         {
-            var tenant = await _sender.Send(new GetTenantByIdQuery { TenantId = id });
+            var result = await _sender.Send(new GetTenantByIdQuery { TenantId = id });
             
-            if (tenant == null)
+            if (result.IsSuccess)
             {
-                _logger.LogWarning("Tenant not found: {TenantId}", id);
-                return NotFound($"Tenant with ID '{id}' not found");
+                _logger.LogInformation("Retrieved tenant: {TenantName}", result.Value.Name);
             }
-
-            _logger.LogInformation("Retrieved tenant: {TenantName}", tenant.Name);
-            return Ok(tenant);
+            
+            return result.ToActionResult();
         }
         catch (Exception ex)
         {
@@ -89,16 +90,14 @@ public class TenantController : ControllerBase
         
         try
         {
-            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = name });
+            var result = await _sender.Send(new GetTenantByNameQuery { TenantName = name });
             
-            if (tenant == null)
+            if (result.IsSuccess)
             {
-                _logger.LogWarning("Tenant not found: {TenantName}", name);
-                return NotFound($"Tenant with name '{name}' not found");
+                _logger.LogInformation("Retrieved tenant: {TenantId}", result.Value.Id);
             }
-
-            _logger.LogInformation("Retrieved tenant: {TenantId}", tenant.Id);
-            return Ok(tenant);
+            
+            return result.ToActionResult();
         }
         catch (Exception ex)
         {
@@ -118,13 +117,16 @@ public class TenantController : ControllerBase
         try
         {
             var command = new CreateTenantCommand { Data = dto };
-            var tenant = await _sender.Send(command);
+            var result = await _sender.Send(command);
+            
+            if (!result.IsSuccess)
+                return result.ToActionResult();
             
             _logger.LogInformation(
                 "Successfully created tenant {TenantId} with client '{ClientId}' and {UrlCount} return URLs",
-                tenant.Id, tenant.ClientId ?? "(none)", tenant.AllowedReturnUrls.Count);
+                result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
 
-            return CreatedAtAction(nameof(GetById), new { id = tenant.Id }, tenant);
+            return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
         }
         catch (InvalidOperationException ex)
         {
@@ -149,13 +151,16 @@ public class TenantController : ControllerBase
         try
         {
             var command = new UpdateTenantCommand { TenantId = id, Data = dto };
-            var tenant = await _sender.Send(command);
+            var result = await _sender.Send(command);
+            
+            if (!result.IsSuccess)
+                return result.ToActionResult();
             
             _logger.LogInformation(
                 "Successfully updated tenant {TenantId}. Client: '{ClientId}', Return URLs: {UrlCount}",
-                tenant.Id, tenant.ClientId ?? "(none)", tenant.AllowedReturnUrls.Count);
+                result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
 
-            return Ok(tenant);
+            return result.ToActionResult();
         }
         catch (InvalidOperationException ex)
         {
@@ -221,23 +226,40 @@ public class TenantController : ControllerBase
 
         try
         {
-            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = tenantId });
+            var tenantResult = await _sender.Send(new GetTenantByNameQuery { TenantName = tenantId });
             
-            if (tenant == null)
+            if (!tenantResult.IsSuccess)
             {
                 _logger.LogWarning("Tenant not found for branding: {TenantId}", tenantId);
                 return NotFound("/* Tenant not found */");
             }
 
-            // Branding is now managed via CustomConfiguration
-            // Return a basic CSS or redirect to CustomConfiguration endpoint
+            // Get CustomConfiguration for branding
+            var configResult = await _sender.Send(new GetCustomConfigurationByIdQuery 
+            { 
+                CustomConfigurationId = tenantResult.Value.CustomConfigurationId 
+            });
+
+            if (!configResult.IsSuccess)
+            {
+                _logger.LogWarning("CustomConfiguration not found for tenant: {TenantId}", tenantId);
+                return NotFound("/* CustomConfiguration not found */");
+            }
+
+            var config = configResult.Value;
+
+            // Generate CSS with tenant branding
             var css = $@"/* Branding CSS for Tenant: {tenantId} */
-/* Branding is managed via CustomConfiguration. Please use the CustomConfiguration API. */
+/* CustomConfiguration: {config.Name} */
 
 :root {{
-    --primary-color: #667eea;
-    --secondary-color: #764ba2;
+    --primary-color: {config.PrimaryColor ?? ""};
+    --secondary-color: {config.SecondaryColor ?? ""};
+    --logo-url: {(config.LogoUrl != null ? $"url('{config.LogoUrl}')" : "")};
+    --background-image-url: {(config.BackgroundImageUrl != null ? $"url('{config.BackgroundImageUrl}')" : "")};
 }}
+
+{config.CustomCss ?? "/* No custom CSS defined */"}
 ";
 
             return Content(css, "text/css");
@@ -269,9 +291,9 @@ public class TenantController : ControllerBase
 
         try
         {
-            var tenant = await _sender.Send(new GetTenantByNameQuery { Name = tenantId });
+            var result = await _sender.Send(new GetTenantByNameQuery { TenantName = tenantId });
             
-            if (tenant == null)
+            if (!result.IsSuccess)
             {
                 _logger.LogWarning("Tenant not found for language: {TenantId}", tenantId);
                 return NotFound(new { error = "Tenant not found" });
@@ -281,7 +303,7 @@ public class TenantController : ControllerBase
             var language = new
             {
                 tenantId = tenantId,
-                customConfigurationId = tenant.CustomConfigurationId,
+                customConfigurationId = result.Value.CustomConfigurationId,
                 message = "Language settings are now managed via CustomConfiguration. Please use the CustomConfiguration API."
             };
 

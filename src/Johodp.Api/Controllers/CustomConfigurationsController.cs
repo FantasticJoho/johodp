@@ -7,6 +7,8 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Application.CustomConfigurations.Commands;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
+using Johodp.Application.Common.Results;
+using Johodp.Api.Extensions;
 
 [ApiController]
 [Route("api/custom-configurations")]
@@ -41,8 +43,11 @@ public class CustomConfigurationsController : ControllerBase
         var command = new CreateCustomConfigurationCommand { Data = dto };
         var result = await _sender.Send(command);
 
-        _logger.LogInformation("Successfully created custom configuration {Id}", result.Id);
-        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+        if (!result.IsSuccess)
+            return result.ToActionResult();
+
+        _logger.LogInformation("Successfully created custom configuration {Id}", result.Value.Id);
+        return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
     /// <summary>
@@ -61,8 +66,11 @@ public class CustomConfigurationsController : ControllerBase
         var command = new UpdateCustomConfigurationCommand { Id = id, Data = dto };
         var result = await _sender.Send(command);
 
-        _logger.LogInformation("Successfully updated custom configuration {Id}", result.Id);
-        return Ok(result);
+        if (!result.IsSuccess)
+            return result.ToActionResult();
+
+        _logger.LogInformation("Successfully updated custom configuration {Id}", result.Value.Id);
+        return result.ToActionResult();
     }
 
     /// <summary>

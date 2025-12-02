@@ -2,15 +2,16 @@ namespace Johodp.Application.Tenants.Queries;
 
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Common.Results;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
 
-public class GetTenantByIdQuery : IRequest<TenantDto?>
+public class GetTenantByIdQuery : IRequest<Result<TenantDto>>
 {
     public Guid TenantId { get; set; }
 }
 
-public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, TenantDto?>
+public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
@@ -19,15 +20,19 @@ public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Ten
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<TenantDto?> Handle(GetTenantByIdQuery query, CancellationToken cancellationToken = default)
+    public async Task<Result<TenantDto>> Handle(GetTenantByIdQuery query, CancellationToken cancellationToken = default)
     {
         var tenantId = TenantId.From(query.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);
 
         if (tenant == null)
-            return null;
+        {
+            return Result<TenantDto>.Failure(Error.NotFound(
+                "TENANT_NOT_FOUND",
+                $"Tenant with ID '{query.TenantId}' not found"));
+        }
 
-        return MapToDto(tenant);
+        return Result<TenantDto>.Success(MapToDto(tenant));
     }
 
     private static TenantDto MapToDto(Domain.Tenants.Aggregates.Tenant tenant)
@@ -83,12 +88,12 @@ public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, IEn
     }
 }
 
-public class GetTenantByNameQuery : IRequest<TenantDto?>
+public class GetTenantByNameQuery : IRequest<Result<TenantDto>>
 {
-    public string Name { get; set; } = string.Empty;
+    public string TenantName { get; set; } = string.Empty;
 }
 
-public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery, TenantDto?>
+public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
@@ -97,14 +102,18 @@ public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery,
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<TenantDto?> Handle(GetTenantByNameQuery query, CancellationToken cancellationToken = default)
+    public async Task<Result<TenantDto>> Handle(GetTenantByNameQuery query, CancellationToken cancellationToken = default)
     {
-        var tenant = await _tenantRepository.GetByNameAsync(query.Name);
+        var tenant = await _tenantRepository.GetByNameAsync(query.TenantName);
 
         if (tenant == null)
-            return null;
+        {
+            return Result<TenantDto>.Failure(Error.NotFound(
+                "TENANT_NOT_FOUND",
+                $"Tenant with name '{query.TenantName}' not found"));
+        }
 
-        return MapToDto(tenant);
+        return Result<TenantDto>.Success(MapToDto(tenant));
     }
 
     private static TenantDto MapToDto(Domain.Tenants.Aggregates.Tenant tenant)
