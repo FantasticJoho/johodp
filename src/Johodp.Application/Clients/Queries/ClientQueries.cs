@@ -27,9 +27,7 @@ public class GetClientByIdQueryHandler : IRequestHandler<GetClientByIdQuery, Res
 
         if (client == null)
         {
-            return Result<ClientDto>.Failure(Error.NotFound(
-                "CLIENT_NOT_FOUND",
-                $"Client with ID '{query.ClientId}' not found"));
+            return Result<ClientDto>.Failure(ClientErrors.NotFound(query.ClientId));
         }
 
         return Result<ClientDto>.Success(MapToDto(client));
@@ -72,9 +70,7 @@ public class GetClientByNameQueryHandler : IRequestHandler<GetClientByNameQuery,
 
         if (client == null)
         {
-            return Result<ClientDto>.Failure(Error.NotFound(
-                "CLIENT_NOT_FOUND",
-                $"Client with name '{query.ClientName}' not found"));
+            return Result<ClientDto>.Failure(ClientErrors.NotFoundByName(query.ClientName));
         }
 
         return Result<ClientDto>.Success(MapToDto(client));

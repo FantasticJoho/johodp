@@ -27,9 +27,7 @@ public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Res
 
         if (tenant == null)
         {
-            return Result<TenantDto>.Failure(Error.NotFound(
-                "TENANT_NOT_FOUND",
-                $"Tenant with ID '{query.TenantId}' not found"));
+            return Result<TenantDto>.Failure(TenantErrors.NotFound(query.TenantId));
         }
 
         return Result<TenantDto>.Success(MapToDto(tenant));
@@ -108,9 +106,7 @@ public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery,
 
         if (tenant == null)
         {
-            return Result<TenantDto>.Failure(Error.NotFound(
-                "TENANT_NOT_FOUND",
-                $"Tenant with name '{query.TenantName}' not found"));
+            return Result<TenantDto>.Failure(TenantErrors.NotFoundByName(query.TenantName));
         }
 
         return Result<TenantDto>.Success(MapToDto(tenant));

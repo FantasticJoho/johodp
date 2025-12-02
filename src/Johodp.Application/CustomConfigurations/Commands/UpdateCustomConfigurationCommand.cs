@@ -34,9 +34,7 @@ public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCus
         var customConfig = await _repository.GetByIdAsync(configId);
         if (customConfig == null)
         {
-            return Result<CustomConfigurationDto>.Failure(Error.NotFound(
-                "CUSTOM_CONFIG_NOT_FOUND",
-                $"CustomConfiguration with ID '{command.Id}' not found"));
+            return Result<CustomConfigurationDto>.Failure(CustomConfigurationErrors.NotFound(command.Id));
         }
 
         // Update branding (colors, logo, images, CSS)

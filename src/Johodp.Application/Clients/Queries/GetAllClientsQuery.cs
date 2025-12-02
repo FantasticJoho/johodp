@@ -14,7 +14,7 @@ public class GetAllClientsQueryHandler1
         _clientRepository = clientRepository;
     }
 
-    public async Task<IEnumerable<ClientDto>> Handle(string request, CancellationToken cancellationToken)
+    public Task<IEnumerable<ClientDto>> Handle(string request, CancellationToken cancellationToken)
     {
         // Pour l'instant, utilisons une approche simple - dans un vrai projet, 
         // il faudrait ajouter GetAllAsync au repository ou utiliser un QueryService

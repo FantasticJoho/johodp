@@ -32,9 +32,7 @@ public class UpdateClientCommandHandler : IRequestHandler<UpdateClientCommand, R
 
         if (client == null)
         {
-            return Result<ClientDto>.Failure(Error.NotFound(
-                "CLIENT_NOT_FOUND",
-                $"Client with ID '{command.ClientId}' not found"));
+            return Result<ClientDto>.Failure(ClientErrors.NotFound(command.ClientId));
         }
 
         var dto = command.Data;

@@ -32,9 +32,7 @@ public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCus
         var existing = await _repository.GetByNameAsync(dto.Name);
         if (existing != null)
         {
-            return Result<CustomConfigurationDto>.Failure(Error.Conflict(
-                "CUSTOM_CONFIG_ALREADY_EXISTS",
-                $"A CustomConfiguration with name '{dto.Name}' already exists"));
+            return Result<CustomConfigurationDto>.Failure(CustomConfigurationErrors.AlreadyExists(dto.Name));
         }
 
         // Create aggregate

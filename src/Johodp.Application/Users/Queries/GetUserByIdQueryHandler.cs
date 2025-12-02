@@ -22,9 +22,7 @@ public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<
 
         if (user == null)
         {
-            return Result<UserDto>.Failure(Error.NotFound(
-                "USER_NOT_FOUND",
-                $"User with ID {request.UserId} not found"));
+            return Result<UserDto>.Failure(UserErrors.NotFound(request.UserId));
         }
 
         return Result<UserDto>.Success(new UserDto

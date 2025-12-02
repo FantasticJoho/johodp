@@ -36,9 +36,7 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, R
 
         if (tenant == null)
         {
-            return Result<TenantDto>.Failure(Error.NotFound(
-                "TENANT_NOT_FOUND",
-                $"Tenant with ID '{command.TenantId}' not found"));
+            return Result<TenantDto>.Failure(TenantErrors.NotFound(command.TenantId));
         }
 
         var dto = command.Data;
@@ -54,9 +52,7 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, R
         {
             if (dto.CustomConfigurationId.Value == Guid.Empty)
             {
-                return Result<TenantDto>.Failure(Error.Validation(
-                    "EMPTY_CUSTOM_CONFIG",
-                    "CustomConfigurationId cannot be empty. A tenant must have a valid CustomConfiguration."));
+                return Result<TenantDto>.Failure(TenantErrors.EmptyCustomConfig());
             }
 
             tenant.SetCustomConfiguration(
@@ -105,18 +101,14 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, R
             {
                 if (!Guid.TryParse(dto.ClientId, out var clientGuid))
                 {
-                    return Result<TenantDto>.Failure(Error.Validation(
-                        "INVALID_CLIENT_ID",
-                        $"ClientId '{dto.ClientId}' is not a valid GUID."));
+                    return Result<TenantDto>.Failure(TenantErrors.InvalidClientId(dto.ClientId));
                 }
                 
                 var clientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(clientGuid);
                 var client = await _clientRepository.GetByIdAsync(clientId);
                 if (client == null)
                 {
-                    return Result<TenantDto>.Failure(Error.NotFound(
-                        "CLIENT_NOT_FOUND",
-                        $"Client '{dto.ClientId}' does not exist. Please create the client first."));
+                    return Result<TenantDto>.Failure(TenantErrors.ClientNotFound(dto.ClientId));
                 }
             }
 

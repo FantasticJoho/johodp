@@ -35,25 +35,19 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
         // Check if tenant name already exists
         if (await _tenantRepository.ExistsAsync(dto.Name))
         {
-            return Result<TenantDto>.Failure(Error.Conflict(
-                "TENANT_ALREADY_EXISTS",
-                $"A tenant with name '{dto.Name}' already exists"));
+            return Result<TenantDto>.Failure(TenantErrors.AlreadyExists(dto.Name));
         }
 
         // Validate associated client (required)
         if (string.IsNullOrWhiteSpace(dto.ClientId))
         {
-            return Result<TenantDto>.Failure(Error.Validation(
-                "CLIENT_ID_REQUIRED",
-                "ClientId is required. A tenant must be associated with an existing client."));
+            return Result<TenantDto>.Failure(TenantErrors.ClientIdRequired());
         }
 
         // Parse ClientId as GUID
         if (!Guid.TryParse(dto.ClientId, out var clientGuid))
         {
-            return Result<TenantDto>.Failure(Error.Validation(
-                "INVALID_CLIENT_ID",
-                $"ClientId '{dto.ClientId}' is not a valid GUID."));
+            return Result<TenantDto>.Failure(TenantErrors.InvalidClientId(dto.ClientId));
         }
 
         // Verify that the client exists
@@ -61,17 +55,13 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
         var client = await _clientRepository.GetByIdAsync(clientId);
         if (client == null)
         {
-            return Result<TenantDto>.Failure(Error.NotFound(
-                "CLIENT_NOT_FOUND",
-                $"Client '{dto.ClientId}' does not exist. Please create the client first."));
+            return Result<TenantDto>.Failure(TenantErrors.ClientNotFound(dto.ClientId));
         }
 
         // Validate CustomConfigurationId (required)
         if (dto.CustomConfigurationId == Guid.Empty)
         {
-            return Result<TenantDto>.Failure(Error.Validation(
-                "CUSTOM_CONFIG_REQUIRED",
-                "CustomConfigurationId is required. A tenant must reference a CustomConfiguration."));
+            return Result<TenantDto>.Failure(TenantErrors.CustomConfigRequired());
         }
 
         // Create tenant aggregate with required CustomConfigurationId

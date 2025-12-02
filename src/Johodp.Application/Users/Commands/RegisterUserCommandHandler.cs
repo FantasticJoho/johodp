@@ -25,9 +25,7 @@ public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, R
         var existingUser = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, request.TenantId);
         if (existingUser != null)
         {
-            return Result<RegisterUserResponse>.Failure(Error.Conflict(
-                "USER_ALREADY_EXISTS",
-                $"User with email {request.Email} already exists for this tenant"));
+            return Result<RegisterUserResponse>.Failure(UserErrors.AlreadyExistsForTenant(request.Email));
         }
 
         // Create user aggregate with single tenant, role, and scope

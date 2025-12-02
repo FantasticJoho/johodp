@@ -213,7 +213,10 @@ static void ApplyDatabaseMigrations(WebApplication app)
 
 static void ConfigureMiddlewarePipeline(WebApplication app)
 {
-    // Request logging for monitoring
+    // Custom request logging middleware (captures all requests with timing)
+    app.UseRequestLogging();
+
+    // Serilog request logging for detailed diagnostics
     app.UseSerilogRequestLogging(options =>
     {
         options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
