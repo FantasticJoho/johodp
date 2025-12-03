@@ -155,6 +155,19 @@ public static class ServiceCollectionExtensions
             options.DefaultSchema = "dbo";
             options.EnableTokenCleanup = true;
             options.TokenCleanupInterval = 3600; // 1 hour
+            
+            // Standardize table names to snake_case for consistency:
+            // 1. Cohérence: Les tables de l'application (clients, users, tenants) sont déjà en snake_case
+            // 2. Pas de quotes: PostgreSQL ne nécessite pas de double-quotes pour les noms en minuscules
+            //    Exemple: SELECT * FROM persisted_grants au lieu de SELECT * FROM "PersistedGrants"
+            // 3. Case-insensitive: PostgreSQL convertit automatiquement en minuscules les identifiants non quotés
+            // 4. Standard SQL: Convention largement adoptée dans PostgreSQL et les bases de données relationnelles
+            // 5. Lisibilité pgAdmin: Requêtes plus propres et uniformes sans mélange de conventions
+            options.PersistedGrants.Name = "persisted_grants";
+            options.DeviceFlowCodes.Name = "device_codes";
+            options.Keys.Name = "keys";
+            options.ServerSideSessions.Name = "server_side_sessions";
+            options.PushedAuthorizationRequests.Name = "pushed_authorization_requests";
         });
 
         services.AddScoped<IUserClaimsPrincipalFactory<User>, DomainUserClaimsPrincipalFactory>();
