@@ -2,7 +2,7 @@ namespace Johodp.Application.Clients.Queries;
 
 using Johodp.Contracts.Clients;
 using Johodp.Application.Common.Interfaces;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 
 
 public class GetAllClientsQueryHandler1

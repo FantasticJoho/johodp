@@ -1,7 +1,5 @@
-namespace Johodp.Infrastructure.Services;
+namespace Johodp.Messaging.Events;
 
-using Johodp.Application.Common.Events;
-using Johodp.Domain.Common;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

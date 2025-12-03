@@ -1,6 +1,6 @@
 namespace Johodp.Application.Common.Interfaces;
 
-using Johodp.Domain.Common;
+using Johodp.Messaging.Events;
 
 public interface IDomainEventPublisher
 {

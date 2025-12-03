@@ -1,4 +1,4 @@
-namespace Johodp.Application.Common.Mediator;
+namespace Johodp.Messaging.Mediator;
 
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;

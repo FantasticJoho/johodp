@@ -1,6 +1,7 @@
 namespace Johodp.Domain.CustomConfigurations.Events;
 
 using Johodp.Domain.Common;
+using Johodp.Messaging.Events;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 /// <summary>

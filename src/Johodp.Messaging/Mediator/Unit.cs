@@ -1,4 +1,4 @@
-namespace Johodp.Application.Common.Mediator;
+namespace Johodp.Messaging.Mediator;
 
 /// <summary>
 /// Represents a void type for requests that don't return a value

@@ -3,7 +3,7 @@ namespace Johodp.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Johodp.Application.Common.Interfaces;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Johodp.Application.Clients.Commands;
 using Johodp.Application.Clients.Queries;
 using Johodp.Contracts.Clients;

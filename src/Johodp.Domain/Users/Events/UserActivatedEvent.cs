@@ -1,6 +1,7 @@
 namespace Johodp.Domain.Users.Events;
 
 using Johodp.Domain.Common;
+using Johodp.Messaging.Events;
 
 public class UserActivatedEvent : DomainEvent
 {

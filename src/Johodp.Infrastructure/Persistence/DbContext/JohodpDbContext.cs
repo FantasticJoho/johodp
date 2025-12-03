@@ -27,7 +27,7 @@ public class JohodpDbContext : DbContext
         modelBuilder.HasDefaultSchema("dbo");
 
         // Ignore abstract base classes
-        modelBuilder.Ignore<Johodp.Domain.Common.DomainEvent>();
+        modelBuilder.Ignore<Johodp.Messaging.Events.DomainEvent>();
 
         // Ignore Value Objects (they are not entities)
         modelBuilder.Ignore<Johodp.Domain.Users.ValueObjects.UserId>();

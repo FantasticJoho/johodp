@@ -1,9 +1,9 @@
 namespace Johodp.Api.Extensions;
 
 using Duende.IdentityServer.Services;
-using Johodp.Application.Common.Events;
+using Johodp.Messaging.Events;
+using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Interfaces;
-using Johodp.Application.Common.Mediator;
 using Johodp.Application.Users;
 using Johodp.Application.Users.Commands;
 using Johodp.Application.Users.EventHandlers;

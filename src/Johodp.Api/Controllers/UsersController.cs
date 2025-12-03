@@ -7,7 +7,7 @@ using Johodp.Contracts.Users;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Users.Commands;
 using Johodp.Application.Users.Queries;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Domain.Tenants.ValueObjects;

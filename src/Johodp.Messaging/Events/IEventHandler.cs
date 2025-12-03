@@ -1,6 +1,4 @@
-namespace Johodp.Application.Common.Events;
-
-using Johodp.Domain.Common;
+namespace Johodp.Messaging.Events;
 
 /// <summary>
 /// Handler for domain events

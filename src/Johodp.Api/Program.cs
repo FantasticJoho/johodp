@@ -21,7 +21,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new ClientIdJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new CustomConfigurationIdJsonConverter());
     });
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

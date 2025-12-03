@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.Commands;
 
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
 using Johodp.Contracts.Users;
 using Johodp.Domain.Tenants.ValueObjects;

@@ -1,6 +1,4 @@
-namespace Johodp.Application.Common.Events;
-
-using Johodp.Domain.Common;
+namespace Johodp.Messaging.Events;
 
 /// <summary>
 /// Event bus for publishing domain events asynchronously

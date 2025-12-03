@@ -1,7 +1,7 @@
 namespace Johodp.Application.Common.Handlers;
 
 using System.Diagnostics;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Microsoft.Extensions.Logging;
 
 /// <summary>

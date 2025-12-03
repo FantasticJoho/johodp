@@ -24,6 +24,7 @@
     <ProjectReference Include="..\Johodp.Domain\Johodp.Domain.csproj" />
     <ProjectReference Include="..\Johodp.Application\Johodp.Application.csproj" />
     <ProjectReference Include="..\Johodp.Infrastructure\Johodp.Infrastructure.csproj" />
+    <ProjectReference Include="..\Johodp.Messaging\Johodp.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

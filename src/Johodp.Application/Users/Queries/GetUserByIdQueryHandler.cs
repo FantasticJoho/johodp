@@ -4,7 +4,7 @@ using Johodp.Contracts.Users;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Handlers;
 using Johodp.Domain.Users.ValueObjects;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
 using Microsoft.Extensions.Logging;
 

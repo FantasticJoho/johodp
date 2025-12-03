@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.EventHandlers;
 
-using Johodp.Application.Common.Events;
+using Johodp.Messaging.Events;
 using Johodp.Domain.Users.Events;
 using Microsoft.Extensions.Logging;
 

@@ -14,6 +14,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E50F9F6D-880
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Johodp.Contracts", "src\Johodp.Contracts\Johodp.Contracts.csproj", "{A949C223-4B38-47A4-8972-33E00A87B03D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Johodp.Messaging", "src\Johodp.Messaging\Johodp.Messaging.csproj", "{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -40,8 +42,13 @@ Global
 		{A949C223-4B38-47A4-8972-33E00A87B03D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A949C223-4B38-47A4-8972-33E00A87B03D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A949C223-4B38-47A4-8972-33E00A87B03D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{A949C223-4B38-47A4-8972-33E00A87B03D} = {E50F9F6D-8800-4BF1-8980-75D618EE1C82}
+		{BD89C23C-1889-4090-9EE8-0A75F2E0FCA7} = {E50F9F6D-8800-4BF1-8980-75D618EE1C82}
 	EndGlobalSection
 EndGlobal

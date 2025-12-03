@@ -7,8 +7,9 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Domain events and base classes -->
+  <ItemGroup><!-- Domain events and base classes -->
+  
+    <ProjectReference Include="..\Johodp.Messaging\Johodp.Messaging.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,7 @@
 namespace Johodp.Domain.CustomConfigurations.Aggregates;
 
 using Johodp.Domain.Common;
+using Johodp.Messaging.Events;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 using Johodp.Domain.CustomConfigurations.Events;
 

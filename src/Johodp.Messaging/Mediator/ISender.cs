@@ -1,4 +1,4 @@
-namespace Johodp.Application.Common.Mediator;
+namespace Johodp.Messaging.Mediator;
 
 /// <summary>
 /// Interface for sending requests to handlers

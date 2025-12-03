@@ -2,7 +2,7 @@ namespace Johodp.Application.Tenants.Commands.Examples;
 
 using Johodp.Application.Common.Handlers;
 using Johodp.Application.Common.Interfaces;
-using Johodp.Application.Common.Mediator;
+using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
 using Johodp.Contracts.Tenants;
 using Johodp.Domain.Tenants.Aggregates;
