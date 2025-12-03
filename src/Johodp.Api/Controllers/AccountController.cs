@@ -1,9 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using Johodp.Contracts.Users;
 using Johodp.Domain.Users.Aggregates;
+using Johodp.Domain.Tenants.Aggregates;
+using Johodp.Domain.Clients.Aggregates;
 using Johodp.Application.Common.Interfaces;
 using System.Security.Claims;
+using System.Text;
+using System.Text.Encodings.Web;
 
 namespace Johodp.Api.Controllers;
 
@@ -21,9 +26,11 @@ public class AccountController : ControllerBase
     private readonly ILogger<AccountController> _logger;
     private readonly ITenantRepository _tenantRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
     private readonly IEmailService _emailService;
+    private readonly UrlEncoder _urlEncoder;
 
     public AccountController(
         UserManager<User> userManager, 
@@ -31,18 +38,22 @@ public class AccountController : ControllerBase
         ILogger<AccountController> logger,
         ITenantRepository tenantRepository,
         IUserRepository userRepository,
+        IClientRepository clientRepository,
         IUnitOfWork unitOfWork,
         INotificationService notificationService,
-        IEmailService emailService)
+        IEmailService emailService,
+        UrlEncoder urlEncoder)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _logger = logger;
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
+        _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
         _emailService = emailService;
+        _urlEncoder = urlEncoder;
     }
 
     // ========== AUTHENTICATION ==========
@@ -244,13 +255,231 @@ public class AccountController : ControllerBase
             : null;
         _ = _emailService.SendWelcomeEmailAsync(user.Email.Value, domainUser.FirstName, domainUser.LastName, tenantName);
 
+        // Check if MFA is required for this tenant's client
+        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+        
         return Ok(new
         {
             message = "Account activated successfully",
             userId = user.Id.Value,
             email = user.Email.Value,
-            status = "Active"
+            status = "Active",
+            mfaRequired = mfaRequired,
+            mfaSetupUrl = mfaRequired ? $"/api/auth/mfa/enroll" : null
         });
+    }
+
+    // ========== MFA / TOTP ENDPOINTS ==========
+
+    /// <summary>
+    /// Enroll TOTP authenticator (returns QR code for scanning)
+    /// </summary>
+    [HttpPost("mfa/enroll")]
+    [Authorize]
+    public async Task<IActionResult> EnrollTotp()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized(new { error = "User not found" });
+
+        // Check if MFA is required
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        if (domainUser == null)
+            return BadRequest(new { error = "User not found" });
+            
+        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+        
+        if (!mfaRequired)
+            return BadRequest(new { error = "MFA is not required for your account" });
+
+        // Reset authenticator key
+        await _userManager.ResetAuthenticatorKeyAsync(user);
+        var key = await _userManager.GetAuthenticatorKeyAsync(user);
+        
+        if (string.IsNullOrEmpty(key))
+        {
+            _logger.LogError("Failed to generate authenticator key for user {UserId}", user.Id);
+            return StatusCode(500, new { error = "Failed to generate authenticator key" });
+        }
+
+        // Generate QR code URI
+        var email = await _userManager.GetEmailAsync(user);
+        var qrCodeUri = GenerateQrCodeUri(email!, key);
+
+        return Ok(new TotpEnrollmentResponse
+        {
+            SharedKey = key,
+            QrCodeUri = qrCodeUri,
+            ManualEntryKey = FormatKey(key)
+        });
+    }
+
+    /// <summary>
+    /// Verify TOTP code and enable MFA
+    /// </summary>
+    [HttpPost("mfa/verify-enrollment")]
+    [Authorize]
+    public async Task<IActionResult> VerifyTotpEnrollment([FromBody] VerifyTotpRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized(new { error = "User not found" });
+
+        // Verify the TOTP code
+        var isValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user,
+            _userManager.Options.Tokens.AuthenticatorTokenProvider,
+            request.Code);
+
+        if (!isValid)
+        {
+            _logger.LogWarning("Invalid TOTP code during enrollment for user {UserId}", user.Id);
+            return BadRequest(new { error = "Invalid verification code" });
+        }
+
+        // Enable 2FA
+        await _userManager.SetTwoFactorEnabledAsync(user, true);
+
+        // Enable MFA in domain
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        if (domainUser != null)
+        {
+            domainUser.EnableMFA();
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        _logger.LogInformation("TOTP enrolled successfully for user {UserId}", user.Id);
+
+        // Generate recovery codes
+        var recoveryCodes = await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 10);
+
+        return Ok(new
+        {
+            message = "Two-factor authentication enabled successfully",
+            recoveryCodes = recoveryCodes?.ToArray()
+        });
+    }
+
+    /// <summary>
+    /// Login with TOTP (two-step: password first, then TOTP)
+    /// </summary>
+    [HttpPost("login-with-totp")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginWithTotp([FromBody] LoginWithTotpRequest request)
+    {
+        // Find user
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null)
+        {
+            _logger.LogWarning("Login attempt with invalid email: {Email}", request.Email);
+            return Unauthorized(new { error = "Invalid email or password" });
+        }
+
+        // Validate password
+        var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Login attempt with invalid password: {Email}", request.Email);
+            return Unauthorized(new { error = "Invalid email or password" });
+        }
+
+        // Check if MFA is required
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        if (domainUser == null)
+            return Unauthorized(new { error = "User not found" });
+            
+        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+
+        if (mfaRequired)
+        {
+            // User must have 2FA enabled
+            if (!await _userManager.GetTwoFactorEnabledAsync(user))
+            {
+                _logger.LogWarning("MFA required but not enrolled for user {UserId}", user.Id);
+                return BadRequest(new 
+                { 
+                    error = "Two-factor authentication is required but not enrolled",
+                    mfaEnrollmentRequired = true 
+                });
+            }
+
+            // Verify TOTP code
+            if (string.IsNullOrEmpty(request.TotpCode))
+            {
+                return Ok(new MfaRequiredResponse
+                {
+                    MfaRequired = true,
+                    MfaMethod = "totp",
+                    Message = "Two-factor authentication code required"
+                });
+            }
+
+            var isValid = await _userManager.VerifyTwoFactorTokenAsync(
+                user,
+                _userManager.Options.Tokens.AuthenticatorTokenProvider,
+                request.TotpCode);
+
+            if (!isValid)
+            {
+                _logger.LogWarning("Invalid TOTP code during login for user {UserId}", user.Id);
+                return Unauthorized(new { error = "Invalid verification code" });
+            }
+        }
+
+        // Sign in
+        await _signInManager.SignInAsync(user, isPersistent: false);
+        
+        _logger.LogInformation("User {UserId} logged in successfully with TOTP", user.Id);
+
+        return Ok(new
+        {
+            message = "Login successful",
+            userId = user.Id.Value,
+            email = user.Email.Value,
+            mfaVerified = mfaRequired
+        });
+    }
+
+    // ========== HELPER METHODS ==========
+
+    private async Task<bool> IsMfaRequiredForTenant(Domain.Tenants.ValueObjects.TenantId? tenantId)
+    {
+        if (tenantId == null)
+            return false;
+
+        var tenant = await _tenantRepository.GetByIdAsync(tenantId);
+        if (tenant == null || string.IsNullOrEmpty(tenant.ClientId))
+            return false;
+
+        var client = await _clientRepository.GetByClientNameAsync(tenant.ClientId);
+        return client?.RequireMfa ?? false;
+    }
+
+    private string GenerateQrCodeUri(string email, string key)
+    {
+        const string AuthenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
+        return string.Format(
+            AuthenticatorUriFormat,
+            _urlEncoder.Encode("Johodp"),
+            _urlEncoder.Encode(email),
+            key);
+    }
+
+    private static string FormatKey(string key)
+    {
+        var result = new StringBuilder();
+        int currentPosition = 0;
+        while (currentPosition + 4 < key.Length)
+        {
+            result.Append(key.AsSpan(currentPosition, 4)).Append(' ');
+            currentPosition += 4;
+        }
+        if (currentPosition < key.Length)
+        {
+            result.Append(key.AsSpan(currentPosition));
+        }
+
+        return result.ToString().ToLowerInvariant();
     }
 
     // ========== PASSWORD RESET FLOW ==========
