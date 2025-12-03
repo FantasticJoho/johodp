@@ -6,16 +6,30 @@ using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.Clients.Aggregates;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Users;
 using System.Security.Claims;
-using System.Text;
-using System.Text.Encodings.Web;
 
 namespace Johodp.Api.Controllers;
 
 /// <summary>
-/// Account Controller - Does NOT use Mediator pattern
-/// Handles ASP.NET Identity infrastructure operations (authentication, password management, tokens)
-/// Direct access to UserManager, SignInManager required for session/identity management
+/// Account Controller - Infrastructure Exception to Clean Architecture
+/// 
+/// This controller intentionally does NOT use the Mediator pattern for the following reasons:
+/// 1. ASP.NET Identity Operations: Direct access to UserManager/SignInManager is required
+///    for authentication, session management, and token generation (these are infrastructure concerns)
+/// 2. Framework Integration: SignInManager manages cookies and authentication state that cannot
+///    be easily encapsulated in domain commands
+/// 3. Pragmatic Design: Wrapping UserManager in Commands/Handlers creates unnecessary indirection
+///    without providing meaningful business value
+/// 
+/// Design Principles Applied:
+/// - Controllers handle HTTP concerns (request/response, status codes)
+/// - Domain services (IMfaService) encapsulate business logic (MFA requirements, TOTP formatting)
+/// - Repositories handle data access
+/// - UserManager/SignInManager handle Identity infrastructure
+/// 
+/// This results in a pragmatic balance: thin controllers for business logic (using Mediator elsewhere),
+/// but direct infrastructure access where the framework requires it.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
@@ -26,11 +40,10 @@ public class AccountController : ControllerBase
     private readonly ILogger<AccountController> _logger;
     private readonly ITenantRepository _tenantRepository;
     private readonly IUserRepository _userRepository;
-    private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly INotificationService _notificationService;
     private readonly IEmailService _emailService;
-    private readonly UrlEncoder _urlEncoder;
+    private readonly IMfaService _mfaService;
 
     public AccountController(
         UserManager<User> userManager, 
@@ -38,22 +51,20 @@ public class AccountController : ControllerBase
         ILogger<AccountController> logger,
         ITenantRepository tenantRepository,
         IUserRepository userRepository,
-        IClientRepository clientRepository,
         IUnitOfWork unitOfWork,
         INotificationService notificationService,
         IEmailService emailService,
-        UrlEncoder urlEncoder)
+        IMfaService mfaService)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _logger = logger;
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
-        _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
         _notificationService = notificationService;
         _emailService = emailService;
-        _urlEncoder = urlEncoder;
+        _mfaService = mfaService;
     }
 
     // ========== AUTHENTICATION ==========
@@ -256,7 +267,7 @@ public class AccountController : ControllerBase
         _ = _emailService.SendWelcomeEmailAsync(user.Email.Value, domainUser.FirstName, domainUser.LastName, tenantName);
 
         // Check if MFA is required for this tenant's client
-        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(domainUser);
         
         return Ok(new
         {
@@ -287,7 +298,7 @@ public class AccountController : ControllerBase
         if (domainUser == null)
             return BadRequest(new { error = "User not found" });
             
-        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(domainUser);
         
         if (!mfaRequired)
             return BadRequest(new { error = "MFA is not required for your account" });
@@ -304,13 +315,13 @@ public class AccountController : ControllerBase
 
         // Generate QR code URI
         var email = await _userManager.GetEmailAsync(user);
-        var qrCodeUri = GenerateQrCodeUri(email!, key);
+        var qrCodeUri = _mfaService.GenerateQrCodeUri(email!, key, "Johodp");
 
         return Ok(new TotpEnrollmentResponse
         {
             SharedKey = key,
             QrCodeUri = qrCodeUri,
-            ManualEntryKey = FormatKey(key)
+            ManualEntryKey = _mfaService.FormatKey(key)
         });
     }
 
@@ -388,7 +399,7 @@ public class AccountController : ControllerBase
         if (domainUser == null)
             return Unauthorized(new { error = "User not found" });
             
-        var mfaRequired = domainUser.TenantId != null && await IsMfaRequiredForTenant(domainUser.TenantId);
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(domainUser);
 
         if (mfaRequired)
         {
@@ -441,46 +452,7 @@ public class AccountController : ControllerBase
     }
 
     // ========== HELPER METHODS ==========
-
-    private async Task<bool> IsMfaRequiredForTenant(Domain.Tenants.ValueObjects.TenantId? tenantId)
-    {
-        if (tenantId == null)
-            return false;
-
-        var tenant = await _tenantRepository.GetByIdAsync(tenantId);
-        if (tenant == null || string.IsNullOrEmpty(tenant.ClientId))
-            return false;
-
-        var client = await _clientRepository.GetByClientNameAsync(tenant.ClientId);
-        return client?.RequireMfa ?? false;
-    }
-
-    private string GenerateQrCodeUri(string email, string key)
-    {
-        const string AuthenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
-        return string.Format(
-            AuthenticatorUriFormat,
-            _urlEncoder.Encode("Johodp"),
-            _urlEncoder.Encode(email),
-            key);
-    }
-
-    private static string FormatKey(string key)
-    {
-        var result = new StringBuilder();
-        int currentPosition = 0;
-        while (currentPosition + 4 < key.Length)
-        {
-            result.Append(key.AsSpan(currentPosition, 4)).Append(' ');
-            currentPosition += 4;
-        }
-        if (currentPosition < key.Length)
-        {
-            result.Append(key.AsSpan(currentPosition));
-        }
-
-        return result.ToString().ToLowerInvariant();
-    }
+    // Note: MFA-related business logic has been extracted to IMfaService for better separation of concerns
 
     // ========== PASSWORD RESET FLOW ==========
 

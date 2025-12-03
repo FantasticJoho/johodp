@@ -5,8 +5,35 @@ using Johodp.Domain.Tenants.ValueObjects;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 /// <summary>
-/// Tenant aggregate representing a multi-tenant configuration
+/// Tenant aggregate root - represents an isolated customer/organization in the multi-tenant system.
+/// Each tenant has its own branding, configuration, users, and URLs.
 /// </summary>
+/// <remarks>
+/// <para><strong>Multi-Tenancy Architecture:</strong></para>
+/// <list type="bullet">
+/// <item>Tenants provide data isolation for different customers/organizations</item>
+/// <item>Each tenant has unique URLs for accessing the application (e.g., "acme-corp-example-com")</item>
+/// <item>Users belong to exactly one tenant (no cross-tenant access)</item>
+/// <item>Tenants can share a Client for OAuth2/OIDC authentication</item>
+/// <item>Each tenant references one CustomConfiguration for branding/localization</item>
+/// </list>
+/// 
+/// <para><strong>Business Rules:</strong></para>
+/// <list type="bullet">
+/// <item>Tenant name must be unique, lowercase, alphanumeric with hyphens only</item>
+/// <item>Maximum 100 characters for name, 200 for display name</item>
+/// <item>CustomConfigurationId is required (cannot create tenant without branding)</item>
+/// <item>Tenants can have multiple URLs and CORS origins</item>
+/// <item>Notification configuration (webhook) is optional</item>
+/// </list>
+/// 
+/// <para><strong>URL Format Examples:</strong></para>
+/// <code>
+/// "acme-corp-example-com"  // Production: https://acme-corp.example.com
+/// "acme-corp-fr"           // French locale: https://acme-corp.fr
+/// "dev-acme-corp"          // Development environment
+/// </code>
+/// </remarks>
 public class Tenant : AggregateRoot
 {
     public TenantId Id { get; private set; } = null!;
@@ -41,6 +68,16 @@ public class Tenant : AggregateRoot
 
     private Tenant() { }
 
+    /// <summary>
+    /// Factory method to create a new Tenant.
+    /// Validates name format and associates required custom configuration.
+    /// </summary>
+    /// <param name="name">Unique tenant name (lowercase, alphanumeric, hyphens only, max 100 chars)</param>
+    /// <param name="displayName">Human-readable tenant name (max 200 chars)</param>
+    /// <param name="customConfigurationId">Required reference to branding/localization configuration</param>
+    /// <returns>New Tenant instance in Active status</returns>
+    /// <exception cref="ArgumentNullException">Thrown when customConfigurationId is null</exception>
+    /// <exception cref="ArgumentException">Thrown when validation fails (empty name, invalid format, length exceeded)</exception>
     public static Tenant Create(
         string name,
         string displayName,

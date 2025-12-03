@@ -1,241 +1,266 @@
 namespace Johodp.Api.Extensions;
 
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using Johodp.Infrastructure.Persistence.DbContext;
-using Johodp.Application.Common.Interfaces;
-using Johodp.Infrastructure.Persistence;
-using Johodp.Infrastructure.Services;
-using Johodp.Infrastructure.IdentityServer;
 using Duende.IdentityServer.Services;
+using Johodp.Application.Common.Events;
+using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
+using Johodp.Application.Users;
+using Johodp.Application.Users.Commands;
+using Johodp.Application.Users.EventHandlers;
+using Johodp.Domain.Users.Aggregates;
+using Johodp.Domain.Users.Events;
+using Johodp.Infrastructure.Identity;
+using Johodp.Infrastructure.IdentityServer;
+using Johodp.Infrastructure.Persistence;
+using Johodp.Infrastructure.Persistence.DbContext;
+using Johodp.Infrastructure.Services;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Security.Cryptography.X509Certificates;
 
 /// <summary>
-/// Extension methods for configuring infrastructure services
+/// Extension methods for configuring infrastructure services.
+/// Optimized for readability and performance with extracted helper methods.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers all infrastructure services including database, repositories, 
-    /// IdentityServer, ASP.NET Identity, and application services
+    /// IdentityServer, ASP.NET Identity, and application services.
     /// </summary>
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         IConfiguration configuration,
         IWebHostEnvironment environment)
     {
-        // ====================================================================
-        // DATABASE CONFIGURATION
-        // ====================================================================
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
-        
+        var connectionString = configuration.GetConnectionString("DefaultConnection")!;
+
+        services.AddDatabase(connectionString);
+        services.AddRepositories();
+        services.AddMediator();
+        services.AddDomainEvents();
+        services.AddApplicationServices();
+        services.AddIdentityServerConfiguration(configuration, environment, connectionString);
+        services.AddIdentityConfiguration();
+        services.AddCorsPolicy();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Configures PostgreSQL database with dynamic JSON support.
+    /// Uses Npgsql data source for better connection pooling and performance.
+    /// </summary>
+    private static void AddDatabase(this IServiceCollection services, string connectionString)
+    {
+        // Enable dynamic JSON serialization for PostgreSQL JSONB columns
         var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
         dataSourceBuilder.EnableDynamicJson();
         var dataSource = dataSourceBuilder.Build();
-        
-        services.AddDbContext<JohodpDbContext>(options =>
-            options.UseNpgsql(dataSource,
-                npgsqlOptions =>
-                {
-                    npgsqlOptions.MigrationsAssembly("Johodp.Infrastructure");
-                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
-                }));
 
-        // ====================================================================
-        // REPOSITORIES & DATA ACCESS
-        // ====================================================================
+        services.AddDbContext<JohodpDbContext>(options =>
+            options.UseNpgsql(dataSource, npgsql =>
+            {
+                npgsql.MigrationsAssembly("Johodp.Infrastructure");
+                npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
+            }));
+    }
+
+    /// <summary>
+    /// Registers all domain repositories and Unit of Work pattern.
+    /// Repositories provide data access abstraction following DDD principles.
+    /// </summary>
+    private static void AddRepositories(this IServiceCollection services)
+    {
         services.AddScoped<IUserRepository, Johodp.Infrastructure.Persistence.Repositories.UserRepository>();
         services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
         services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
         services.AddScoped<ICustomConfigurationRepository, Johodp.Infrastructure.Persistence.Repositories.CustomConfigurationRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+    }
 
-        // ====================================================================
-        // MEDIATOR (CQRS Pattern)
-        // ====================================================================
-        // Auto-register all command/query handlers from Application assembly
-        services.AddMediator(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly);
+    /// <summary>
+    /// Configures CQRS Mediator pattern.
+    /// Auto-registers all Command/Query handlers from Application assembly.
+    /// </summary>
+    private static void AddMediator(this IServiceCollection services)
+    {
+        services.AddMediator(typeof(RegisterUserCommand).Assembly);
+    }
 
-        // ====================================================================
-        // DOMAIN EVENTS (Event-Driven Architecture - Simple Event Aggregator)
-        // ====================================================================
-        services.AddScoped<Johodp.Application.Common.Events.IEventBus, Johodp.Infrastructure.Services.EventAggregator>();
+    /// <summary>
+    /// Configures event-driven architecture with simple event aggregator pattern.
+    /// Registers domain event handlers for user lifecycle events.
+    /// </summary>
+    private static void AddDomainEvents(this IServiceCollection services)
+    {
+        services.AddScoped<IEventBus, EventAggregator>();
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
-        
-        // Event Handlers
-        services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserPendingActivationEvent>, 
-            Johodp.Application.Users.EventHandlers.SendActivationEmailHandler>();
-        services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserActivatedEvent>, 
-            Johodp.Application.Users.EventHandlers.UserActivatedEventHandler>();
 
-        // ====================================================================
-        // APPLICATION SERVICES
-        // ====================================================================
-        // Notification Service (webhooks to external applications)
-        services.AddHttpClient<INotificationService, Johodp.Infrastructure.Services.NotificationService>()
+        // User lifecycle event handlers
+        services.AddScoped<IEventHandler<UserPendingActivationEvent>, SendActivationEmailHandler>();
+        services.AddScoped<IEventHandler<UserActivatedEvent>, UserActivatedEventHandler>();
+    }
+
+    /// <summary>
+    /// Registers application-layer services for business logic and infrastructure concerns.
+    /// Includes notification, email, user activation, and MFA services.
+    /// </summary>
+    private static void AddApplicationServices(this IServiceCollection services)
+    {
+        // HTTP client for webhook notifications with connection pooling
+        services.AddHttpClient<INotificationService, NotificationService>()
             .SetHandlerLifetime(TimeSpan.FromMinutes(5));
 
-        // Email Service (activation emails, password reset, etc.)
-        services.AddScoped<IEmailService, Johodp.Infrastructure.Services.EmailService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IUserActivationService, UserActivationService>();
+        services.AddScoped<IMfaAuthenticationService, MfaAuthenticationService>();
+        services.AddScoped<IMfaService, MfaService>();
+    }
 
-        // User Activation Service (token generation and email sending)
-        services.AddScoped<IUserActivationService, Johodp.Infrastructure.Services.UserActivationService>();
+    /// <summary>
+    /// Configures Duende IdentityServer for OAuth2/OIDC with PostgreSQL storage.
+    /// Uses custom client store for dynamic database-driven client configuration.
+    /// </summary>
+    private static void AddIdentityServerConfiguration(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IWebHostEnvironment environment,
+        string connectionString)
+    {
+        // Dynamic client loading from database
+        services.AddScoped<Duende.IdentityServer.Stores.IClientStore, CustomClientStore>();
 
-        // MFA Authentication Service (client-specific multi-factor authentication)
-        services.AddScoped<IMfaAuthenticationService, Johodp.Infrastructure.Services.MfaAuthenticationService>();
-
-        // ====================================================================
-        // IDENTITYSERVER CONFIGURATION
-        // ====================================================================
-        // Custom client store (loads clients dynamically from database)
-        services.AddScoped<Duende.IdentityServer.Stores.IClientStore, Johodp.Infrastructure.IdentityServer.CustomClientStore>();
-        
         var idServerBuilder = services.AddIdentityServer(options =>
+        {
+            options.UserInteraction.LoginUrl = "/api/auth/login";
+            options.UserInteraction.LoginReturnUrlParameter = "returnUrl";
+            options.UserInteraction.CreateAccountUrl = "/api/auth/register";
+            options.UserInteraction.LogoutUrl = "/api/auth/logout";
+            options.UserInteraction.DeviceVerificationUrl = "/api/auth/device";
+            options.UserInteraction.ErrorUrl = "/error";
+        })
+        .AddInMemoryApiScopes(IdentityServerConfig.GetApiScopes())
+        .AddInMemoryApiResources(IdentityServerConfig.GetApiResources())
+        .AddInMemoryIdentityResources(IdentityServerConfig.GetIdentityResources())
+        .AddOperationalStore(options =>
+        {
+            options.ConfigureDbContext = b => b.UseNpgsql(connectionString, sql =>
             {
-                // Configure where IdentityServer redirects for user interactions
-                options.UserInteraction.LoginUrl = "/api/auth/login";
-                options.UserInteraction.LoginReturnUrlParameter = "returnUrl";
-                options.UserInteraction.CreateAccountUrl = "/api/auth/register";
-                options.UserInteraction.LogoutUrl = "/api/auth/logout";
-                options.UserInteraction.DeviceVerificationUrl = "/api/auth/device";
-                
-                // Not needed since clients have RequireConsent = false
-                // options.UserInteraction.ConsentUrl = "/consent";
-                
-                // Error handling can be done via API responses (no error page needed)
-                options.UserInteraction.ErrorUrl = "/error";
-            })
-            .AddInMemoryApiScopes(IdentityServerConfig.GetApiScopes())
-            .AddInMemoryApiResources(IdentityServerConfig.GetApiResources())
-            .AddInMemoryIdentityResources(IdentityServerConfig.GetIdentityResources())
-            // Store authorization codes, refresh tokens, and consents in PostgreSQL
-            .AddOperationalStore(options =>
-            {
-                options.ConfigureDbContext = b =>
-                    b.UseNpgsql(connectionString,
-                        sql =>
-                        {
-                            sql.MigrationsAssembly("Johodp.Infrastructure");
-                            sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
-                        });
-                
-                // Use 'dbo' schema for IdentityServer tables (consistent with JohodpDbContext)
-                options.DefaultSchema = "dbo";
-                
-                // Automatic cleanup of expired tokens
-                options.EnableTokenCleanup = true;
-                options.TokenCleanupInterval = 3600; // 1 hour
+                sql.MigrationsAssembly("Johodp.Infrastructure");
+                sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
             });
-            // Clients are now loaded from database via CustomClientStore
 
-        // Register a minimal IUserClaimsPrincipalFactory for the domain User so
-        // IdentityServer can decorate it when wiring up ASP.NET Identity.
-        services.AddScoped<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<Johodp.Domain.Users.Aggregates.User>, Johodp.Infrastructure.Identity.DomainUserClaimsPrincipalFactory>();
+            options.DefaultSchema = "dbo";
+            options.EnableTokenCleanup = true;
+            options.TokenCleanupInterval = 3600; // 1 hour
+        });
 
-        // Wire IdentityServer to use ASP.NET Identity for user authentication
-        idServerBuilder.AddAspNetIdentity<Johodp.Domain.Users.Aggregates.User>();
-        
-        // Signing credential configuration based on environment
+        services.AddScoped<IUserClaimsPrincipalFactory<User>, DomainUserClaimsPrincipalFactory>();
+        idServerBuilder.AddAspNetIdentity<User>();
+
+        ConfigureSigningCredential(idServerBuilder, configuration, environment);
+
+        services.AddScoped<IProfileService, IdentityServerProfileService>();
+    }
+
+    /// <summary>
+    /// Configures token signing credential based on environment.
+    /// Development: temporary key (regenerated on restart).
+    /// Production: persistent X.509 certificate or JSON Web Key.
+    /// </summary>
+    private static void ConfigureSigningCredential(
+        IIdentityServerBuilder idServerBuilder,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
+    {
         if (environment.IsDevelopment())
         {
-            // Development: Use temporary signing credential (regenerated on each restart)
+            // Temporary signing key for development (not persisted)
             idServerBuilder.AddDeveloperSigningCredential();
+            return;
         }
-        else
+
+        var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
+
+        if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
         {
-            // Production: Use persistent signing credential (single key, no rotation)
-            var signingKeyPath = configuration["IdentityServer:SigningKeyPath"];
-            
-            if (string.IsNullOrEmpty(signingKeyPath) || !File.Exists(signingKeyPath))
-            {
-                throw new InvalidOperationException(
-                    "IdentityServer:SigningKeyPath must be configured in production. " +
-                    "Generate a certificate with: dotnet dev-certs https -ep path/to/key.pfx -p YourPassword " +
-                    "Or generate a JWK with: dotnet run --project tools/KeyGenerator");
-            }
-            
-            // Auto-detect file type based on extension
-            var extension = Path.GetExtension(signingKeyPath).ToLowerInvariant();
-            
-            if (extension == ".pfx" || extension == ".p12")
-            {
-                // X.509 Certificate (PFX/PKCS#12)
+            throw new InvalidOperationException(
+                "IdentityServer:SigningKeyPath must be configured in production. " +
+                "Generate a certificate with: dotnet dev-certs https -ep path/to/key.pfx -p YourPassword " +
+                "Or generate a JWK with: dotnet run --project tools/KeyGenerator");
+        }
+
+        var extension = Path.GetExtension(signingKeyPath).ToLowerInvariant();
+
+        switch (extension)
+        {
+            case ".pfx" or ".p12":
                 var keyPassword = configuration["IdentityServer:SigningKeyPassword"];
-                var cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(
-                    signingKeyPath, 
-                    keyPassword);
-                
+                var cert = new X509Certificate2(signingKeyPath, keyPassword);
                 idServerBuilder.AddSigningCredential(cert);
-            }
-            else if (extension == ".json" || extension == ".jwk")
-            {
-                // JSON Web Key (RFC 7517)
-                var key = Johodp.Infrastructure.IdentityServer.SigningKeyHelper.LoadJwkFromFile(signingKeyPath);
-                idServerBuilder.AddSigningCredential(key, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.RsaSha256);
-            }
-            else
-            {
+                break;
+
+            case ".json" or ".jwk":
+                var key = SigningKeyHelper.LoadJwkFromFile(signingKeyPath);
+                idServerBuilder.AddSigningCredential(key, SecurityAlgorithms.RsaSha256);
+                break;
+
+            default:
                 throw new InvalidOperationException(
                     $"Unsupported signing key file format: {extension}. " +
                     "Supported formats: .pfx, .p12 (certificate), .json, .jwk (JSON Web Key)");
-            }
         }
+    }
 
-        // Profile service: map domain user to token/userinfo claims
-        services.AddScoped<IProfileService, IdentityServerProfileService>();
-
-        // ====================================================================
-        // ASP.NET IDENTITY CONFIGURATION
-        // ====================================================================
-        services.AddIdentityCore<Johodp.Domain.Users.Aggregates.User>(options =>
+    /// <summary>
+    /// Configures ASP.NET Core Identity with custom domain User entity.
+    /// Uses relaxed password requirements for development convenience.
+    /// </summary>
+    private static void AddIdentityConfiguration(this IServiceCollection services)
+    {
+        services.AddIdentityCore<User>(options =>
         {
+            // Relaxed password policy for development
             options.Password.RequireNonAlphanumeric = false;
             options.Password.RequireUppercase = false;
             options.Password.RequireDigit = false;
             options.SignIn.RequireConfirmedEmail = false;
         })
-        .AddSignInManager<Johodp.Infrastructure.Identity.CustomSignInManager>()
-        .AddUserStore<Johodp.Infrastructure.Identity.UserStore>()
+        .AddSignInManager<CustomSignInManager>()
+        .AddUserStore<UserStore>()
         .AddDefaultTokenProviders();
 
-        // Configure token lifespan for email confirmation tokens (activation)
         services.Configure<DataProtectionTokenProviderOptions>(options =>
         {
             options.TokenLifespan = TimeSpan.FromHours(24);
         });
 
-        // TODO: Add Tenant API Key Authentication for external applications later
-        // services.AddAuthentication()
-        //     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions, Johodp.Infrastructure.Identity.TenantApiKeyAuthenticationHandler>(
-        //         "TenantApiKey",
-        //         options => { });
-
-        // Ensure the application cookie used by ASP.NET Identity has dev-friendly settings
-        // so browsers accept it on localhost HTTP. For production, revisit these settings.
         services.ConfigureApplicationCookie(opts =>
         {
             opts.Cookie.Name = ".AspNetCore.Identity.Application";
             opts.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
             opts.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
         });
+    }
 
-        // ====================================================================
-        // CORS CONFIGURATION (Development)
-        // ====================================================================
+    /// <summary>
+    /// Configures CORS policy for development (allows any origin).
+    /// TODO: Restrict origins in production for security.
+    /// </summary>
+    private static void AddCorsPolicy(this IServiceCollection services)
+    {
         services.AddCors(options =>
         {
             options.AddPolicy("AllowSpa", policy =>
             {
-                policy.SetIsOriginAllowed(origin => true) // Allow any origin in development
+                // Development: allow any origin with credentials
+                policy.SetIsOriginAllowed(_ => true)
                       .AllowCredentials()
                       .AllowAnyHeader()
                       .AllowAnyMethod();
             });
         });
-
-        return services;
     }
 }
