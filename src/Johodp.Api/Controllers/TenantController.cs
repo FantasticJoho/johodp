@@ -39,19 +39,9 @@ public class TenantController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<TenantDto>>> GetAll()
     {
-        _logger.LogInformation("Getting all tenants");
-        
-        try
-        {
-            var tenants = await _sender.Send(new GetAllTenantsQuery());
-            _logger.LogInformation("Retrieved {Count} tenants", tenants.Count());
-            return Ok(tenants);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving all tenants");
-            return StatusCode(500, "An error occurred while retrieving tenants");
-        }
+        var tenants = await _sender.Send(new GetAllTenantsQuery());
+        _logger.LogInformation("Retrieved {Count} tenants", tenants.Count());
+        return Ok(tenants);
     }
 
     /// <summary>
@@ -60,24 +50,10 @@ public class TenantController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<TenantDto>> GetById(Guid id)
     {
-        _logger.LogInformation("Getting tenant by ID: {TenantId}", id);
-        
-        try
-        {
-            var result = await _sender.Send(new GetTenantByIdQuery { TenantId = id });
-            
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Retrieved tenant: {TenantName}", result.Value.Name);
-            }
-            
-            return result.ToActionResult();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving tenant {TenantId}", id);
-            return StatusCode(500, "An error occurred while retrieving the tenant");
-        }
+        var result = await _sender.Send(new GetTenantByIdQuery { TenantId = id });
+        if (result.IsSuccess)
+            _logger.LogInformation("Retrieved tenant: {TenantName}", result.Value.Name);
+        return result.ToActionResult();
     }
 
     /// <summary>
@@ -86,24 +62,10 @@ public class TenantController : ControllerBase
     [HttpGet("by-name/{name}")]
     public async Task<ActionResult<TenantDto>> GetByName(string name)
     {
-        _logger.LogInformation("Getting tenant by name: {TenantName}", name);
-        
-        try
-        {
-            var result = await _sender.Send(new GetTenantByNameQuery { TenantName = name });
-            
-            if (result.IsSuccess)
-            {
-                _logger.LogInformation("Retrieved tenant: {TenantId}", result.Value.Id);
-            }
-            
-            return result.ToActionResult();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving tenant {TenantName}", name);
-            return StatusCode(500, "An error occurred while retrieving the tenant");
-        }
+        var result = await _sender.Send(new GetTenantByNameQuery { TenantName = name });
+        if (result.IsSuccess)
+            _logger.LogInformation("Retrieved tenant: {TenantId}", result.Value.Id);
+        return result.ToActionResult();
     }
 
     /// <summary>
@@ -112,32 +74,16 @@ public class TenantController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TenantDto>> Create([FromBody] CreateTenantDto dto)
     {
-        _logger.LogInformation("Creating new tenant: {TenantName}", dto.Name);
-        
-        try
-        {
-            var command = new CreateTenantCommand { Data = dto };
-            var result = await _sender.Send(command);
-            
-            if (!result.IsSuccess)
-                return result.ToActionResult();
-            
-            _logger.LogInformation(
-                "Successfully created tenant {TenantId} with client '{ClientId}' and {UrlCount} return URLs",
-                result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
+        _logger.LogInformation("Creating tenant: {TenantName}", dto.Name);
 
-            return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to create tenant {TenantName}: {Message}", dto.Name, ex.Message);
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error creating tenant {TenantName}", dto.Name);
-            return StatusCode(500, "An error occurred while creating the tenant");
-        }
+        var result = await _sender.Send(new CreateTenantCommand { Data = dto });
+        if (!result.IsSuccess)
+            return result.ToActionResult();
+
+        _logger.LogInformation("Created tenant {TenantId} with client '{ClientId}' and {UrlCount} URLs",
+            result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
     /// <summary>
@@ -147,31 +93,15 @@ public class TenantController : ControllerBase
     public async Task<ActionResult<TenantDto>> Update(Guid id, [FromBody] UpdateTenantDto dto)
     {
         _logger.LogInformation("Updating tenant: {TenantId}", id);
-        
-        try
-        {
-            var command = new UpdateTenantCommand { TenantId = id, Data = dto };
-            var result = await _sender.Send(command);
-            
-            if (!result.IsSuccess)
-                return result.ToActionResult();
-            
-            _logger.LogInformation(
-                "Successfully updated tenant {TenantId}. Client: '{ClientId}', Return URLs: {UrlCount}",
-                result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
 
+        var result = await _sender.Send(new UpdateTenantCommand { TenantId = id, Data = dto });
+        if (!result.IsSuccess)
             return result.ToActionResult();
-        }
-        catch (InvalidOperationException ex)
-        {
-            _logger.LogWarning(ex, "Failed to update tenant {TenantId}: {Message}", id, ex.Message);
-            return BadRequest(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error updating tenant {TenantId}", id);
-            return StatusCode(500, "An error occurred while updating the tenant");
-        }
+
+        _logger.LogInformation("Updated tenant {TenantId}. Client: '{ClientId}', URLs: {UrlCount}",
+            result.Value.Id, result.Value.ClientId ?? "(none)", result.Value.AllowedReturnUrls.Count);
+
+        return result.ToActionResult();
     }
 
     /// <summary>
@@ -180,29 +110,16 @@ public class TenantController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        _logger.LogInformation("Deleting tenant: {TenantId}", id);
-        
-        try
+        var deleted = await _tenantRepository.DeleteAsync(Johodp.Domain.Tenants.ValueObjects.TenantId.From(id));
+        if (!deleted)
         {
-            var tenantId = Johodp.Domain.Tenants.ValueObjects.TenantId.From(id);
-            var deleted = await _tenantRepository.DeleteAsync(tenantId);
-            
-            if (!deleted)
-            {
-                _logger.LogWarning("Tenant not found for deletion: {TenantId}", id);
-                return NotFound($"Tenant with ID '{id}' not found");
-            }
+            _logger.LogWarning("Tenant not found for deletion: {TenantId}", id);
+            return NotFound($"Tenant with ID '{id}' not found");
+        }
 
-            await _unitOfWork.SaveChangesAsync();
-            _logger.LogInformation("Successfully deleted tenant: {TenantId}", id);
-            
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error deleting tenant {TenantId}", id);
-            return StatusCode(500, "An error occurred while deleting the tenant");
-        }
+        await _unitOfWork.SaveChangesAsync();
+        _logger.LogInformation("Deleted tenant: {TenantId}", id);
+        return NoContent();
     }
 
     /// <summary>

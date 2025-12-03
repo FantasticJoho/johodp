@@ -1,0 +1,207 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:HttpProxyUI.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="700"
+        x:Class="HttpProxyUI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="HTTP Proxy Inspector"
+        Width="1200" Height="700">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Grid DockPanel.Dock="Top" Margin="10">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            
+            <!-- Première ligne -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                <TextBlock Text="Port:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding ProxyPort}" Width="80" IsEnabled="{Binding !IsRunning}"/>
+                
+                <TextBlock Text="Target:" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <TextBox Text="{Binding TargetUrl}" Width="300" IsEnabled="{Binding !IsRunning}"/>
+                
+                <Button Content="Start" Command="{Binding StartCommand}" IsEnabled="{Binding !IsRunning}" 
+                        Background="#28a745" Foreground="White" Padding="15,5"/>
+                <Button Content="Stop" Command="{Binding StopCommand}" IsEnabled="{Binding IsRunning}"
+                        Background="#dc3545" Foreground="White" Padding="15,5"/>
+                <Button Content="Clear" Command="{Binding ClearCommand}" Padding="15,5"/>
+                
+                <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" Margin="20,0,0,0" 
+                           FontWeight="Bold" Foreground="{Binding IsRunning, Converter={StaticResource StatusColorConverter}}"/>
+            </StackPanel>
+            
+            <!-- Deuxième ligne : Configuration Upstream Proxy -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10">
+                <CheckBox Content="Use System Proxy" IsChecked="{Binding UseSystemProxy}" IsEnabled="{Binding !IsRunning}"/>
+                
+                <TextBlock Text="Upstream Proxy:" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                <TextBox Text="{Binding UpstreamProxy}" Width="250" 
+                         IsEnabled="{Binding !IsRunning}"
+                         Watermark="http://proxy.company.com:8080"
+                         IsVisible="{Binding !UseSystemProxy}"/>
+                <TextBlock Text="(Using system default)" VerticalAlignment="Center" 
+                           Foreground="#666" FontStyle="Italic"
+                           IsVisible="{Binding UseSystemProxy}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Status Bar -->
+        <Border DockPanel.Dock="Bottom" Background="#f0f0f0" Padding="10,5">
+            <TextBlock Text="{Binding Requests.Count, StringFormat='Total Requests: {0}'}"/>
+        </Border>
+
+        <!-- Main Content: Liste + Détails -->
+        <Grid ColumnDefinitions="350,*">
+            
+            <!-- Liste des requêtes (gauche) -->
+            <Border Grid.Column="0" BorderBrush="#ddd" BorderThickness="0,0,1,0" Padding="5">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Requests" FontSize="16" FontWeight="Bold" Margin="5,5,5,10"/>
+                    
+                    <ListBox ItemsSource="{Binding Requests}" 
+                             SelectedItem="{Binding SelectedRequest}"
+                             Background="White">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="5" Background="{Binding StatusCode, Converter={StaticResource StatusBackgroundConverter}}">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="{Binding Id, StringFormat='#{0}'}" 
+                                                   FontWeight="Bold" Foreground="#666" Width="40"/>
+                                        <TextBlock Text="{Binding Method}" 
+                                                   FontWeight="Bold" 
+                                                   Foreground="{Binding Method, Converter={StaticResource MethodColorConverter}}"
+                                                   Width="60"/>
+                                        <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,3,0,0">
+                                        <TextBlock Text="{Binding TimeDisplay}" FontSize="11" Foreground="#999"/>
+                                        <TextBlock Text="{Binding StatusDisplay}" FontSize="11" 
+                                                   Foreground="{Binding StatusCode, Converter={StaticResource StatusColorConverter}}"/>
+                                        <TextBlock Text="{Binding DurationDisplay}" FontSize="11" Foreground="#999"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Détails de la requête (droite) -->
+            <ScrollViewer Grid.Column="1" Padding="15">
+                <StackPanel Spacing="15" IsVisible="{Binding SelectedRequest, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    
+                    <!-- Request Info -->
+                    <Border BorderBrush="#007bff" BorderThickness="2" CornerRadius="5" Padding="10">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="REQUEST" FontSize="14" FontWeight="Bold" Foreground="#007bff"/>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding SelectedRequest.Method}" FontWeight="Bold" FontSize="16"/>
+                                <TextBlock Text="{Binding SelectedRequest.Url}" FontSize="14" Foreground="#666"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding SelectedRequest.Timestamp, StringFormat='Time: {0:yyyy-MM-dd HH:mm:ss.fff}'}" 
+                                       FontSize="12" Foreground="#999"/>
+                            <TextBlock Text="{Binding SelectedRequest.RemoteEndPoint, StringFormat='From: {0}'}" 
+                                       FontSize="12" Foreground="#999"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Request Headers -->
+                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="5" Padding="10">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Request Headers" FontSize="13" FontWeight="Bold"/>
+                            <ItemsControl ItemsSource="{Binding SelectedRequest.Headers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2">
+                                            <TextBlock Text="{Binding Key}" FontWeight="Bold" Foreground="#007bff" Width="200"/>
+                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Request Body -->
+                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="5" Padding="10"
+                            IsVisible="{Binding SelectedRequest.Body, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Request Body" FontSize="13" FontWeight="Bold"/>
+                            <TextBox Text="{Binding SelectedRequest.Body}" 
+                                     IsReadOnly="True" 
+                                     TextWrapping="Wrap" 
+                                     AcceptsReturn="True"
+                                     MinHeight="100"
+                                     MaxHeight="300"
+                                     FontFamily="Consolas"
+                                     Background="#f8f8f8"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Response Info -->
+                    <Border BorderBrush="#28a745" BorderThickness="2" CornerRadius="5" Padding="10"
+                            IsVisible="{Binding SelectedRequest.StatusCode, Converter={StaticResource StatusCodeVisibilityConverter}}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="RESPONSE" FontSize="14" FontWeight="Bold" Foreground="#28a745"/>
+                            <StackPanel Orientation="Horizontal" Spacing="15">
+                                <TextBlock Text="{Binding SelectedRequest.StatusDisplay}" FontWeight="Bold" FontSize="16"
+                                           Foreground="{Binding SelectedRequest.StatusCode, Converter={StaticResource StatusColorConverter}}"/>
+                                <TextBlock Text="{Binding SelectedRequest.Duration, StringFormat='Duration: {0:F0}ms'}" 
+                                           FontSize="14" Foreground="#666"/>
+                                <TextBlock Text="{Binding SelectedRequest.ResponseSize, StringFormat='Size: {0} bytes'}" 
+                                           FontSize="14" Foreground="#666"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Response Headers -->
+                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="5" Padding="10"
+                            IsVisible="{Binding SelectedRequest.ResponseHeaders.Count, Converter={StaticResource CountVisibilityConverter}}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Response Headers" FontSize="13" FontWeight="Bold"/>
+                            <ItemsControl ItemsSource="{Binding SelectedRequest.ResponseHeaders}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2">
+                                            <TextBlock Text="{Binding Key}" FontWeight="Bold" Foreground="#28a745" Width="200"/>
+                                            <TextBlock Text="{Binding Value}" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Response Body -->
+                    <Border BorderBrush="#ccc" BorderThickness="1" CornerRadius="5" Padding="10"
+                            IsVisible="{Binding SelectedRequest.ResponseBody, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Response Body" FontSize="13" FontWeight="Bold"/>
+                            <TextBox Text="{Binding SelectedRequest.ResponseBody}" 
+                                     IsReadOnly="True" 
+                                     TextWrapping="Wrap" 
+                                     AcceptsReturn="True"
+                                     MinHeight="150"
+                                     MaxHeight="400"
+                                     FontFamily="Consolas"
+                                     Background="#f8f8f8"/>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+            
+        </Grid>
+    </DockPanel>
+
+</Window>

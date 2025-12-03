@@ -3,28 +3,31 @@ namespace Johodp.Application.CustomConfigurations.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.Aggregates;
+using Microsoft.Extensions.Logging;
 
 public class CreateCustomConfigurationCommand : IRequest<Result<CustomConfigurationDto>>
 {
     public CreateCustomConfigurationDto Data { get; set; } = null!;
 }
 
-public class CreateCustomConfigurationCommandHandler : IRequestHandler<CreateCustomConfigurationCommand, Result<CustomConfigurationDto>>
+public class CreateCustomConfigurationCommandHandler : BaseHandler<CreateCustomConfigurationCommand, Result<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCustomConfigurationCommandHandler(
         ICustomConfigurationRepository repository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CreateCustomConfigurationCommandHandler> logger) : base(logger)
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<CustomConfigurationDto>> Handle(CreateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
+    protected override async Task<Result<CustomConfigurationDto>> HandleCore(CreateCustomConfigurationCommand command, CancellationToken cancellationToken)
     {
         var dto = command.Data;
 

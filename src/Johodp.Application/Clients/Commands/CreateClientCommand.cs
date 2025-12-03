@@ -3,28 +3,31 @@ namespace Johodp.Application.Clients.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.Aggregates;
+using Microsoft.Extensions.Logging;
 
 public class CreateClientCommand : IRequest<Result<ClientDto>>
 {
     public CreateClientDto Data { get; set; } = null!;
 }
 
-public class CreateClientCommandHandler : IRequestHandler<CreateClientCommand, Result<ClientDto>>
+public class CreateClientCommandHandler : BaseHandler<CreateClientCommand, Result<ClientDto>>
 {
     private readonly IClientRepository _clientRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateClientCommandHandler(
         IClientRepository clientRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CreateClientCommandHandler> logger) : base(logger)
     {
         _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<ClientDto>> Handle(CreateClientCommand command, CancellationToken cancellationToken = default)
+    protected override async Task<Result<ClientDto>> HandleCore(CreateClientCommand command, CancellationToken cancellationToken)
     {
         var dto = command.Data;
 

@@ -2,20 +2,24 @@ namespace Johodp.Application.Users.Queries;
 
 using Johodp.Application.Users.DTOs;
 using Johodp.Application.Common.Interfaces;
+using Johodp.Application.Common.Handlers;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Microsoft.Extensions.Logging;
 
-public class GetUserByIdQueryHandler : IRequestHandler<GetUserByIdQuery, Result<UserDto>>
+public class GetUserByIdQueryHandler : BaseHandler<GetUserByIdQuery, Result<UserDto>>
 {
     private readonly IUnitOfWork _unitOfWork;
 
-    public GetUserByIdQueryHandler(IUnitOfWork unitOfWork)
+    public GetUserByIdQueryHandler(
+        IUnitOfWork unitOfWork,
+        ILogger<GetUserByIdQueryHandler> logger) : base(logger)
     {
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<UserDto>> Handle(GetUserByIdQuery request, CancellationToken cancellationToken = default)
+    protected override async Task<Result<UserDto>> HandleCore(GetUserByIdQuery request, CancellationToken cancellationToken)
     {
         var userId = UserId.From(request.UserId);
         var user = await _unitOfWork.Users.GetByIdAsync(userId);

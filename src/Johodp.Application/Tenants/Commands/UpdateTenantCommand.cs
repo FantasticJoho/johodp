@@ -3,9 +3,11 @@ namespace Johodp.Application.Tenants.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class UpdateTenantCommand : IRequest<Result<TenantDto>>
 {
@@ -13,7 +15,7 @@ public class UpdateTenantCommand : IRequest<Result<TenantDto>>
     public UpdateTenantDto Data { get; set; } = null!;
 }
 
-public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, Result<TenantDto>>
+public class UpdateTenantCommandHandler : BaseHandler<UpdateTenantCommand, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
     private readonly IClientRepository _clientRepository;
@@ -22,14 +24,15 @@ public class UpdateTenantCommandHandler : IRequestHandler<UpdateTenantCommand, R
     public UpdateTenantCommandHandler(
         ITenantRepository tenantRepository,
         IClientRepository clientRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<UpdateTenantCommandHandler> logger) : base(logger)
     {
         _tenantRepository = tenantRepository;
         _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<TenantDto>> Handle(UpdateTenantCommand command, CancellationToken cancellationToken = default)
+    protected override async Task<Result<TenantDto>> HandleCore(UpdateTenantCommand command, CancellationToken cancellationToken)
     {
         var tenantId = TenantId.From(command.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);

@@ -3,24 +3,28 @@ namespace Johodp.Application.Clients.Queries;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.Clients.DTOs;
 using Johodp.Domain.Clients.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class GetClientByIdQuery : IRequest<Result<ClientDto>>
 {
     public Guid ClientId { get; set; }
 }
 
-public class GetClientByIdQueryHandler : IRequestHandler<GetClientByIdQuery, Result<ClientDto>>
+public class GetClientByIdQueryHandler : BaseHandler<GetClientByIdQuery, Result<ClientDto>>
 {
     private readonly IClientRepository _clientRepository;
 
-    public GetClientByIdQueryHandler(IClientRepository clientRepository)
+    public GetClientByIdQueryHandler(
+        IClientRepository clientRepository,
+        ILogger<GetClientByIdQueryHandler> logger) : base(logger)
     {
         _clientRepository = clientRepository;
     }
 
-    public async Task<Result<ClientDto>> Handle(GetClientByIdQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<Result<ClientDto>> HandleCore(GetClientByIdQuery query, CancellationToken cancellationToken)
     {
         var clientId = ClientId.From(query.ClientId);
         var client = await _clientRepository.GetByIdAsync(clientId);
@@ -55,16 +59,18 @@ public class GetClientByNameQuery : IRequest<Result<ClientDto>>
     public string ClientName { get; set; } = string.Empty;
 }
 
-public class GetClientByNameQueryHandler : IRequestHandler<GetClientByNameQuery, Result<ClientDto>>
+public class GetClientByNameQueryHandler : BaseHandler<GetClientByNameQuery, Result<ClientDto>>
 {
     private readonly IClientRepository _clientRepository;
 
-    public GetClientByNameQueryHandler(IClientRepository clientRepository)
+    public GetClientByNameQueryHandler(
+        IClientRepository clientRepository,
+        ILogger<GetClientByNameQueryHandler> logger) : base(logger)
     {
         _clientRepository = clientRepository;
     }
 
-    public async Task<Result<ClientDto>> Handle(GetClientByNameQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<Result<ClientDto>> HandleCore(GetClientByNameQuery query, CancellationToken cancellationToken)
     {
         var client = await _clientRepository.GetByNameAsync(query.ClientName);
 

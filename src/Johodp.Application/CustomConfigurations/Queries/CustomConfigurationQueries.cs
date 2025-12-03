@@ -3,24 +3,28 @@ namespace Johodp.Application.CustomConfigurations.Queries;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class GetCustomConfigurationByIdQuery : IRequest<Result<CustomConfigurationDto>>
 {
     public Guid CustomConfigurationId { get; set; }
 }
 
-public class GetCustomConfigurationByIdQueryHandler : IRequestHandler<GetCustomConfigurationByIdQuery, Result<CustomConfigurationDto>>
+public class GetCustomConfigurationByIdQueryHandler : BaseHandler<GetCustomConfigurationByIdQuery, Result<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
 
-    public GetCustomConfigurationByIdQueryHandler(ICustomConfigurationRepository repository)
+    public GetCustomConfigurationByIdQueryHandler(
+        ICustomConfigurationRepository repository,
+        ILogger<GetCustomConfigurationByIdQueryHandler> logger) : base(logger)
     {
         _repository = repository;
     }
 
-    public async Task<Result<CustomConfigurationDto>> Handle(GetCustomConfigurationByIdQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<Result<CustomConfigurationDto>> HandleCore(GetCustomConfigurationByIdQuery query, CancellationToken cancellationToken)
     {
         var configId = CustomConfigurationId.From(query.CustomConfigurationId);
         var config = await _repository.GetByIdAsync(configId);
@@ -58,16 +62,18 @@ public class GetCustomConfigurationByIdQueryHandler : IRequestHandler<GetCustomC
 
 public class GetAllCustomConfigurationsQuery : IRequest<IEnumerable<CustomConfigurationDto>> { }
 
-public class GetAllCustomConfigurationsQueryHandler : IRequestHandler<GetAllCustomConfigurationsQuery, IEnumerable<CustomConfigurationDto>>
+public class GetAllCustomConfigurationsQueryHandler : BaseHandler<GetAllCustomConfigurationsQuery, IEnumerable<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
 
-    public GetAllCustomConfigurationsQueryHandler(ICustomConfigurationRepository repository)
+    public GetAllCustomConfigurationsQueryHandler(
+        ICustomConfigurationRepository repository,
+        ILogger<GetAllCustomConfigurationsQueryHandler> logger) : base(logger)
     {
         _repository = repository;
     }
 
-    public async Task<IEnumerable<CustomConfigurationDto>> Handle(GetAllCustomConfigurationsQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<IEnumerable<CustomConfigurationDto>> HandleCore(GetAllCustomConfigurationsQuery query, CancellationToken cancellationToken)
     {
         var configs = await _repository.GetAllAsync();
         return configs.Select(MapToDto);

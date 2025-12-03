@@ -35,18 +35,15 @@ public class CustomConfigurationsController : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(CustomConfigurationDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CustomConfigurationDto>> CreateCustomConfiguration(
-        [FromBody] CreateCustomConfigurationDto dto)
+    public async Task<ActionResult<CustomConfigurationDto>> CreateCustomConfiguration([FromBody] CreateCustomConfigurationDto dto)
     {
         _logger.LogInformation("Creating custom configuration: {Name}", dto.Name);
 
-        var command = new CreateCustomConfigurationCommand { Data = dto };
-        var result = await _sender.Send(command);
-
+        var result = await _sender.Send(new CreateCustomConfigurationCommand { Data = dto });
         if (!result.IsSuccess)
             return result.ToActionResult();
 
-        _logger.LogInformation("Successfully created custom configuration {Id}", result.Value.Id);
+        _logger.LogInformation("Created custom configuration: {Id}", result.Value.Id);
         return CreatedAtAction(nameof(GetById), new { id = result.Value.Id }, result.Value);
     }
 
@@ -57,19 +54,15 @@ public class CustomConfigurationsController : ControllerBase
     [ProducesResponseType(typeof(CustomConfigurationDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CustomConfigurationDto>> UpdateCustomConfiguration(
-        Guid id,
-        [FromBody] UpdateCustomConfigurationDto dto)
+    public async Task<ActionResult<CustomConfigurationDto>> UpdateCustomConfiguration(Guid id, [FromBody] UpdateCustomConfigurationDto dto)
     {
         _logger.LogInformation("Updating custom configuration: {Id}", id);
 
-        var command = new UpdateCustomConfigurationCommand { Id = id, Data = dto };
-        var result = await _sender.Send(command);
-
+        var result = await _sender.Send(new UpdateCustomConfigurationCommand { Id = id, Data = dto });
         if (!result.IsSuccess)
             return result.ToActionResult();
 
-        _logger.LogInformation("Successfully updated custom configuration {Id}", result.Value.Id);
+        _logger.LogInformation("Updated custom configuration: {Id}", result.Value.Id);
         return result.ToActionResult();
     }
 
@@ -81,21 +74,14 @@ public class CustomConfigurationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomConfigurationDto>> GetById(Guid id)
     {
-        _logger.LogInformation("Getting custom configuration by ID: {Id}", id);
-
-        var configId = CustomConfigurationId.From(id);
-        var config = await _repository.GetByIdAsync(configId);
-
+        var config = await _repository.GetByIdAsync(CustomConfigurationId.From(id));
         if (config == null)
         {
             _logger.LogWarning("Custom configuration not found: {Id}", id);
             return NotFound();
         }
 
-        var dto = MapToDto(config);
-
-        _logger.LogInformation("Retrieved custom configuration: {Id}", id);
-        return Ok(dto);
+        return Ok(MapToDto(config));
     }
 
     /// <summary>
@@ -106,20 +92,14 @@ public class CustomConfigurationsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CustomConfigurationDto>> GetByName(string name)
     {
-        _logger.LogInformation("Getting custom configuration by name: {Name}", name);
-
         var config = await _repository.GetByNameAsync(name);
-
         if (config == null)
         {
             _logger.LogWarning("Custom configuration not found: {Name}", name);
             return NotFound();
         }
 
-        var dto = MapToDto(config);
-
-        _logger.LogInformation("Retrieved custom configuration: {Name}", name);
-        return Ok(dto);
+        return Ok(MapToDto(config));
     }
 
     /// <summary>
@@ -129,13 +109,8 @@ public class CustomConfigurationsController : ControllerBase
     [ProducesResponseType(typeof(IEnumerable<CustomConfigurationDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<CustomConfigurationDto>>> GetAll()
     {
-        _logger.LogInformation("Getting all custom configurations");
-
         var configurations = await _repository.GetAllAsync();
-        var dtos = configurations.Select(MapToDto);
-
-        _logger.LogInformation("Retrieved {Count} custom configurations", dtos.Count());
-        return Ok(dtos);
+        return Ok(configurations.Select(MapToDto));
     }
 
     /// <summary>

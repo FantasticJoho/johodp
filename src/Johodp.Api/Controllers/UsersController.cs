@@ -22,7 +22,6 @@ public class UsersController : ControllerBase
     private readonly ILogger<UsersController> _logger;
     private readonly IUserRepository _userRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ISender _mediator;
     private readonly UserManager<User> _userManager;
 
     public UsersController(
@@ -33,7 +32,6 @@ public class UsersController : ControllerBase
         UserManager<User> userManager)
     {
         _sender = sender;
-        _mediator = sender;
         _logger = logger;
         _userRepository = userRepository;
         _unitOfWork = unitOfWork;
@@ -48,53 +46,30 @@ public class UsersController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<RegisterUserResponse>> Register([FromBody] RegisterUserCommand command)
     {
-        _logger.LogInformation(
-            "User registration requested for email: {Email}, tenant: {TenantId}, role: {Role}, scope: {Scope}", 
-            command.Email, 
-            command.TenantId.Value,
-            command.Role,
-            command.Scope);
+        _logger.LogInformation("User registration: {Email}, tenant: {TenantId}, role: {Role}, scope: {Scope}",
+            command.Email, command.TenantId.Value, command.Role, command.Scope);
 
-        // Force CreateAsPending = true pour les appels API (l'app tierce demande la création)
+        // Force CreateAsPending for API calls (external app requests creation)
         command.CreateAsPending = true;
 
-        try
-        {
-            var result = await _sender.Send(command);
-            
-            if (!result.IsSuccess)
-                return result.ToActionResult();
-            
-            // L'email d'activation sera envoyé automatiquement via l'Event Handler
-            // (SendActivationEmailHandler) qui écoute UserPendingActivationEvent
-            
-            _logger.LogInformation(
-                "User successfully registered via API: {Email}, UserId: {UserId}, Status: PendingActivation, Tenant: {TenantId}", 
-                command.Email, 
-                result.Value.UserId,
-                command.TenantId.Value);
+        var result = await _sender.Send(command);
+        if (!result.IsSuccess)
+            return result.ToActionResult();
 
-            return Created($"/api/users/{result.Value.UserId}", new
-            {
-                userId = result.Value.UserId,
-                email = result.Value.Email,
-                status = "PendingActivation",
-                tenantId = command.TenantId.Value,
-                role = command.Role,
-                scope = command.Scope,
-                message = "User created successfully. Activation email will be sent."
-            });
-        }
-        catch (InvalidOperationException ex)
+        // Activation email sent automatically via SendActivationEmailHandler (listens to UserPendingActivationEvent)
+        _logger.LogInformation("User registered: {Email}, UserId: {UserId}, Status: PendingActivation, Tenant: {TenantId}",
+            command.Email, result.Value.UserId, command.TenantId.Value);
+
+        return Created($"/api/users/{result.Value.UserId}", new
         {
-            _logger.LogWarning("User registration failed for {Email}: {Error}", command.Email, ex.Message);
-            return Conflict(new { error = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error during user registration for {Email}", command.Email);
-            return StatusCode(500, new { error = "An error occurred during registration" });
-        }
+            userId = result.Value.UserId,
+            email = result.Value.Email,
+            status = "PendingActivation",
+            tenantId = command.TenantId.Value,
+            role = command.Role,
+            scope = command.Scope,
+            message = "User created successfully. Activation email will be sent."
+        });
     }
 
     /// <summary>
@@ -103,24 +78,10 @@ public class UsersController : ControllerBase
     [HttpGet("{userId}")]
     public async Task<ActionResult<Johodp.Application.Users.DTOs.UserDto>> GetUser(Guid userId)
     {
-        _logger.LogDebug("Get user requested for UserId: {UserId}", userId);
-        try
-        {
-            var query = new GetUserByIdQuery(userId);
-            var result = await _sender.Send(query);
-            
-            if (result.IsSuccess)
-            {
-                _logger.LogDebug("User found: {UserId}, Email: {Email}", userId, result.Value.Email);
-            }
-            
-            return result.ToActionResult();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user {UserId}", userId);
-            throw;
-        }
+        var result = await _sender.Send(new GetUserByIdQuery(userId));
+        if (result.IsSuccess)
+            _logger.LogDebug("User found: {UserId}, Email: {Email}", userId, result.Value.Email);
+        return result.ToActionResult();
     }
 
     // Note: Multi-tenant user management endpoints removed.

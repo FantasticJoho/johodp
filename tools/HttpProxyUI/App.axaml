@@ -1,0 +1,24 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="HttpProxyUI.App"
+             xmlns:local="using:HttpProxyUI"
+             xmlns:converters="using:HttpProxyUI.Converters"
+             RequestedThemeVariant="Default">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.Resources>
+        <converters:MethodColorConverter x:Key="MethodColorConverter"/>
+        <converters:StatusColorConverter x:Key="StatusColorConverter"/>
+        <converters:StatusBackgroundConverter x:Key="StatusBackgroundConverter"/>
+        <converters:StatusCodeVisibilityConverter x:Key="StatusCodeVisibilityConverter"/>
+        <converters:CountVisibilityConverter x:Key="CountVisibilityConverter"/>
+    </Application.Resources>
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+  
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

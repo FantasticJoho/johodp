@@ -5,21 +5,24 @@ using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
+using Microsoft.Extensions.Logging;
 
-public class RegisterUserCommandHandler : IRequestHandler<RegisterUserCommand, Result<RegisterUserResponse>>
+public class RegisterUserCommandHandler : BaseHandler<RegisterUserCommand, Result<RegisterUserResponse>>
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDomainEventPublisher _domainEventPublisher;
 
     public RegisterUserCommandHandler(
         IUnitOfWork unitOfWork, 
-        IDomainEventPublisher domainEventPublisher)
+        IDomainEventPublisher domainEventPublisher,
+        ILogger<RegisterUserCommandHandler> logger) : base(logger)
     {
         _unitOfWork = unitOfWork;
         _domainEventPublisher = domainEventPublisher;
     }
 
-    public async Task<Result<RegisterUserResponse>> Handle(RegisterUserCommand request, CancellationToken cancellationToken = default)
+    protected override async Task<Result<RegisterUserResponse>> HandleCore(RegisterUserCommand request, CancellationToken cancellationToken)
     {
         // Check if (email, tenantId) combination already exists
         var existingUser = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, request.TenantId);

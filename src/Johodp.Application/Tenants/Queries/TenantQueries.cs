@@ -3,24 +3,28 @@ namespace Johodp.Application.Tenants.Queries;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class GetTenantByIdQuery : IRequest<Result<TenantDto>>
 {
     public Guid TenantId { get; set; }
 }
 
-public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Result<TenantDto>>
+public class GetTenantByIdQueryHandler : BaseHandler<GetTenantByIdQuery, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
-    public GetTenantByIdQueryHandler(ITenantRepository tenantRepository)
+    public GetTenantByIdQueryHandler(
+        ITenantRepository tenantRepository,
+        ILogger<GetTenantByIdQueryHandler> logger) : base(logger)
     {
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<Result<TenantDto>> Handle(GetTenantByIdQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<Result<TenantDto>> HandleCore(GetTenantByIdQuery query, CancellationToken cancellationToken)
     {
         var tenantId = TenantId.From(query.TenantId);
         var tenant = await _tenantRepository.GetByIdAsync(tenantId);
@@ -53,16 +57,18 @@ public class GetTenantByIdQueryHandler : IRequestHandler<GetTenantByIdQuery, Res
 
 public class GetAllTenantsQuery : IRequest<IEnumerable<TenantDto>> { }
 
-public class GetAllTenantsQueryHandler : IRequestHandler<GetAllTenantsQuery, IEnumerable<TenantDto>>
+public class GetAllTenantsQueryHandler : BaseHandler<GetAllTenantsQuery, IEnumerable<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
-    public GetAllTenantsQueryHandler(ITenantRepository tenantRepository)
+    public GetAllTenantsQueryHandler(
+        ITenantRepository tenantRepository,
+        ILogger<GetAllTenantsQueryHandler> logger) : base(logger)
     {
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<IEnumerable<TenantDto>> Handle(GetAllTenantsQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<IEnumerable<TenantDto>> HandleCore(GetAllTenantsQuery query, CancellationToken cancellationToken)
     {
         var tenants = await _tenantRepository.GetAllAsync();
         return tenants.Select(MapToDto);
@@ -91,16 +97,18 @@ public class GetTenantByNameQuery : IRequest<Result<TenantDto>>
     public string TenantName { get; set; } = string.Empty;
 }
 
-public class GetTenantByNameQueryHandler : IRequestHandler<GetTenantByNameQuery, Result<TenantDto>>
+public class GetTenantByNameQueryHandler : BaseHandler<GetTenantByNameQuery, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
 
-    public GetTenantByNameQueryHandler(ITenantRepository tenantRepository)
+    public GetTenantByNameQueryHandler(
+        ITenantRepository tenantRepository,
+        ILogger<GetTenantByNameQueryHandler> logger) : base(logger)
     {
         _tenantRepository = tenantRepository;
     }
 
-    public async Task<Result<TenantDto>> Handle(GetTenantByNameQuery query, CancellationToken cancellationToken = default)
+    protected override async Task<Result<TenantDto>> HandleCore(GetTenantByNameQuery query, CancellationToken cancellationToken)
     {
         var tenant = await _tenantRepository.GetByNameAsync(query.TenantName);
 

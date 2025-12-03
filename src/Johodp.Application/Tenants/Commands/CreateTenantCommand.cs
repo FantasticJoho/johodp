@@ -3,16 +3,18 @@ namespace Johodp.Application.Tenants.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.Tenants.DTOs;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class CreateTenantCommand : IRequest<Result<TenantDto>>
 {
     public CreateTenantDto Data { get; set; } = null!;
 }
 
-public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, Result<TenantDto>>
+public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, Result<TenantDto>>
 {
     private readonly ITenantRepository _tenantRepository;
     private readonly IClientRepository _clientRepository;
@@ -21,14 +23,15 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, R
     public CreateTenantCommandHandler(
         ITenantRepository tenantRepository,
         IClientRepository clientRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CreateTenantCommandHandler> logger) : base(logger)
     {
         _tenantRepository = tenantRepository;
         _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<TenantDto>> Handle(CreateTenantCommand command, CancellationToken cancellationToken = default)
+    protected override async Task<Result<TenantDto>> HandleCore(CreateTenantCommand command, CancellationToken cancellationToken)
     {
         var dto = command.Data;
 

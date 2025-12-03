@@ -136,6 +136,14 @@ public class UserActivationService : IUserActivationService
                 _logger.LogInformation(
                     "User {UserId} activated successfully",
                     userId);
+
+                // Send welcome email after successful activation
+                _ = _emailService.SendWelcomeEmailAsync(
+                    user.Email.Value,
+                    user.FirstName,
+                    user.LastName,
+                    tenantName: null); // Could be enhanced to fetch tenant name if needed
+
                 return true;
             }
             else

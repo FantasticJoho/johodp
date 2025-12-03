@@ -3,8 +3,10 @@ namespace Johodp.Application.CustomConfigurations.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Application.Common.Handlers;
 using Johodp.Application.CustomConfigurations.DTOs;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
+using Microsoft.Extensions.Logging;
 
 public class UpdateCustomConfigurationCommand : IRequest<Result<CustomConfigurationDto>>
 {
@@ -12,20 +14,21 @@ public class UpdateCustomConfigurationCommand : IRequest<Result<CustomConfigurat
     public UpdateCustomConfigurationDto Data { get; set; } = null!;
 }
 
-public class UpdateCustomConfigurationCommandHandler : IRequestHandler<UpdateCustomConfigurationCommand, Result<CustomConfigurationDto>>
+public class UpdateCustomConfigurationCommandHandler : BaseHandler<UpdateCustomConfigurationCommand, Result<CustomConfigurationDto>>
 {
     private readonly ICustomConfigurationRepository _repository;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCustomConfigurationCommandHandler(
         ICustomConfigurationRepository repository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<UpdateCustomConfigurationCommandHandler> logger) : base(logger)
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<Result<CustomConfigurationDto>> Handle(UpdateCustomConfigurationCommand command, CancellationToken cancellationToken = default)
+    protected override async Task<Result<CustomConfigurationDto>> HandleCore(UpdateCustomConfigurationCommand command, CancellationToken cancellationToken)
     {
         var dto = command.Data;
         var configId = CustomConfigurationId.From(command.Id);

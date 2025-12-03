@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Application.Common.Interfaces;
+using System.Security.Claims;
 
-namespace Johodp.Api.Controllers.Account;
+namespace Johodp.Api.Controllers;
 
 /// <summary>
 /// Account Controller - Does NOT use Mediator pattern
@@ -101,8 +102,8 @@ public class AccountController : ControllerBase
         _logger.LogInformation("Login successful: {Email}, tenant: {TenantName}", request.Email, tenantName);
         await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, new[]
         {
-            new System.Security.Claims.Claim("tenant_id", tenant.Id.Value.ToString()),
-            new System.Security.Claims.Claim("tenant_name", tenant.Name)
+            new Claim("tenant_id", tenant.Id.Value.ToString()),
+            new Claim("tenant_name", tenant.Name)
         });
 
         return Ok(new { message = "Login successful", email = request.Email });
@@ -238,10 +239,10 @@ public class AccountController : ControllerBase
         _logger.LogInformation("Activation successful: {UserId}", user.Id);
 
         // Send welcome email (fire-and-forget)
-        var tenantName = domainUser.TenantId.HasValue 
-            ? (await _tenantRepository.GetByIdAsync(domainUser.TenantId.Value))?.Name.Value
+        var tenantName = domainUser.TenantId != null
+            ? (await _tenantRepository.GetByIdAsync(domainUser.TenantId))?.Name
             : null;
-        _ = _emailService.SendWelcomeEmailAsync(user.Email.Value, domainUser.FirstName.Value, domainUser.LastName.Value, tenantName);
+        _ = _emailService.SendWelcomeEmailAsync(user.Email.Value, domainUser.FirstName, domainUser.LastName, tenantName);
 
         return Ok(new
         {
@@ -276,8 +277,8 @@ public class AccountController : ControllerBase
         var token = await _userManager.GeneratePasswordResetTokenAsync(user);
 
         // Send email (fire-and-forget)
-        var domainUser = await _userRepository.GetByIdAsync(user.Id.Value);
-        var firstName = domainUser?.FirstName.Value ?? "User";
+        var domainUser = await _userRepository.GetByIdAsync(Johodp.Domain.Users.ValueObjects.UserId.From(user.Id.Value));
+        var firstName = domainUser?.FirstName ?? "User";
         _ = _emailService.SendPasswordResetEmailAsync(user.Email.Value, firstName, token, user.Id.Value);
 
         _logger.LogWarning("[DEV] Password reset token: {Email} -> {Token}", user.Email, token);
@@ -324,6 +325,32 @@ public class AccountController : ControllerBase
 
         _logger.LogInformation("Password reset successful: {Email}", request.Email);
         return Ok(new { message = "Password reset successful", email = request.Email });
+    }
+
+    // ========== PRIVATE HELPERS ==========
+
+    /// <summary>
+    /// Extract tenant name from acr_values or request body
+    /// </summary>
+    private static string? ExtractTenantName(string? acrValues, string? requestTenantName)
+    {
+        if (!string.IsNullOrEmpty(acrValues) && acrValues.StartsWith("tenant:", StringComparison.OrdinalIgnoreCase))
+            return acrValues.Substring(7);
+        return requestTenantName;
+    }
+
+    /// <summary>
+    /// Validate tenant exists and is active (reusable helper)
+    /// </summary>
+    private async Task<(IActionResult? error, Domain.Tenants.Aggregates.Tenant? tenant)> ValidateActiveTenantAsync(string tenantName)
+    {
+        var tenant = await _tenantRepository.GetByNameAsync(tenantName);
+        if (tenant == null || !tenant.IsActive)
+        {
+            _logger.LogWarning("Invalid or inactive tenant: {TenantName}", tenantName);
+            return (BadRequest(new { error = "Invalid or inactive tenant" }), null);
+        }
+        return (null, tenant);
     }
 }
 
