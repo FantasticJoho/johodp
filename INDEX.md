@@ -1,226 +1,115 @@
-# 📖 Index de la documentation
+# 📖 Index de la Documentation - Johodp Identity Provider
 
-Bienvenue dans la documentation du projet **Johodp** - une application Identity Provider basée sur Domain-Driven Design et .NET 8.
+> **Note:** Ce document est obsolète. Utilisez **[INDEX2.md](INDEX2.md)** pour la documentation à jour.
 
-## 🚀 Commencer ici
-
-### Pour les impatients (5 minutes)
-👉 **[QUICKSTART.md](QUICKSTART.md)** - Guide de démarrage en 5 minutes
-- Installation PostgreSQL
-- Restauration des packages
-- Lancement de l'API
-- Premier test d'endpoint
-
-### Pour comprendre l'architecture
-👉 **[ARCHITECTURE.md](ARCHITECTURE.md)** - Vue d'ensemble technique
-- Diagrammes de flux
-- Architecture layered
-- Patterns implémentés
-- Intégration IdentityServer
-
-### Pour connaître la structure complète
-👉 **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Détail de tous les fichiers
-- Tous les fichiers créés
-- Dépendances NuGet
-- Prochaines étapes
-- Concepts clés appliqués
-
-## 📚 Documentation détaillée
-
-### Vue générale
-📄 **[README.md](README.md)**
-- Présentation du projet
-- Prérequis et installation
-- Utilisation basique
-- Structure du projet
-
-### Endpoints API
-📄 **[API_ENDPOINTS.md](API_ENDPOINTS.md)**
-- Tous les endpoints disponibles
-- Exemples de requêtes (cURL, PowerShell, C#)
-- Codes de réponse
-- Validation des données
-
-### Dépannage
-📄 **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
-- Solutions aux problèmes courants
-- Commandes utiles
-- FAQ
-- Ressources d'aide
-
-### Résumé de la réalisation
-📄 **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)**
-- Ce qui a été créé
-- Statistiques
-- Avantages de l'architecture
-- Checklist des prochaines étapes
-
-## 🏗️ Structure du projet
-
-```
-Johodp/
-├── src/
-│   ├── Johodp.Domain/                # Couche métier (DDD)
-│   ├── Johodp.Application/           # Couche use cases (CQRS)
-│   ├── Johodp.Infrastructure/        # Couche technique (EF, repos)
-│   └── Johodp.Api/                   # Couche présentation (REST API)
-├── tests/
-│   └── Johodp.Tests/                 # Tests unitaires (xUnit)
-├── docker-compose.yml                # Infra locale (PostgreSQL)
-├── Johodp.sln                        # Solution Visual Studio
-├── README.md                         # Vue générale
-├── QUICKSTART.md                     # 5 minutes
-├── ARCHITECTURE.md                   # Technical deep dive
-├── PROJECT_STRUCTURE.md              # Tous les fichiers
-├── API_ENDPOINTS.md                  # Référence API
-├── TROUBLESHOOTING.md                # Problèmes courants
-└── COMPLETION_SUMMARY.md             # Résumé
-```
-
-## 🎯 Navigation rapide par rôle
-
-### 👨‍💻 Développeur backend
-1. [QUICKSTART.md](QUICKSTART.md) - Lancer l'app
-2. [ARCHITECTURE.md](ARCHITECTURE.md) - Comprendre le design
-3. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - Localiser les fichiers
-4. [API_ENDPOINTS.md](API_ENDPOINTS.md) - Endpoints disponibles
-5. [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Si problèmes
-
-### 👨‍💼 Architecte système
-1. [README.md](README.md) - Vue générale
-2. [ARCHITECTURE.md](ARCHITECTURE.md) - Patterns et design
-3. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - Organisation
-4. [COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md) - Points clés
-
-### 🧪 QA / Testeur
-1. [QUICKSTART.md](QUICKSTART.md) - Démarrer
-2. [API_ENDPOINTS.md](API_ENDPOINTS.md) - Endpoints à tester
-3. [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Problèmes connus
-4. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - Fichiers de test
-
-### 📚 Apprenant DDD
-1. [README.md](README.md) - Contexte
-2. [ARCHITECTURE.md](ARCHITECTURE.md) - Patterns DDD
-3. [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) - Implémentation
-4. Les fichiers source dans `src/Johodp.Domain/`
-
-## 📖 Concepts clés
-
-### Domain-Driven Design
-- **Agrégats** : User, Client (entités métier cohésives)
-- **Value Objects** : Email, UserId (immuables, identité par valeur)
-- **Domain Events** : UserRegisteredEvent (tracent les changements)
-- **Repositories** : Abstraction de la persistance
-- **Unit of Work** : Transactions atomiques
-
-### Patterns d'architecture
-- **Clean Architecture** : Séparation des couches
-- **CQRS** : Commands et Queries séparés
-- **Repository Pattern** : Abstraction de la BDD
-- **Dependency Injection** : Couplage faible
-
-### Technologies
-- **.NET 8** - Framework moderne
-- **Entity Framework Core** - ORM
-- **PostgreSQL** - Base de données robuste
-- **IdentityServer4** - OAuth2/OIDC
-- **MediatR** - CQRS
-- **FluentValidation** - Validation
-- **xUnit** - Tests
-
-## 🚀 Étapes suivantes
-
-### Démarrage immédiat
-```bash
-# 1. Lancer PostgreSQL
-docker-compose up -d
-
-# 2. Restaurer packages
-dotnet restore
-
-# 3. Créer migrations
-.\init-db.ps1
-
-# 4. Lancer l'API
-dotnet run --project src/Johodp.Api
-```
-
-### Après le démarrage
-1. **Lire [ARCHITECTURE.md](ARCHITECTURE.md)** pour comprendre le design
-2. **Explorer [API_ENDPOINTS.md](API_ENDPOINTS.md)** pour tester les endpoints
-3. **Consulter [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** pour localiser les fichiers
-4. **Commencer à développer** vos propres use cases
-
-## 📞 Questions fréquentes
-
-### Où commencer ?
-👉 [QUICKSTART.md](QUICKSTART.md)
-
-### Comment lancer l'API ?
-👉 [QUICKSTART.md](QUICKSTART.md#-démarrage-en-5-minutes) → Étape 4
-
-### Quels endpoints sont disponibles ?
-👉 [API_ENDPOINTS.md](API_ENDPOINTS.md)
-
-### Comment ajouter une nouvelle fonctionnalité ?
-👉 [ARCHITECTURE.md](ARCHITECTURE.md) → Patterns CQRS
-
-### Qui contacter en cas de problème ?
-👉 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-
-### Comment les données sont-elles organisées ?
-👉 [ARCHITECTURE.md](ARCHITECTURE.md) → Flux de données
-
-### Où trouver les tests ?
-👉 `tests/Johodp.Tests/UserAggregateTests.cs`
-
-## 📊 Statistiques du projet
-
-| Élément | Valeur |
-|---------|--------|
-| Fichiers source | 81 |
-| Fichiers de test | 14 |
-| Fichiers de documentation | 8 |
-| Couches architecturales | 4 |
-| Agrégats DDD | 2 |
-| Value Objects | 5 |
-| Domain Events | 3 |
-| Use Cases | 2 |
-
-## 🎓 Ressources externes
-
-### DDD
-- 📖 [Domain-Driven Design par Eric Evans](https://www.domainlanguage.com/ddd/)
-- 📖 [Implementing DDD par Vaughn Vernon](https://vaughnvernon.com/book/)
-- 🎥 [DDD in Practice](https://www.pluralsight.com/)
-
-### .NET & Architecture
-- 📖 [Clean Architecture par Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- 📚 [Microsoft - CQRS Pattern](https://docs.microsoft.com/en-us/azure/architecture/patterns/cqrs)
-- 📚 [Entity Framework Core](https://docs.microsoft.com/en-us/ef/core/)
-
-### IdentityServer
-- 📚 [IdentityServer4 Documentation](https://docs.identityserver.io/)
-- 🎥 [IdentityServer4 Tutorials](https://identityserver4.readthedocs.io/)
-
-### PostgreSQL
-- 📚 [PostgreSQL Documentation](https://www.postgresql.org/docs/)
-- 🎥 [PostgreSQL Tutorials](https://www.postgresqltutorial.com/)
-
-## 🏆 Résumé
-
-Vous avez maintenant une **architecture moderne, scalable et profesionnelle** basée sur :
-- ✅ Domain-Driven Design
-- ✅ Clean Architecture
-- ✅ CQRS Pattern
-- ✅ .NET 8 & Entity Framework Core
-- ✅ PostgreSQL & Docker
-- ✅ Tests et documentation complète
-
-**Explorez la documentation, lancez l'application et commencez à développer! 🚀**
+Bienvenue dans la documentation du projet **Johodp** - Identity Provider multi-tenant basé sur Domain-Driven Design et .NET 8.
 
 ---
 
-**Dernière mise à jour** : 17 novembre 2025
-**Version** : 1.0.0
-**Status** : ✅ Production-ready
+## 🚀 Démarrage Rapide
+
+| Document | Description | Temps |
+|----------|-------------|-------|
+| **[QUICKSTART.md](QUICKSTART.md)** | Installation et premier lancement | 5 min |
+| **[INSTALL.md](INSTALL.md)** | Guide d'installation complet | 15 min |
+| **[README.md](README.md)** | Vue d'ensemble du projet | 10 min |
+
+---
+
+## 📐 Architecture et Modèle
+
+| Document | Description |
+|----------|-------------|
+| **[ARCHITECTURE.md](ARCHITECTURE.md)** | Clean Architecture, DDD, multi-tenant, webhooks OAuth2 |
+| **[DOMAIN_MODEL.md](DOMAIN_MODEL.md)** | Modèle de domaine (User, Client, Tenant, CustomConfiguration) |
+| **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** | Structure des dossiers et fichiers |
+
+---
+
+## 📦 Fonctionnalités et Livraison
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| **[LOT_PLANNING.md](LOT_PLANNING.md)** | Stratégie de livraison par lots | ⭐ Production |
+| **[USER_STORIES.md](USER_STORIES.md)** | User stories complètes (10 épics, 48 US) | ⭐ MàJ |
+| **[USE_CASES.md](USE_CASES.md)** | Cas d'usage détaillés (UC-00 à UC-12) | ✅ Complet |
+| **[ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md)** | Matrice endpoints implémentés vs documentés | ⭐ Nouveau |
+
+**LOT 1:** 34/35 endpoints (97%) - 7/35 tests (20%)  
+**LOT 2 (MFA):** 3/5 endpoints (60%) - 0/5 tests (0%)
+
+---
+
+## 🔐 Sécurité et Authentification
+
+| Document | Description |
+|----------|-------------|
+| **[MFA_TOTP.md](MFA_TOTP.md)** | Multi-Factor Authentication (TOTP/Google Authenticator) |
+| **[MFA_CLIENT.md](MFA_CLIENT.md)** | Configuration client MFA |
+| **[CORS_SECURITY.md](CORS_SECURITY.md)** | Configuration CORS multi-tenant (7 couches) |
+| **[IDENTITY_SERVER_KEYS.md](IDENTITY_SERVER_KEYS.md)** | Gestion des clés de signature |
+| **[CERTIFICATE_ROTATION.md](CERTIFICATE_ROTATION.md)** | Rotation des certificats X.509 |
+
+---
+
+## 🗄️ Base de Données et Infrastructure
+
+| Document | Description |
+|----------|-------------|
+| **[MIGRATIONS_STRATEGY.md](MIGRATIONS_STRATEGY.md)** | Stratégie de migrations EF Core |
+| **[TABLE_NAMING.md](TABLE_NAMING.md)** | Standardisation snake_case |
+| **[MONGODB_CREDENTIAL_ROTATION.md](MONGODB_CREDENTIAL_ROTATION.md)** | Rotation credentials MongoDB (sidecar + Vault) |
+| **[CACHE.md](CACHE.md)** | Stratégie de cache distribuée |
+| **[HEALTH_CHECKS.md](HEALTH_CHECKS.md)** | Health checks et monitoring |
+
+---
+
+## 🔍 API et Endpoints
+
+| Document | Description |
+|----------|-------------|
+| **[API_ENDPOINTS.md](API_ENDPOINTS.md)** | Liste complète des endpoints REST |
+| **[API_LOGIN.md](API_LOGIN.md)** | Flux de connexion OAuth2/OIDC |
+| **[ACCOUNT_FLOWS.md](ACCOUNT_FLOWS.md)** | Flux de gestion de compte (inscription, reset password) |
+| **[ONBOARDING_FLOW.md](ONBOARDING_FLOW.md)** | Flux d'onboarding avec webhook tierce |
+
+---
+
+## 🧪 Tests et Qualité
+
+| Document | Description |
+|----------|-------------|
+| **[tests/Johodp.Tests/](tests/Johodp.Tests/)** | Tests d'intégration (SQLite in-memory) |
+| **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** | Dépannage et solutions aux problèmes courants |
+
+**Status:** 6/6 tests actifs passent - **Gaps:** 28/40 endpoints sans tests
+
+---
+
+## 📝 Récapitulatifs et Métadonnées
+
+| Document | Description |
+|----------|-------------|
+| **[SESSION_RECAP.md](SESSION_RECAP.md)** | Récapitulatif session 2024-12-03 |
+| **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** | Résumé implémentation |
+| **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)** | Résumé complétion |
+
+---
+
+## 🎯 Navigation par Besoin
+
+| Je veux... | Document |
+|------------|----------|
+| Démarrer rapidement | [QUICKSTART.md](QUICKSTART.md) |
+| Comprendre l'architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Voir les endpoints | [ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md) |
+| Implémenter MFA | [MFA_TOTP.md](MFA_TOTP.md) + [USER_STORIES.md](USER_STORIES.md) (Epic 6) |
+| Comprendre les lots | [LOT_PLANNING.md](LOT_PLANNING.md) |
+| Résoudre un problème | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
+| Configurer MongoDB | [MONGODB_CREDENTIAL_ROTATION.md](MONGODB_CREDENTIAL_ROTATION.md) |
+
+---
+
+**Version:** 2.0  
+**Dernière mise à jour:** 3 décembre 2025  
+**Status:** ⭐ INDEX2.md est la référence actuelle

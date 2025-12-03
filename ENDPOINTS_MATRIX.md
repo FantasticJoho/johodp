@@ -44,7 +44,7 @@ Ce document compare les endpoints **réellement implémentés** dans les control
 
 | Endpoint | Méthode | User Story | Implémenté | Documenté | Tests |
 |----------|---------|------------|------------|-----------|-------|
-| `/api/custom-configurations` | POST | US-2.1 | ✅ | ✅ | ❌ |
+| `/api/custom-configurations` | POST | US-2.1 | ✅ | ✅ | ❌  |
 | `/api/custom-configurations/{id}` | PUT | US-2.2 | ✅ | ✅ | ❌ |
 | `/api/custom-configurations/{id}` | GET | US-2.3 | ✅ | ✅ | ❌ |
 | `/api/custom-configurations/by-name/{name}` | GET | US-2.4 | ✅ | ✅ | ❌ |
@@ -200,10 +200,10 @@ Ce document compare les endpoints **réellement implémentés** dans les control
    - **Priorité:** P1 - LOT 2 completeness
    - **Effort:** 3 SP
 
-5. **Mise à jour complete-workflow.http**
-   - **Impact:** Moyen - Documentation développeur
-   - **Priorité:** P2 - LOT 2 completeness
-   - **Effort:** 2 SP
+5. ~~**Mise à jour complete-workflow.http**~~ - ❌ Non applicable (MFA dans api-auth-endpoints.http)
+   - **Impact:** N/A
+   - **Priorité:** N/A
+   - **Effort:** N/A
 
 ---
 
@@ -215,7 +215,7 @@ Ce document compare les endpoints **réellement implémentés** dans les control
 3. ❌ **Implémenter POST /api/auth/login-with-recovery-code** (5 SP)
 4. ❌ **Implémenter POST /api/auth/mfa/disable** (3 SP)
 5. ❌ **Créer tests d'intégration MFA** (8 SP)
-6. ❌ **Mettre à jour complete-workflow.http avec MFA** (2 SP)
+6. ❌ **Ajouter exemples MFA dans api-auth-endpoints.http** (2 SP)
 7. ❌ **Créer documentation utilisateur (guide Google Authenticator)** (3 SP)
 
 **Estimation Lot 2 Completeness:** 21 SP (~1 sprint)

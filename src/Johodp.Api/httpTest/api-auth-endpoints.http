@@ -325,6 +325,149 @@ Content-Type: application/json
 
 
 ###############################################################################
+### MFA / TOTP (Multi-Factor Authentication)
+###############################################################################
+
+### MFA Enrollment - Step 1: Generate QR Code
+# @name mfaEnroll
+POST {{baseUrl}}/api/auth/mfa/enroll
+Content-Type: application/json
+
+{
+  "userId": "{{registeredUserId}}"
+}
+
+# Response:
+# - 200 OK with:
+#   - qrCodeUrl: Data URI for QR code image (display to user)
+#   - manualEntryKey: Secret key for manual entry in authenticator app
+#   - provisioningUri: otpauth:// URI for app linking
+# - 400 Bad Request if user not found or MFA already enabled
+
+### Extract manual key from enrollment response
+@mfaSecretKey = {{mfaEnroll.response.body.manualEntryKey}}
+
+### MFA Enrollment - Step 2: Verify TOTP Code
+# User scans QR code with Google Authenticator / Microsoft Authenticator
+# Then enters the 6-digit code shown in the app
+POST {{baseUrl}}/api/auth/mfa/verify-enrollment
+Content-Type: application/json
+
+{
+  "userId": "{{registeredUserId}}",
+  "code": "123456"
+}
+
+# Response:
+# - 200 OK if code is valid (MFA now enabled for user)
+# - 400 Bad Request if code is invalid or expired
+
+### MFA Login - Login with TOTP Code
+# After regular login, if client requires MFA, user must provide TOTP code
+# @name mfaLogin
+POST {{baseUrl}}/api/auth/login-with-totp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "code": "123456",
+  "tenantName": "{{tenantId}}"
+}
+
+# Response:
+# - 200 OK with session cookie if credentials + TOTP valid
+# - 401 Unauthorized if TOTP code is invalid
+# - 400 Bad Request if MFA not enabled for user
+
+
+###############################################################################
+### MFA COMPLETE ENROLLMENT SCENARIO
+###############################################################################
+
+### Scenario: Enable MFA for existing user
+
+# Step 1: User is already registered and activated (see registration flow above)
+
+# Step 2: Initiate MFA enrollment
+POST {{baseUrl}}/api/auth/mfa/enroll
+Content-Type: application/json
+
+{
+  "userId": "YOUR_USER_ID_HERE"
+}
+
+# Step 3: User scans QR code with authenticator app
+# - Open Google Authenticator or Microsoft Authenticator
+# - Scan the QR code from qrCodeUrl in response
+# - Or manually enter the key from manualEntryKey
+
+# Step 4: Verify enrollment with 6-digit code from app
+POST {{baseUrl}}/api/auth/mfa/verify-enrollment
+Content-Type: application/json
+
+{
+  "userId": "YOUR_USER_ID_HERE",
+  "code": "TOTP_CODE_FROM_APP"
+}
+
+# Step 5: MFA is now enabled - subsequent logins require TOTP
+POST {{baseUrl}}/api/auth/login-with-totp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "code": "CURRENT_TOTP_CODE",
+  "tenantName": "{{tenantId}}"
+}
+
+
+###############################################################################
+### MFA ERROR SCENARIOS
+###############################################################################
+
+### Test: Enroll MFA for non-existent user (400 Bad Request)
+POST {{baseUrl}}/api/auth/mfa/enroll
+Content-Type: application/json
+
+{
+  "userId": "00000000-0000-0000-0000-000000000000"
+}
+
+### Test: Verify enrollment with invalid TOTP code (400 Bad Request)
+POST {{baseUrl}}/api/auth/mfa/verify-enrollment
+Content-Type: application/json
+
+{
+  "userId": "{{registeredUserId}}",
+  "code": "000000"
+}
+
+### Test: MFA login with invalid TOTP code (401 Unauthorized)
+POST {{baseUrl}}/api/auth/login-with-totp
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "code": "000000",
+  "tenantName": "{{tenantId}}"
+}
+
+### Test: MFA login without MFA enabled (400 Bad Request)
+POST {{baseUrl}}/api/auth/login-with-totp
+Content-Type: application/json
+
+{
+  "email": "user.without.mfa@example.com",
+  "password": "P@ssw0rd123!",
+  "code": "123456",
+  "tenantName": "{{tenantId}}"
+}
+
+
+###############################################################################
 ### NOTES:
 ###############################################################################
 #
@@ -347,6 +490,13 @@ Content-Type: application/json
 #
 # 4. Onboarding:
 #    - POST /api/account/onboarding
+#
+# 5. MFA / TOTP:
+#    - POST /api/auth/mfa/enroll
+#    - POST /api/auth/mfa/verify-enrollment
+#    - POST /api/auth/login-with-totp
+#    - POST /api/auth/mfa/disable (not implemented)
+#    - POST /api/auth/login-with-recovery-code (not implemented)
 #
 # Response Patterns:
 # - Success: 200 OK, 201 Created, 202 Accepted
@@ -399,5 +549,13 @@ Content-Type: application/json
 # 5. Activate user with token
 # 6. Login with credentials
 # 7. Test other flows (password reset, logout, etc.)
+# 8. (Optional) Enable MFA for user and test TOTP login
+#
+# MFA Testing Notes:
+# - Requires authenticator app (Google Authenticator, Microsoft Authenticator)
+# - QR code can be scanned or manual key entered
+# - TOTP codes expire every 30 seconds
+# - Only 3/5 MFA endpoints implemented (enroll, verify, login-with-totp)
+# - Missing: mfa/disable, login-with-recovery-code
 #
 ###############################################################################

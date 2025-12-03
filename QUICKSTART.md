@@ -202,22 +202,21 @@ POST /api/auth/reset-password
 **Account Management**
 ```bash
 # Activation compte
-POST /api/account/activate
+POST /api/auth/activate
 {
   "token": "CfDJ8N...",
   "userId": "550e8400-e29b-41d4-a716-446655440000",
-  "tenantId": "acme",
   "newPassword": "SecureP@ssw0rd123!",
   "confirmPassword": "SecureP@ssw0rd123!"
 }
 
-# Onboarding
-POST /api/account/onboarding
+# Enregistrement (soumission de demande - notification app tierce)
+POST /api/auth/register
 {
-  "tenantId": "acme",
   "email": "user@example.com",
   "firstName": "Jean",
-  "lastName": "Dupont"
+  "lastName": "Dupont",
+  "tenantId": "acme"
 }
 ```
 

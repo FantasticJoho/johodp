@@ -1,123 +1,143 @@
-# 📚 Index Complet - Johodp Identity Provider (v2)
+# 📚 Index Complet - Johodp Identity Provider
 
-## 🎯 Documents Essentiels (Start Here)
-
-### Pour Démarrer le Projet
-1. **[QUICKSTART.md](QUICKSTART.md)** - Guide de démarrage rapide (Docker + PostgreSQL)
-2. **[INSTALL.md](INSTALL.md)** - Instructions d'installation détaillées
-3. **[README.md](README.md)** - Vue d'ensemble du projet
-
-### Pour Comprendre l'Architecture
-4. **[ARCHITECTURE.md](ARCHITECTURE.md)** - Clean Architecture + DDD
-5. **[DOMAIN_MODEL.md](DOMAIN_MODEL.md)** - Modèle de domaine détaillé (User, Client, Tenant)
-6. **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Structure des dossiers et projets
+> **Référence principale** - Document consolidé et à jour (3 décembre 2025)
 
 ---
 
-## 📦 Organisation par Lots (Livraison Progressive)
+## 🎯 Documents Essentiels
 
-### ✅ LOT 1 - Fonctionnalités Core (PRODUCTION)
-7. **[LOT_PLANNING.md](LOT_PLANNING.md)** ⭐ **NOUVEAU** - Stratégie de livraison par lots
-8. **[USER_STORIES.md](USER_STORIES.md)** ⭐ **MIS À JOUR** - User stories complètes (48 US, 170 SP)
-9. **[USE_CASES.md](USE_CASES.md)** - Cas d'usage détaillés
-10. **[ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md)** ⭐ **NOUVEAU** - Matrice endpoints implémentés vs documentés
+### Démarrage et Installation
+- **[QUICKSTART.md](QUICKSTART.md)** - Démarrage rapide (Docker + PostgreSQL) - 5 min
+- **[INSTALL.md](INSTALL.md)** - Installation détaillée - 15 min
+- **[README.md](README.md)** - Vue d'ensemble du projet - 10 min
 
-**Status:** 34/35 endpoints implémentés (97%), 7/35 tests (20%)
-
----
-
-### 🔄 LOT 2 - Authentification Multi-Facteurs (EN COURS)
-11. **[MFA_TOTP.md](MFA_TOTP.md)** - Guide technique MFA/TOTP
-12. **[MFA_CLIENT.md](MFA_CLIENT.md)** - Configuration client MFA
-13. **[USER_STORIES.md](USER_STORIES.md)** - Epic 6: MFA/TOTP (lignes 1018-1200)
-
-**Status:** 3/5 endpoints implémentés (60%), 0/5 tests (0%)
-
-**Endpoints Implémentés:**
-- `POST /api/auth/mfa/enroll` - Enrollment TOTP
-- `POST /api/auth/mfa/verify-enrollment` - Vérification et activation
-- `POST /api/auth/login-with-totp` - Connexion avec TOTP
+### Architecture et Modèle
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Clean Architecture, DDD, multi-tenant, webhooks OAuth2
+- **[DOMAIN_MODEL.md](DOMAIN_MODEL.md)** - Modèle de domaine (User, Client, Tenant, CustomConfiguration)
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Structure des dossiers et fichiers
 
 ---
 
-### 📋 LOT 3 - Fonctionnalités Avancées (PLANIFIÉ)
-**Scope:** Administration, monitoring, tests E2E avancés  
-**Status:** Planifié (~50 SP, 2-3 sprints)
+## 📦 Fonctionnalités par Lot
+
+### ✅ LOT 1 - Core (PRODUCTION - 97% complet)
+- **[LOT_PLANNING.md](LOT_PLANNING.md)** - Stratégie de livraison
+- **[USER_STORIES.md](USER_STORIES.md)** - 48 user stories, 10 épics
+- **[USE_CASES.md](USE_CASES.md)** - Cas d'usage (UC-00 à UC-12)
+- **[ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md)** - Matrice implémentation vs documentation
+
+**Status:** 34/35 endpoints (97%) | 7/35 tests (20%)
+
+### 🔄 LOT 2 - MFA/TOTP (EN COURS - 60% complet)
+- **[MFA_TOTP.md](MFA_TOTP.md)** - Guide technique TOTP/Google Authenticator
+- **[MFA_CLIENT.md](MFA_CLIENT.md)** - Configuration client
+- **[USER_STORIES.md](USER_STORIES.md)** - Epic 6: MFA (lignes 1018-1200)
+
+**Status:** 3/5 endpoints (60%) | 0/5 tests (0%)
+
+**Endpoints implémentés:**
+- `POST /api/auth/mfa/enroll`
+- `POST /api/auth/mfa/verify-enrollment`
+- `POST /api/auth/login-with-totp`
+
+### 📋 LOT 3 - Avancé (PLANIFIÉ)
+Administration, monitoring, tests E2E (~50 SP, 2-3 sprints)
 
 ---
 
-## 🔐 Sécurité et Authentification
+## 🔐 Sécurité
 
-### OAuth2/OIDC
-14. **[API_LOGIN.md](API_LOGIN.md)** - Flux de connexion API
-15. **[ACCOUNT_FLOWS.md](ACCOUNT_FLOWS.md)** - Flux d'inscription/activation
-16. **[ONBOARDING_FLOW.md](ONBOARDING_FLOW.md)** - Flux complet d'onboarding
+### OAuth2/OIDC et Authentification
+- **[ACCOUNT_FLOWS.md](ACCOUNT_FLOWS.md)** - Flux complets (inscription, activation, login, reset password, onboarding)
 
-### Multi-Factor Authentication (LOT 2)
-17. **[MFA_TOTP.md](MFA_TOTP.md)** - Implémentation TOTP/Google Authenticator
-18. **[MFA_CLIENT.md](MFA_CLIENT.md)** - Configuration côté client
+### Certificats et Rotation
+- **[IDENTITY_SERVER_KEYS.md](IDENTITY_SERVER_KEYS.md)** - Clés de signature
+- **[CERTIFICATE_ROTATION.md](CERTIFICATE_ROTATION.md)** - Rotation X.509
 
-### Sécurité Générale
-19. **[CORS_SECURITY.md](CORS_SECURITY.md)** - Configuration CORS sécurisée
-20. **[IDENTITY_SERVER_KEYS.md](IDENTITY_SERVER_KEYS.md)** - Gestion des clés de signature
-21. **[CERTIFICATE_ROTATION.md](CERTIFICATE_ROTATION.md)** - Rotation des certificats X.509
+### Configuration CORS
+- **[CORS_SECURITY.md](CORS_SECURITY.md)** - Defense-in-depth (7 couches)
 
 ---
 
-## 🗄️ Base de Données
+## 🗄️ Base de Données et Infrastructure
 
-### Migrations et Schéma
-31. **[MIGRATIONS_STRATEGY.md](MIGRATIONS_STRATEGY.md)** - Stratégie de migrations EF Core
-32. **[MIGRATIONS_API.md](MIGRATIONS_API.md)** - API de gestion des migrations
-33. **[TABLE_NAMING.md](TABLE_NAMING.md)** ⭐ **NOUVEAU** - Standardisation snake_case
+### PostgreSQL
+- **[MIGRATIONS_STRATEGY.md](MIGRATIONS_STRATEGY.md)** - Stratégie EF Core
+- **[MIGRATIONS_API.md](MIGRATIONS_API.md)** - API de gestion
+- **[TABLE_NAMING.md](TABLE_NAMING.md)** - Standardisation snake_case
+- **[SCHEMA_DBO_MIGRATION.md](SCHEMA_DBO_MIGRATION.md)** - Migration vers schéma dbo
+- **[init-db.sh](init-db.sh)** / **[init-db.ps1](init-db.ps1)** - Scripts d'initialisation
 
-### Scripts SQL
-35. **[init-db.sh](init-db.sh)** / **[init-db.ps1](init-db.ps1)** - Initialisation base PostgreSQL
-36. **[rename-tables-to-snake-case.sql](rename-tables-to-snake-case.sql)** ⭐ **NOUVEAU** - Migration naming
+### MongoDB
+- **[MONGODB_CREDENTIAL_ROTATION.md](MONGODB_CREDENTIAL_ROTATION.md)** - Rotation credentials (sidecar + Vault + reloadOnChange)
+
+### Cache et Monitoring
+- **[CACHE.md](CACHE.md)** - Cache distribuée
+- **[HEALTH_CHECKS.md](HEALTH_CHECKS.md)** - Health checks
+- **[MONITORING.md](MONITORING.md)** - Observabilité (métriques, logs, traces)
+- **[JOURNALISATION.md](JOURNALISATION.md)** - Stratégie de logging
+- **[LOGGING_ENRICHERS.md](LOGGING_ENRICHERS.md)** - Enrichment automatique (tenant_id, client_id)
+
+---
+
+## 🔍 API et Endpoints
+
+- **[API_ENDPOINTS.md](API_ENDPOINTS.md)** - Liste complète REST avec exemples
+- **[ACCOUNT_FLOWS.md](ACCOUNT_FLOWS.md)** - Flux d'authentification et gestion de compte
+- **[MULTI_TENANT_USER_API.md](MULTI_TENANT_USER_API.md)** - Gestion utilisateurs multi-tenant
 
 ---
 
 ## 🧪 Tests et Qualité
 
-### Tests
-51. **[tests/Johodp.Tests/](tests/Johodp.Tests/)** - Tests d'intégration
-   - **Status:** 6/6 tests actifs passent (SQLite in-memory)
-   - **Gaps:** 28/40 endpoints sans tests
+- **[tests/Johodp.Tests/](tests/Johodp.Tests/)** - Tests d'intégration (SQLite in-memory)
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Dépannage
+
+**Status:** 6/6 tests actifs passent | **Gap:** 28/40 endpoints sans tests
 
 ---
 
-## 📝 Documentation Projet
+## 🎨 Configuration et Customisation
 
-### Récapitulatifs et Résumés
-58. **[SESSION_RECAP.md](SESSION_RECAP.md)** ⭐ **NOUVEAU** - Récap session 2024-12-03
-59. **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Résumé implémentation
-60. **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)** - Résumé complétion
-
----
-
-## 🔍 Navigation Rapide par Besoin
-
-### Je veux...
-- **Démarrer le projet:** [QUICKSTART.md](QUICKSTART.md)
-- **Comprendre l'architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
-- **Voir les endpoints implémentés:** [ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md)
-- **Implémenter MFA:** [MFA_TOTP.md](MFA_TOTP.md) + [USER_STORIES.md](USER_STORIES.md) (Epic 6)
-- **Comprendre les lots:** [LOT_PLANNING.md](LOT_PLANNING.md)
-- **Dépanner un problème:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- **Configurer la base de données:** [TABLE_NAMING.md](TABLE_NAMING.md)
+- **[CUSTOM_CONFIGURATION.md](CUSTOM_CONFIGURATION.md)** - CustomConfiguration (branding, langues partagées)
+- **[TENANT_MANAGEMENT.md](TENANT_MANAGEMENT.md)** - Gestion des tenants
+- **[TENANT_URL_FORMAT.md](TENANT_URL_FORMAT.md)** - Format des URLs multi-tenant
+- **[CONTRACTS_PROJECT.md](CONTRACTS_PROJECT.md)** - Projet Johodp.Contracts (DTOs partagés)
 
 ---
 
-## ⭐ Documents Nouveaux (Session 2024-12-03)
+## 🔧 Patterns et Techniques
 
-1. **[LOT_PLANNING.md](LOT_PLANNING.md)** - Stratégie de livraison par lots
-2. **[ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md)** - Matrice implémenté vs documenté
-3. **[SESSION_RECAP.md](SESSION_RECAP.md)** - Récapitulatif session documentation MFA
-4. **[TABLE_NAMING.md](TABLE_NAMING.md)** - Standardisation snake_case PostgreSQL
-5. **[rename-tables-to-snake-case.sql](rename-tables-to-snake-case.sql)** - Script migration naming
+- **[MEDIATOR.md](MEDIATOR.md)** - Pattern Mediator (MediatR)
+- **[RESULT_SPECIFICATION_PATTERNS.md](RESULT_SPECIFICATION_PATTERNS.md)** - Result pattern et Specification pattern
+- **[USER_AGGREGATE_MODIFICATIONS.md](USER_AGGREGATE_MODIFICATIONS.md)** - Modifications agrégat User
 
 ---
 
-**Dernière mise à jour:** 2024-12-03  
-**Total Documents:** 64 fichiers de documentation  
-**Status Projet:** LOT 1 ✅ | LOT 2 🔄 60% | LOT 3 📋 Planifié
+## 📝 Métadonnées et Récapitulatifs
+
+- **[SESSION_RECAP.md](SESSION_RECAP.md)** - Récap session 2024-12-03
+- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Résumé implémentation
+- **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)** - Résumé complétion
+
+---
+
+## 🎯 Navigation Rapide
+
+| Besoin | Document |
+|--------|----------|
+| Démarrer | [QUICKSTART.md](QUICKSTART.md) |
+| Architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Endpoints | [ENDPOINTS_MATRIX.md](ENDPOINTS_MATRIX.md) |
+| MFA | [MFA_TOTP.md](MFA_TOTP.md) |
+| Lots | [LOT_PLANNING.md](LOT_PLANNING.md) |
+| Dépannage | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
+| MongoDB | [MONGODB_CREDENTIAL_ROTATION.md](MONGODB_CREDENTIAL_ROTATION.md) |
+| Multi-tenant | [TENANT_MANAGEMENT.md](TENANT_MANAGEMENT.md) |
+| CustomConfig | [CUSTOM_CONFIGURATION.md](CUSTOM_CONFIGURATION.md) |
+
+---
+
+**Version:** 2.1  
+**Dernière mise à jour:** 3 décembre 2025  
+**Status:** ✅ Production-ready (LOT 1) | 🔄 LOT 2 en cours
