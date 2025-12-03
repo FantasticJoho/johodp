@@ -25,6 +25,8 @@ using System.Security.Cryptography.X509Certificates;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    private const string InfrastructureAssemblyName = "Johodp.Infrastructure";
+
     /// <summary>
     /// Registers all infrastructure services including database, repositories, 
     /// IdentityServer, ASP.NET Identity, and application services.
@@ -62,7 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<JohodpDbContext>(options =>
             options.UseNpgsql(dataSource, npgsql =>
             {
-                npgsql.MigrationsAssembly("Johodp.Infrastructure");
+                npgsql.MigrationsAssembly(InfrastructureAssemblyName);
                 npgsql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
             }));
     }
@@ -148,7 +150,7 @@ public static class ServiceCollectionExtensions
         {
             options.ConfigureDbContext = b => b.UseNpgsql(connectionString, sql =>
             {
-                sql.MigrationsAssembly("Johodp.Infrastructure");
+                sql.MigrationsAssembly(InfrastructureAssemblyName);
                 sql.MigrationsHistoryTable("__EFMigrationsHistory", "dbo");
             });
 
