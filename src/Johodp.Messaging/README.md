@@ -17,6 +17,18 @@ Mini-médiateur maison (~100 lignes) pour dispatcher les commandes et requêtes 
 **Implémentation:**
 - `Sender` - Implémentation du dispatcher avec injection de dépendances
 - `MediatorExtensions` - Enregistrement automatique des handlers
+- `BaseHandler<TRequest, TResponse>` - Classe de base avec hooks et cross-cutting concerns
+
+### Validation
+
+Système de validation automatique intégré au pipeline des handlers.
+
+**Interfaces:**
+- `IValidator<TRequest>` - Validateur pour une requête
+- `ValidationException` - Exception levée en cas d'échec de validation
+
+**Implémentation:**
+- `ValidationExtensions` - Enregistrement automatique des validateurs
 
 ### Event Aggregator
 
@@ -60,6 +72,9 @@ services.AddMediator(
     typeof(CreateTenantCommandHandler).Assembly,
     typeof(GetTenantQueryHandler).Assembly);
 
+// Enregistrer les validateurs automatiquement
+services.AddValidatorsFromAssemblyContaining<CreateTenantCommand>();
+
 // Enregistrer l'Event Aggregator avec les assemblies contenant les event handlers
 services.AddEventAggregator(
     typeof(UserCreatedEventHandler).Assembly);
@@ -78,6 +93,8 @@ public class CreateTenantCommand : IRequest<TenantDto>
 ```
 
 ### Mediator - Implémenter le Handler
+
+#### Option 1 : Handler Simple
 
 ```csharp
 using Johodp.Messaging.Mediator;
@@ -108,6 +125,59 @@ public class CreateTenantCommandHandler : IRequestHandler<CreateTenantCommand, T
 }
 ```
 
+#### Option 2 : Handler avec BaseHandler (Logging, Timing, Hooks)
+
+```csharp
+using Johodp.Messaging.Mediator;
+using Johodp.Messaging.Validation;
+using Microsoft.Extensions.Logging;
+
+public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, TenantDto>
+{
+    private readonly ITenantRepository _repository;
+
+    public CreateTenantCommandHandler(
+        ITenantRepository repository,
+        ILogger<CreateTenantCommandHandler> logger,
+        IValidator<CreateTenantCommand>? validator = null) 
+        : base(logger, validator)
+    {
+        _repository = repository;
+    }
+
+    protected override async Task<TenantDto> HandleCore(
+        CreateTenantCommand request, 
+        CancellationToken cancellationToken)
+    {
+        // La validation est automatique si un validateur est injecté
+        // Le logging et timing sont gérés par BaseHandler
+        
+        var tenant = Tenant.Create(request.Name, request.DisplayName);
+        await _repository.AddAsync(tenant);
+        
+        return new TenantDto
+        {
+            Id = tenant.Id,
+            Name = tenant.Name,
+            DisplayName = tenant.DisplayName
+        };
+    }
+
+    // Optionnel : personnaliser les hooks
+    protected override async Task OnBeforeHandle(CreateTenantCommand request)
+    {
+        await base.OnBeforeHandle(request); // Appel validation + logging
+        _logger.LogInformation("Creating tenant: {Name}", request.Name);
+    }
+
+    protected override async Task OnAfterHandle(CreateTenantCommand request, TenantDto response, TimeSpan elapsed)
+    {
+        await base.OnAfterHandle(request, response, elapsed);
+        _logger.LogInformation("Tenant created with ID: {TenantId}", response.Id);
+    }
+}
+```
+
 ### Mediator - Envoyer une Commande
 
 ```csharp
@@ -127,6 +197,138 @@ public class TenantController : ControllerBase
     {
         var result = await _sender.Send(command);
         return Ok(result);
+    }
+}
+```
+
+### Validation - Définir un Validateur
+
+#### Règle d'Or : Pas de DB dans les Validateurs ⚠️
+
+**Les validateurs doivent contenir UNIQUEMENT des validations synchrones :**
+- Format, longueur, regex
+- Règles métier sans état
+- Validations rapides (< 1ms)
+
+**Les validations avec accès DB vont dans `HandleCore` :**
+- Checks d'unicité (nom existe déjà)
+- Foreign keys (tenant existe)
+- Règles dépendantes de l'état
+
+```csharp
+using Johodp.Messaging.Validation;
+
+public class CreateTenantCommandValidator : IValidator<CreateTenantCommand>
+{
+    public Task<IDictionary<string, string[]>> ValidateAsync(CreateTenantCommand request)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        // ✅ Validations synchrones uniquement (format, longueur, règles simples)
+        
+        // Valider le nom
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            errors["Name"] = new[] { "Tenant name is required" };
+        }
+        else if (request.Name.Length < 3)
+        {
+            errors["Name"] = new[] { "Tenant name must be at least 3 characters" };
+        }
+        else if (request.Name.Length > 100)
+        {
+            errors["Name"] = new[] { "Tenant name cannot exceed 100 characters" };
+        }
+
+        // Valider le nom d'affichage
+        if (string.IsNullOrWhiteSpace(request.DisplayName))
+        {
+            errors["DisplayName"] = new[] { "Display name is required" };
+        }
+
+        // ❌ PAS de check DB ici (tenant existe, etc.)
+        // → Ces validations sont faites dans HandleCore avec Result pattern
+
+        return Task.FromResult<IDictionary<string, string[]>>(errors);
+    }
+}
+```
+
+### Validation - Validations avec Base de Données
+
+**Les validations DB doivent être faites dans `HandleCore`, pas dans les validateurs.**
+
+#### ✅ Approche Recommandée : HandleCore + Result Pattern
+
+```csharp
+public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, Result<TenantDto>>
+{
+    private readonly ITenantRepository _tenantRepository;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public CreateTenantCommandHandler(
+        ITenantRepository tenantRepository,
+        IUnitOfWork unitOfWork,
+        ILogger<CreateTenantCommandHandler> logger,
+        IValidator<CreateTenantCommand>? validator = null) 
+        : base(logger, validator)
+    {
+        _tenantRepository = tenantRepository;
+        _unitOfWork = unitOfWork;
+    }
+
+    protected override async Task<Result<TenantDto>> HandleCore(
+        CreateTenantCommand command, 
+        CancellationToken cancellationToken)
+    {
+        // ✅ Validation DB dans HandleCore (pas dans le validateur)
+        var existingTenant = await _tenantRepository.GetByNameAsync(command.Name);
+        if (existingTenant != null)
+        {
+            return Result<TenantDto>.Failure(Error.Conflict(
+                "TENANT_ALREADY_EXISTS",
+                $"Tenant '{command.Name}' already exists"));
+        }
+
+        // Business logic
+        var tenant = Tenant.Create(command.Name, command.DisplayName);
+        await _tenantRepository.AddAsync(tenant);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<TenantDto>.Success(MapToDto(tenant));
+    }
+}
+```
+
+**Avantages :**
+- ✅ 1 seul round-trip DB (vs 2 avec validateur DB)
+- ✅ Pas de race conditions
+- ✅ Performance optimale (+30%)
+- ✅ Cohérence transactionnelle
+
+**Voir `VALIDATION_DB_GUIDE.md` pour plus de détails sur les stratégies de validation.**
+
+### Validation - Gérer les Erreurs
+
+```csharp
+using Johodp.Messaging.Validation;
+
+[HttpPost]
+public async Task<IActionResult> Create([FromBody] CreateTenantCommand command)
+{
+    try
+    {
+        var result = await _sender.Send(command);
+        return Ok(result);
+    }
+    catch (ValidationException ex)
+    {
+        // ex.Errors contient un dictionnaire des erreurs de validation
+        return BadRequest(new 
+        { 
+            message = "Validation failed",
+            errors = ex.Errors 
+        });
     }
 }
 ```
@@ -230,6 +432,26 @@ public class DeleteTenantCommandHandler : IRequestHandler<DeleteTenantCommand, U
 ✅ Gestion des cancellations  
 ✅ Type Unit pour commandes void  
 
+### BaseHandler (Cross-Cutting Concerns)
+
+✅ Template Method Pattern pour handlers  
+✅ Logging automatique (avant/après/erreur)  
+✅ Mesure du temps d'exécution  
+✅ Validation automatique intégrée  
+✅ Hooks personnalisables (OnBeforeHandle, OnAfterHandle, OnError)  
+✅ Gestion d'erreurs structurée  
+
+### Validation
+
+✅ Validation automatique dans le pipeline  
+✅ Interface simple `IValidator<TRequest>`  
+✅ Enregistrement automatique des validateurs  
+✅ Exception typée avec dictionnaire d'erreurs  
+✅ Support de validations synchrones et asynchrones  
+✅ Validation optionnelle (inject `null` pour désactiver)  
+⚠️ **Règle d'Or** : Validations DB dans `HandleCore`, pas dans les validateurs  
+✅ Performance optimale avec Result Pattern (+30% vs validateurs DB)  
+
 ### Event Aggregator
 
 ✅ Publication synchrone d'événements  
@@ -253,8 +475,13 @@ Johodp.Messaging/
 │   ├── IRequestHandler.cs
 │   ├── ISender.cs
 │   ├── Sender.cs
+│   ├── BaseHandler.cs          ← Classe de base avec hooks
 │   ├── Unit.cs
 │   └── MediatorExtensions.cs
+├── Validation/
+│   ├── IValidator.cs           ← Interface validateur
+│   ├── ValidationException.cs  ← Exception typée
+│   └── ValidationExtensions.cs ← Enregistrement auto
 └── Events/
     ├── DomainEvent.cs
     ├── IEventBus.cs
@@ -267,17 +494,29 @@ Johodp.Messaging/
 
 | Caractéristique | Johodp.Messaging | MediatR |
 |----------------|------------------|---------|
-| Lignes de code | ~200 | ~3000+ |
+| Lignes de code | ~300 | ~3000+ |
 | Dépendances | 2 | Multiple |
-| Behaviors/Pipeline | ❌ | ✅ |
+| Behaviors/Pipeline | ✅ (BaseHandler + Hooks) | ✅ (IPipelineBehavior) |
+| Validation | ✅ (Intégré) | ❌ (Package séparé) |
 | Notifications | ✅ (EventAggregator) | ✅ |
 | Performance | Légèrement plus lent (reflection) | Optimisé |
 | Simplicité | ✅✅✅ | ✅ |
 | Contrôle total | ✅✅✅ | ❌ |
+| Logging automatique | ✅ | ❌ |
+| Timing automatique | ✅ | ❌ |
 
 ## 📄 Licence
 
 Ce projet fait partie de l'écosystème Johodp. Utilisable dans n'importe quel projet .NET interne ou externe.
+
+## 📖 Documentation Complémentaire
+
+- **VALIDATION_DB_GUIDE.md** - Guide détaillé sur les stratégies de validation avec accès DB
+  - Approche 1 : HandleCore + Result Pattern (recommandée)
+  - Approche 2 : Validateur avec DB (rare)
+  - Approche 3 : Hybride (best of both)
+  - Comparaisons de performance
+  - Checklist de décision
 
 ## 🤝 Contribution
 

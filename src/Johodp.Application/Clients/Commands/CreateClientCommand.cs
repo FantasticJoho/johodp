@@ -3,10 +3,10 @@ namespace Johodp.Application.Clients.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
-using Johodp.Application.Common.Handlers;
 using Johodp.Contracts.Clients;
 using Johodp.Domain.Clients.Aggregates;
 using Microsoft.Extensions.Logging;
+using Johodp.Messaging.Validation;
 
 public class CreateClientCommand : IRequest<Result<ClientDto>>
 {
@@ -21,7 +21,8 @@ public class CreateClientCommandHandler : BaseHandler<CreateClientCommand, Resul
     public CreateClientCommandHandler(
         IClientRepository clientRepository,
         IUnitOfWork unitOfWork,
-        ILogger<CreateClientCommandHandler> logger) : base(logger)
+        ILogger<CreateClientCommandHandler> logger,
+        IValidator<CreateClientCommand>? validator = null) : base(logger, validator)
     {
         _clientRepository = clientRepository;
         _unitOfWork = unitOfWork;

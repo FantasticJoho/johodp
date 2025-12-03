@@ -1,11 +1,12 @@
-namespace Johodp.Application.Common.Handlers;
+namespace Johodp.Messaging.Mediator;
 
 using System.Diagnostics;
-using Johodp.Messaging.Mediator;
 using Microsoft.Extensions.Logging;
+using Johodp.Messaging.Validation;
 
 /// <summary>
 /// Base handler providing common cross-cutting concerns:
+/// - Validation (automatic validation before handling)
 /// - Logging (before/after execution)
 /// - Timing (execution duration)
 /// - Error handling (structured logging)
@@ -16,10 +17,12 @@ public abstract class BaseHandler<TRequest, TResponse> : IRequestHandler<TReques
     where TRequest : IRequest<TResponse>
 {
     protected readonly ILogger _logger;
+    protected readonly IValidator<TRequest>? _validator;
 
-    protected BaseHandler(ILogger logger)
+    protected BaseHandler(ILogger logger, IValidator<TRequest>? validator = null)
     {
         _logger = logger;
+        _validator = validator;
     }
 
     /// <summary>
@@ -56,13 +59,25 @@ public abstract class BaseHandler<TRequest, TResponse> : IRequestHandler<TReques
 
     /// <summary>
     /// Hook executed before handling the request
-    /// Override to add custom pre-processing logic
+    /// Automatically validates the request if a validator is provided
+    /// Override to add custom pre-processing logic (call base.OnBeforeHandle to keep validation)
     /// </summary>
-    protected virtual Task OnBeforeHandle(TRequest request)
+    protected virtual async Task OnBeforeHandle(TRequest request)
     {
         var requestName = typeof(TRequest).Name;
         _logger.LogInformation("Handling {RequestName}", requestName);
-        return Task.CompletedTask;
+        
+        // Automatic validation
+        if (_validator != null)
+        {
+            var errors = await _validator.ValidateAsync(request);
+            if (errors.Any())
+            {
+                _logger.LogWarning("Validation failed for {RequestName}: {ErrorCount} error(s)", 
+                    requestName, errors.Count);
+                throw new ValidationException(errors);
+            }
+        }
     }
 
     /// <summary>

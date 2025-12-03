@@ -3,7 +3,6 @@ namespace Johodp.Application.Clients.Queries;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
-using Johodp.Application.Common.Handlers;
 using Johodp.Contracts.Clients;
 using Johodp.Domain.Clients.ValueObjects;
 using Microsoft.Extensions.Logging;

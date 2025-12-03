@@ -3,7 +3,6 @@ namespace Johodp.Application.Tenants.Queries;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
-using Johodp.Application.Common.Handlers;
 using Johodp.Contracts.Tenants;
 using Johodp.Domain.Tenants.ValueObjects;
 using Microsoft.Extensions.Logging;

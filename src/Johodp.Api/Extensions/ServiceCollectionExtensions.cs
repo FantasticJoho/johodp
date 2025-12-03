@@ -3,6 +3,7 @@ namespace Johodp.Api.Extensions;
 using Duende.IdentityServer.Services;
 using Johodp.Messaging.Events;
 using Johodp.Messaging.Mediator;
+using Johodp.Messaging.Validation;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Users;
 using Johodp.Application.Users.Commands;
@@ -41,6 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddDatabase(connectionString);
         services.AddRepositories();
         services.AddMediator();
+        services.AddValidatorsFromAssemblyContaining<RegisterUserCommand>();
         services.AddDomainEvents();
         services.AddApplicationServices();
         services.AddIdentityServerConfiguration(configuration, environment, connectionString);

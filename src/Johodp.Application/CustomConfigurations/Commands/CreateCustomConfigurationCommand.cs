@@ -3,7 +3,6 @@ namespace Johodp.Application.CustomConfigurations.Commands;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Messaging.Mediator;
 using Johodp.Application.Common.Results;
-using Johodp.Application.Common.Handlers;
 using Johodp.Contracts.CustomConfigurations;
 using Johodp.Domain.CustomConfigurations.Aggregates;
 using Microsoft.Extensions.Logging;
