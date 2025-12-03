@@ -1253,6 +1253,94 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 
 ---
 
+### UC-11: Demande de Réinitialisation de Mot de Passe (Forgot Password)
+
+**Acteur Principal:** Utilisateur final
+
+**Préconditions:**
+- Un utilisateur actif existe dans le système
+- L'utilisateur a oublié son mot de passe
+
+**Scénario Principal:**
+1. L'utilisateur clique sur "Mot de passe oublié ?" sur la page de login
+2. L'application redirige vers `/account/forgot-password?acr_values=tenant:acme-corp-example-com`
+3. Johodp affiche le formulaire avec le branding du tenant
+4. L'utilisateur entre son email
+5. L'utilisateur soumet le formulaire
+6. Le système vérifie que le tenant existe et est actif
+7. Le système recherche l'utilisateur par le couple (email, tenantId)
+8. **Si l'utilisateur n'existe pas:** Le système retourne quand même un message de succès (sécurité anti-énumération)
+9. **Si l'utilisateur existe:**
+   - Le système génère un token de réinitialisation via `UserManager.GeneratePasswordResetTokenAsync()`
+   - Le système récupère le prénom de l'utilisateur
+   - Le système envoie un email avec le token et un lien de réinitialisation
+   - Le système log le token en DEV (pour faciliter les tests)
+10. Le système affiche: "Si l'email existe, un lien de réinitialisation a été envoyé"
+11. L'utilisateur reçoit un email avec un lien: `/account/reset-password?token=<token>&email=<email>&tenant=acme-corp-example-com`
+
+**Règles de Gestion:**
+- RG-FORGOT-01: Le message de succès est **toujours le même** (même si email inexistant) pour éviter l'énumération
+- RG-FORGOT-02: Le token est généré par ASP.NET Identity (`UserManager.GeneratePasswordResetTokenAsync`)
+- RG-FORGOT-03: Le token expire après un délai configurable (par défaut 24h)
+- RG-FORGOT-04: La recherche utilise le couple (email, tenantId) pour isolation
+- RG-FORGOT-05: Le tenant doit être actif (`IsActive = true`)
+- RG-FORGOT-06: En DEV, le token est loggé pour faciliter les tests
+- RG-FORGOT-07: En PROD, le token n'est jamais retourné dans la réponse API
+- RG-FORGOT-08: L'email envoyé contient le prénom de l'utilisateur pour personnalisation
+
+**Postconditions:**
+- Un token de réinitialisation est généré (si utilisateur existe)
+- Un email avec le lien de réinitialisation est envoyé
+- L'utilisateur peut cliquer sur le lien pour réinitialiser son mot de passe
+- Aucune information n'est révélée sur l'existence ou non de l'email
+
+---
+
+### UC-12: Réinitialisation de Mot de Passe (Reset Password)
+
+**Acteur Principal:** Utilisateur final
+
+**Préconditions:**
+- L'utilisateur a reçu un email avec un token de réinitialisation (UC-11 complété)
+- Le token n'est pas expiré
+
+**Scénario Principal:**
+1. L'utilisateur clique sur le lien dans l'email: `/account/reset-password?token=<token>&email=<email>&tenant=acme-corp-example-com`
+2. Johodp affiche le formulaire de réinitialisation avec le branding du tenant
+3. Le formulaire pré-remplit l'email (en lecture seule)
+4. L'utilisateur entre le nouveau mot de passe et la confirmation
+5. L'utilisateur soumet le formulaire
+6. Le système vérifie que le tenant existe et est actif
+7. Le système recherche l'utilisateur par le couple (email, tenantId)
+8. **Si l'utilisateur n'existe pas:** Erreur "Token invalide ou email incorrect"
+9. **Si l'utilisateur existe:**
+   - Le système vérifie que les deux mots de passe correspondent
+   - Le système valide le token avec `UserManager.ResetPasswordAsync(user, token, newPassword)`
+   - ASP.NET Identity vérifie automatiquement la validité et l'expiration du token
+   - Le système hache le nouveau mot de passe
+   - Le système met à jour le mot de passe en base
+   - Le token est invalidé automatiquement après utilisation
+10. Le système affiche un message de succès
+11. L'utilisateur est redirigé vers la page de login
+
+**Règles de Gestion:**
+- RG-RESET-01: Le token ne peut être utilisé **qu'une seule fois** (one-time use)
+- RG-RESET-02: Le token expire après le délai configuré (par défaut 24h)
+- RG-RESET-03: Les mots de passe doivent correspondre (password == confirmPassword)
+- RG-RESET-04: Le nouveau mot de passe doit respecter les règles de complexité configurées
+- RG-RESET-05: La recherche utilise le couple (email, tenantId) pour isolation
+- RG-RESET-06: Si le token est invalide ou expiré, un message d'erreur explicite est affiché
+- RG-RESET-07: Le tenant doit être actif (`IsActive = true`)
+- RG-RESET-08: Après réinitialisation réussie, l'utilisateur doit se reconnecter
+
+**Postconditions:**
+- Le mot de passe de l'utilisateur est changé
+- Le token est invalidé et ne peut plus être réutilisé
+- L'utilisateur peut se connecter avec le nouveau mot de passe
+- Les anciennes sessions restent actives (pas de déconnexion forcée)
+
+---
+
 ## 🔐 Règles de Sécurité Transversales
 
 ### SEC-01: Validation des Redirect URIs

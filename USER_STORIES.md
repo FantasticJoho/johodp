@@ -1021,57 +1021,255 @@ GET /account/logout
 
 ---
 
-### US-5.5: Demander une Réinitialisation de Mot de Passe (DEVRAIT AVOIR)
-**En tant qu'** utilisateur final  
-**Je veux** demander un lien de réinitialisation  
-**Afin de** récupérer l'accès à mon compte
+### US-5.5: Demander une Réinitialisation de Mot de Passe (DOIT AVOIR - ✅ IMPLÉMENTÉ)
+**En tant qu'** utilisateur final ayant oublié son mot de passe  
+**Je veux** demander un lien de réinitialisation par email  
+**Afin de** récupérer l'accès à mon compte en toute sécurité
+
+**Contexte:**
+L'utilisateur a oublié son mot de passe et veut le réinitialiser. Le système doit permettre cette réinitialisation tout en empêchant l'énumération des comptes (ne pas révéler si un email existe).
 
 **Critères d'acceptation:**
-- [ ] Je peux accéder à GET `/account/forgot-password`
-- [ ] Je peux soumettre POST `/account/forgot-password` avec ForgotPasswordViewModel
-- [ ] Le système génère un token via UserManager.GeneratePasswordResetTokenAsync
-- [ ] En DEV: Le token est affiché dans la console
-- [ ] En PROD: Un email est envoyé avec le lien de reset
-- [ ] Le système affiche la page de confirmation
-- [ ] Le système ne révèle pas si l'email existe (sécurité)
+- [x] Je peux accéder à la page de demande via le lien "Mot de passe oublié ?" sur la page de login
+- [x] Je vois un formulaire avec un champ email et le branding du tenant
+- [x] Je peux soumettre POST `/api/auth/forgot-password` avec mon email et le nom du tenant
+- [x] Le système vérifie que le tenant existe et est actif
+- [x] Le système recherche mon compte par le couple (email, tenantId) pour isolation
+- [x] Si mon compte existe:
+  - Le système génère un token de réinitialisation via `UserManager.GeneratePasswordResetTokenAsync()`
+  - Le système envoie un email personnalisé (avec mon prénom) contenant le token et un lien de réinitialisation
+  - En DEV: Le token est loggé dans la console pour faciliter les tests
+- [x] Si mon compte n'existe pas:
+  - Le système retourne quand même un message de succès (anti-énumération)
+  - Aucun email n'est envoyé
+- [x] Le message de succès est **toujours identique** : "Si l'email existe, un lien de réinitialisation a été envoyé"
+- [x] En mode DEV, la réponse inclut le token et l'URL de reset pour faciliter les tests
+- [x] En mode PROD, la réponse ne contient aucune information sensible
+- [x] Le système retourne 400 si le tenant est manquant ou invalide
+
+**Implémentation:**
+- Endpoint: `POST /api/auth/forgot-password`
+- Controller: `AccountController.ForgotPassword()`
+- Service Email: `IEmailService.SendPasswordResetEmailAsync()`
 
 **Tests d'acceptation:**
 ```http
-POST /account/forgot-password
+### Demande de réinitialisation (email existant)
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "john.doe@acme.com",
+  "tenantName": "acme-corp"
+}
+
+→ 200 OK
+{
+  "message": "Si l'email existe, un lien de réinitialisation a été envoyé",
+  "email": "john.doe@acme.com", // DEV uniquement
+  "token": "ABC123XYZ...", // DEV uniquement
+  "resetUrl": "https://idp.johodp.com/api/auth/reset-password" // DEV uniquement
+}
+
+### Demande de réinitialisation (email inexistant - même réponse)
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "unknown@acme.com",
+  "tenantName": "acme-corp"
+}
+
+→ 200 OK (même message, aucune info révélée)
+{
+  "message": "Si l'email existe, un lien de réinitialisation a été envoyé"
+}
+
+### Demande sans tenant
+POST {{baseUrl}}/api/auth/forgot-password
+Content-Type: application/json
+
 {
   "email": "john.doe@acme.com"
 }
-→ 302 Redirect vers /account/forgot-password-confirmation
+
+→ 400 BadRequest
+{
+  "error": "Tenant name is required"
+}
 ```
+
+**Règles métier:**
+- **RG-FORGOT-01:** Message de succès identique pour éviter l'énumération des comptes
+- **RG-FORGOT-02:** Token généré par ASP.NET Identity (sécurité native)
+- **RG-FORGOT-03:** Token expire après 24h (configurable)
+- **RG-FORGOT-04:** Isolation stricte par tenant (email + tenantId)
+- **RG-FORGOT-05:** Email personnalisé avec le prénom de l'utilisateur
+- **RG-FORGOT-06:** En DEV, token visible pour faciliter les tests automatisés
+- **RG-FORGOT-07:** En PROD, token jamais exposé dans la réponse API
+
+**Scénarios d'erreur:**
+- **Tenant manquant:** 400 BadRequest
+- **Tenant invalide ou inactif:** 400 BadRequest
+- **Email invalide:** Retourne quand même succès (anti-énumération)
 
 ---
 
-### US-5.6: Réinitialiser un Mot de Passe (DEVRAIT AVOIR)
-**En tant qu'** utilisateur final  
-**Je veux** définir un nouveau mot de passe  
-**Afin de** récupérer l'accès à mon compte
+### US-5.6: Réinitialiser un Mot de Passe avec Token (DOIT AVOIR - ✅ IMPLÉMENTÉ)
+**En tant qu'** utilisateur ayant reçu un email de réinitialisation  
+**Je veux** définir un nouveau mot de passe en utilisant le token reçu  
+**Afin de** récupérer l'accès à mon compte de manière sécurisée
+
+**Contexte:**
+L'utilisateur a reçu un email avec un token de réinitialisation (US-5.5). Il clique sur le lien et doit définir un nouveau mot de passe. Le token est à usage unique et expire après 24h.
 
 **Critères d'acceptation:**
-- [ ] Je peux accéder à GET `/account/reset-password?token=<token>`
-- [ ] Le formulaire contient: email, password, confirmPassword
-- [ ] Je peux soumettre POST `/account/reset-password` avec ResetPasswordViewModel
-- [ ] Le système valide le token
-- [ ] Le système réinitialise le mot de passe via UserManager.ResetPasswordAsync
-- [ ] Le système affiche la page de confirmation
-- [ ] Le système retourne une erreur si le token est invalide ou expiré
-- [ ] Le système retourne une erreur si les mots de passe ne correspondent pas
+- [x] Je reçois un email avec un lien contenant le token, l'email et le nom du tenant
+- [x] Je clique sur le lien qui m'amène au formulaire de réinitialisation avec le branding du tenant
+- [x] Le formulaire contient : email (pré-rempli), nouveau mot de passe, confirmation du mot de passe
+- [x] Je peux soumettre POST `/api/auth/reset-password` avec:
+  - Email
+  - Nom du tenant
+  - Token de réinitialisation
+  - Nouveau mot de passe
+  - Confirmation du mot de passe
+- [x] Le système vérifie que le tenant existe et est actif
+- [x] Le système recherche mon compte par le couple (email, tenantId)
+- [x] Le système vérifie que les deux mots de passe correspondent
+- [x] Le système valide le token et réinitialise le mot de passe via `UserManager.ResetPasswordAsync()`
+- [x] ASP.NET Identity vérifie automatiquement:
+  - Que le token est valide
+  - Que le token n'a pas expiré
+  - Que le token n'a pas déjà été utilisé
+- [x] Le système hache le nouveau mot de passe
+- [x] Le token est invalidé après utilisation (one-time use)
+- [x] Le système retourne un message de succès avec l'email
+- [x] Le système retourne 400 si:
+  - Les mots de passe ne correspondent pas
+  - Le token est invalide, expiré ou déjà utilisé
+  - Le tenant est manquant ou invalide
+  - L'utilisateur n'existe pas
+
+**Implémentation:**
+- Endpoint: `POST /api/auth/reset-password`
+- Controller: `AccountController.ResetPassword()`
+- Validation: `UserManager.ResetPasswordAsync()` (gère token + hashing)
 
 **Tests d'acceptation:**
 ```http
-POST /account/reset-password
+### Réinitialisation réussie
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
 {
   "email": "john.doe@acme.com",
-  "token": "ABC123",
+  "tenantName": "acme-corp",
+  "token": "CfDJ8O...", // Token reçu par email
   "password": "NewSecureP@ss123",
   "confirmPassword": "NewSecureP@ss123"
 }
-→ 302 Redirect vers /account/reset-password-confirmation
+
+→ 200 OK
+{
+  "message": "Password reset successful",
+  "email": "john.doe@acme.com"
+}
+
+### Mots de passe non concordants
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "john.doe@acme.com",
+  "tenantName": "acme-corp",
+  "token": "CfDJ8O...",
+  "password": "NewSecureP@ss123",
+  "confirmPassword": "DifferentPassword456"
+}
+
+→ 400 BadRequest
+{
+  "error": "Passwords do not match"
+}
+
+### Token invalide ou expiré
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "john.doe@acme.com",
+  "tenantName": "acme-corp",
+  "token": "INVALID_TOKEN",
+  "password": "NewSecureP@ss123",
+  "confirmPassword": "NewSecureP@ss123"
+}
+
+→ 400 BadRequest
+{
+  "error": "Password reset failed",
+  "details": "Invalid token."
+}
+
+### Tenant manquant
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "john.doe@acme.com",
+  "token": "CfDJ8O...",
+  "password": "NewSecureP@ss123",
+  "confirmPassword": "NewSecureP@ss123"
+}
+
+→ 400 BadRequest
+{
+  "error": "Tenant name is required"
+}
+
+### Email inexistant pour ce tenant
+POST {{baseUrl}}/api/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "unknown@acme.com",
+  "tenantName": "acme-corp",
+  "token": "CfDJ8O...",
+  "password": "NewSecureP@ss123",
+  "confirmPassword": "NewSecureP@ss123"
+}
+
+→ 400 BadRequest
+{
+  "error": "Invalid reset token or email"
+}
 ```
+
+**Règles métier:**
+- **RG-RESET-01:** Token à usage unique (one-time use)
+- **RG-RESET-02:** Token expire après 24h (configurable dans Identity)
+- **RG-RESET-03:** Validation stricte de la correspondance des mots de passe
+- **RG-RESET-04:** Nouveau mot de passe doit respecter les règles de complexité
+- **RG-RESET-05:** Isolation stricte par tenant (email + tenantId)
+- **RG-RESET-06:** Après réinitialisation réussie, l'utilisateur doit se reconnecter
+- **RG-RESET-07:** Les anciennes sessions ne sont pas invalidées automatiquement
+- **RG-RESET-08:** ASP.NET Identity gère automatiquement la validation et l'invalidation du token
+
+**Scénarios d'erreur:**
+- **Tenant manquant:** 400 BadRequest "Tenant name is required"
+- **Tenant invalide ou inactif:** 400 BadRequest (erreur tenant)
+- **Utilisateur inexistant:** 400 BadRequest "Invalid reset token or email"
+- **Mots de passe non concordants:** 400 BadRequest "Passwords do not match"
+- **Token invalide:** 400 BadRequest "Password reset failed" + détails d'Identity
+- **Token expiré:** 400 BadRequest "Password reset failed" + détails d'Identity
+- **Token déjà utilisé:** 400 BadRequest "Password reset failed" + détails d'Identity
+- **Mot de passe trop faible:** 400 BadRequest avec détails des règles non respectées
+
+**Sécurité:**
+- Le token ne peut être utilisé qu'une seule fois
+- Le token expire automatiquement
+- Isolation stricte par tenant (pas de cross-tenant password reset)
+- Hashing sécurisé du nouveau mot de passe (BCrypt via Identity)
+- Messages d'erreur explicites pour guider l'utilisateur sans révéler d'informations sensibles
 
 ---
 
