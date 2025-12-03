@@ -674,6 +674,22 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - L'application tierce a un access_token valide pour appeler les APIs d'administration
 - Toutes les actions sont tracées avec le client_id source
 
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Application Tierce]) --> Request[POST /connect/token<br/>grant_type=client_credentials]
+    Request --> ValidateClient{Valider<br/>client_id + secret}
+    ValidateClient -->|Invalide| Error401[401 Unauthorized]
+    ValidateClient -->|Valide| CheckScope{Vérifier scope<br/>johodp.admin}
+    CheckScope -->|Non autorisé| Error403[403 Forbidden]
+    CheckScope -->|Autorisé| GenerateToken[Générer access_token<br/>exp: 1h]
+    GenerateToken --> AuditLog[Tracer l'action<br/>client_id]
+    AuditLog --> Success[200 OK<br/>access_token]
+    Success --> End([Token utilisable pour APIs])
+    Error401 --> End
+    Error403 --> End
+```
+
 ---
 
 ### UC-01: Création d'un Client OAuth2 par l'Application Tierce
@@ -716,6 +732,25 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - Un client est créé mais non fonctionnel (besoin d'un tenant)
 - Le client n'apparaît pas dans IdentityServer
 - L'application tierce peut maintenant créer des tenants pour ce client
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Application Tierce]) --> Auth[Authentification<br/>UC-00]
+    Auth --> Request[POST /api/clients<br/>Bearer token]
+    Request --> ValidateToken{Valider token<br/>scope admin?}
+    ValidateToken -->|Non| Error401[401 Unauthorized]
+    ValidateToken -->|Oui| CheckName{ClientName<br/>unique?}
+    CheckName -->|Non| Error400[400 BadRequest<br/>Nom déjà utilisé]
+    CheckName -->|Oui| CreateClient[Créer agrégat Client<br/>RequirePkce=true<br/>IsActive=true]
+    CreateClient --> SaveDB[(Persister en base)]
+    SaveDB --> AuditLog[Tracer action<br/>client_id appelant]
+    AuditLog --> Success[201 Created<br/>ClientDto + ClientId]
+    Success --> Note[Note: Client non visible<br/>dans IdentityServer<br/>sans tenant]
+    Note --> End([Prêt pour UC-01bis et UC-02])
+    Error401 --> End
+    Error400 --> End
+```
 
 ---
 
@@ -773,6 +808,28 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - Une CustomConfiguration est créée et active
 - Elle peut être référencée par n'importe quel Tenant
 - Elle peut être partagée entre plusieurs Tenants (même de Clients différents)
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Application Tierce]) --> Auth[Authentification<br/>UC-00]
+    Auth --> Request[POST /api/custom-configurations<br/>Bearer token]
+    Request --> ValidateToken{Valider token<br/>scope admin?}
+    ValidateToken -->|Non| Error401[401 Unauthorized]
+    ValidateToken -->|Oui| CheckName{Name unique?}
+    CheckName -->|Non| Error400Name[400 BadRequest<br/>Nom existe]
+    CheckName -->|Oui| ValidateLang{DefaultLanguage<br/>dans Supported?}
+    ValidateLang -->|Non| Error400Lang[400 BadRequest<br/>Langue invalide]
+    ValidateLang -->|Oui| CreateConfig[Créer CustomConfiguration<br/>Branding + Languages<br/>IsActive=true]
+    CreateConfig --> SaveDB[(Persister en base)]
+    SaveDB --> AuditLog[Tracer action]
+    AuditLog --> Success[201 Created<br/>CustomConfigurationDto]
+    Success --> Note[Note: Indépendante<br/>partageable entre tenants]
+    Note --> End([Prêt pour UC-02])
+    Error401 --> End
+    Error400Name --> End
+    Error400Lang --> End
+```
 
 ---
 
@@ -853,6 +910,35 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - L'application tierce peut maintenant gérer les inscriptions utilisateur
 - **Le branding de la CustomConfiguration sera appliqué aux pages d'authentification**
 
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Application Tierce]) --> Auth[Authentification UC-00]
+    Auth --> Request[POST /api/tenant<br/>Bearer token + data]
+    Request --> ValidateToken{Token valide<br/>scope admin?}
+    ValidateToken -->|Non| Error401[401 Unauthorized]
+    ValidateToken -->|Oui| CheckClient{Client existe?}
+    CheckClient -->|Non| Error400Client[400 Client introuvable]
+    CheckClient -->|Oui| CheckConfig{CustomConfiguration<br/>existe et active?}
+    CheckConfig -->|Non| Error400Config[400 Config invalide]
+    CheckConfig -->|Oui| ValidateURIs{RedirectURIs<br/>+ CORS valides?}
+    ValidateURIs -->|Non| Error400URI[400 URIs invalides]
+    ValidateURIs -->|Oui| ValidateWebhook{Webhook URL<br/>HTTPS en prod?}
+    ValidateWebhook -->|Non| Error400Webhook[400 Webhook invalide]
+    ValidateWebhook -->|Oui| CreateTenant[Créer Tenant<br/>+ Localisation<br/>+ Webhook]
+    CreateTenant --> LinkClient[Ajouter TenantId<br/>dans Client.AssociatedTenantIds]
+    LinkClient --> SaveDB[(Persister tout)]
+    SaveDB --> AuditLog[Tracer action]
+    AuditLog --> ActivateClient[Client devient visible<br/>dans IdentityServer]
+    ActivateClient --> Success[201 Created<br/>TenantDto]
+    Success --> End([Prêt pour UC-04 onboarding])
+    Error401 --> End
+    Error400Client --> End
+    Error400Config --> End
+    Error400URI --> End
+    Error400Webhook --> End
+```
+
 ---
 
 ### UC-03: Récupération Dynamique d'un Client par IdentityServer
@@ -885,6 +971,29 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 **Postconditions:**
 - IdentityServer reçoit un client valide OU null
 - Le client est prêt pour le flux OAuth2/OIDC
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Requête OAuth2]) --> Call[IdentityServer appelle<br/>CustomClientStore.FindClientByIdAsync]
+    Call --> QueryClient[(Récupérer Client<br/>depuis DB)]
+    QueryClient --> ClientExists{Client existe?}
+    ClientExists -->|Non| ReturnNull1[Retourner null]
+    ClientExists -->|Oui| QueryTenants[(Récupérer Tenants<br/>AssociatedTenantIds)]
+    QueryTenants --> HasTenants{Tenants > 0?}
+    HasTenants -->|Non| ReturnNull2[Retourner null<br/>Client invisible]
+    HasTenants -->|Oui| AggregateURIs[Agréger RedirectUris<br/>de tous les tenants]
+    AggregateURIs --> AggregateCORS[Agréger CorsOrigins<br/>de tous les tenants]
+    AggregateCORS --> Deduplicate[Dédupliquer URLs]
+    Deduplicate --> HasURIs{RedirectUris > 0?}
+    HasURIs -->|Non| ReturnNull3[Retourner null<br/>Config invalide]
+    HasURIs -->|Oui| BuildClient[Construire<br/>Duende.Client]
+    BuildClient --> Success[Retourner Client valide]
+    Success --> End([OAuth2 peut continuer])
+    ReturnNull1 --> End
+    ReturnNull2 --> End
+    ReturnNull3 --> End
+```
 
 ---
 
@@ -961,6 +1070,41 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - Un token d'activation est généré et envoyé par email
 - L'application tierce a tracé la demande dans ses logs
 
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Utilisateur]) --> ClickCreate[Cliquer Créer compte<br/>dans app tierce]
+    ClickCreate --> Redirect[Redirection vers<br/>/account/onboarding<br/>acr_values=tenant:xxx]
+    Redirect --> DisplayForm[Afficher formulaire<br/>avec branding tenant]
+    DisplayForm --> FillForm[Remplir email<br/>firstName, lastName]
+    FillForm --> Submit[Soumettre formulaire]
+    Submit --> CheckTenant{Tenant actif?}
+    CheckTenant -->|Non| Error400[400 Tenant invalide]
+    CheckTenant -->|Oui| CheckDuplicate{Email existe<br/>pour ce tenant?}
+    CheckDuplicate -->|Oui| Error400Dup[400 Email existe]
+    CheckDuplicate -->|Non| SendWebhook[POST webhook<br/>à app tierce<br/>+ signature HMAC]
+    SendWebhook --> WaitPage[Afficher page<br/>En attente validation]
+    
+    subgraph "Traitement Asynchrone App Tierce"
+        Webhook[App reçoit webhook] --> ValidateHMAC{Signature<br/>valide?}
+        ValidateHMAC -->|Non| IgnoreWebhook[Ignorer requête]
+        ValidateHMAC -->|Oui| BusinessRules{Règles métier<br/>OK?}
+        BusinessRules -->|Non| RejectUser[Ne rien faire<br/>timeout 5min]
+        BusinessRules -->|Oui| CallAPI[POST /api/users/register<br/>Bearer token<br/>avec TenantId + Role + Scope]
+    end
+    
+    CallAPI --> CreateUser[Créer User<br/>PendingActivation]
+    CreateUser --> GenToken[Générer token activation]
+    GenToken --> SendEmail[Envoyer email<br/>avec lien activation]
+    SendEmail --> Success[200 OK]
+    Success --> End([User attend email])
+    RejectUser --> Timeout[Timeout 5min]
+    Timeout --> End
+    Error400 --> End
+    Error400Dup --> End
+    IgnoreWebhook --> End
+```
+
 ---
 
 ### UC-05: Activation de Compte Utilisateur
@@ -1001,6 +1145,37 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - L'email est confirmé (`EmailConfirmed = true`)
 - Un cookie de session est créé
 - L'utilisateur peut maintenant se connecter normalement
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Utilisateur reçoit email]) --> ClickLink[Cliquer lien activation<br/>avec token + userId + tenant]
+    ClickLink --> DisplayForm[Afficher formulaire<br/>avec branding tenant]
+    DisplayForm --> ShowEmail[Email masqué affiché<br/>j***n@example.com]
+    ShowEmail --> FillPassword[Entrer mot de passe<br/>+ confirmation]
+    FillPassword --> Submit[Soumettre formulaire]
+    Submit --> VerifyToken{Token valide<br/>et non expiré?}
+    VerifyToken -->|Non| Error400Token[400 Token invalide<br/>ou expiré]
+    VerifyToken -->|Oui| CheckStatus{Statut =<br/>PendingActivation?}
+    CheckStatus -->|Non| Error400Status[400 Déjà activé]
+    CheckStatus -->|Oui| CheckPasswordMatch{Mots de passe<br/>correspondent?}
+    CheckPasswordMatch -->|Non| Error400Match[400 Mismatch]
+    CheckPasswordMatch -->|Oui| ValidateComplexity{Complexité<br/>respectée?}
+    ValidateComplexity -->|Non| Error400Complex[400 Mot de passe faible]
+    ValidateComplexity -->|Oui| HashPassword[Hacher mot de passe<br/>BCrypt]
+    HashPassword --> UpdateUser[user.SetPasswordHash<br/>user.Activate]
+    UpdateUser --> ConfirmEmail[UserManager<br/>.ConfirmEmailAsync]
+    ConfirmEmail --> ChangeStatus[Statut → Active]
+    ChangeStatus --> AutoLogin[Connexion automatique<br/>créer session cookie]
+    AutoLogin --> SaveDB[(Persister changements)]
+    SaveDB --> DomainEvent[Émettre UserActivatedEvent]
+    DomainEvent --> Success[Redirection page succès]
+    Success --> End([Utilisateur actif])
+    Error400Token --> End
+    Error400Status --> End
+    Error400Match --> End
+    Error400Complex --> End
+```
 
 ---
 
@@ -1089,6 +1264,41 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - La SPA a un access_token pour appeler l'API
 - La SPA a un refresh_token pour renouveler la session
 
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([SPA]) --> GenPKCE[Générer code_verifier<br/>+ code_challenge]
+    GenPKCE --> AuthRequest[Redirection /connect/authorize<br/>+ PKCE + acr_values=tenant:xxx]
+    AuthRequest --> IdPCheck[IdentityServer vérifie client<br/>via CustomClientStore UC-03]
+    IdPCheck --> ClientValid{Client valide<br/>avec tenants?}
+    ClientValid -->|Non| ErrorNoClient[OAuth2 Error<br/>unknown_client]
+    ClientValid -->|Oui| RedirectLogin[Redirection /account/login]
+    RedirectLogin --> DisplayLogin[Afficher formulaire login<br/>avec branding tenant]
+    DisplayLogin --> UserSubmit[User entre email + password]
+    UserSubmit --> FindUser[(Chercher User par<br/>email + tenantId)]
+    FindUser --> UserExists{User existe?}
+    UserExists -->|Non| Error401[Afficher erreur:<br/>Invalid credentials]
+    UserExists -->|Oui| VerifyPassword{Password correct?}
+    VerifyPassword -->|Non| Error401
+    VerifyPassword -->|Oui| CheckTenantAccess{User.TenantId ==<br/>tenant demandé?}
+    CheckTenantAccess -->|Non| Error403[Afficher erreur:<br/>No access to tenant]
+    CheckTenantAccess -->|Oui| CreateSession[Créer session cookie]
+    CreateSession --> GenAuthCode[Générer authorization_code]
+    GenAuthCode --> RedirectCallback[Redirection callback<br/>avec code]
+    RedirectCallback --> SPAExchange[SPA: POST /connect/token<br/>code + code_verifier]
+    SPAExchange --> ValidatePKCE{PKCE valide<br/>challenge vs verifier?}
+    ValidatePKCE -->|Non| Error400PKCE[OAuth2 Error<br/>invalid_grant]
+    ValidatePKCE -->|Oui| GenTokens[Générer access_token<br/>+ id_token + refresh_token]
+    GenTokens --> AddClaims[Ajouter claims:<br/>tenant_id, tenant_role, tenant_scope]
+    AddClaims --> Success[200 OK<br/>tokens]
+    Success --> End([SPA authentifiée<br/>peut appeler APIs])
+    
+    ErrorNoClient --> BlockedEnd([CONNEXION BLOQUÉE<br/>Pas de client valide])
+    Error401 --> RetryLogin([User doit réessayer<br/>avec bonnes credentials])
+    Error403 --> BlockedAccess([CONNEXION BLOQUÉE<br/>Pas d'accès à ce tenant])
+    Error400PKCE --> BlockedPKCE([CONNEXION BLOQUÉE<br/>Problème PKCE])
+```
+
 ---
 
 ### UC-07: Appel API Protégé avec Access Token
@@ -1127,6 +1337,34 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 **Postconditions:**
 - Les données sont retournées à la SPA
 - Le token reste valide pour d'autres appels
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([SPA]) --> APICall[GET /api/users/me<br/>Authorization: Bearer token]
+    APICall --> Middleware[Middleware JWT<br/>ASP.NET Core]
+    Middleware --> ValidateSignature{Signature valide<br/>IdentityServer?}
+    ValidateSignature -->|Non| Error401Sig[401 Unauthorized<br/>Invalid signature]
+    ValidateSignature -->|Oui| CheckExpiry{Token expiré?}
+    CheckExpiry -->|Oui| Error401Exp[401 Unauthorized<br/>Token expired]
+    CheckExpiry -->|Non| CheckIssuer{Issuer valide?}
+    CheckIssuer -->|Non| Error401Iss[401 Unauthorized<br/>Invalid issuer]
+    CheckIssuer -->|Oui| CheckAudience{Audience valide?}
+    CheckAudience -->|Non| Error401Aud[401 Unauthorized<br/>Invalid audience]
+    CheckAudience -->|Oui| ExtractClaims[Extraire claims<br/>sub, email, role, scope]
+    ExtractClaims --> CheckScopes{Scopes suffisants<br/>pour endpoint?}
+    CheckScopes -->|Non| Error403[403 Forbidden<br/>Insufficient scope]
+    CheckScopes -->|Oui| ExecuteController[Exécuter controller<br/>avec User.Claims]
+    ExecuteController --> FetchData[(Récupérer données)]
+    FetchData --> Success[200 OK<br/>données JSON]
+    Success --> End([Réponse reçue<br/>SPA traite données])
+    
+    Error401Sig --> BlockedSig([ACCÈS REFUSÉ<br/>Token invalide<br/>SPA doit refresh/re-login])
+    Error401Exp --> BlockedExp([ACCÈS REFUSÉ<br/>Token expiré<br/>SPA doit refresh token UC-08])
+    Error401Iss --> BlockedIss([ACCÈS REFUSÉ<br/>Issuer incorrect])
+    Error401Aud --> BlockedAud([ACCÈS REFUSÉ<br/>Audience incorrecte])
+    Error403 --> BlockedScope([ACCÈS REFUSÉ<br/>Permissions insuffisantes])
+```
 
 ---
 
@@ -1176,6 +1414,35 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - La SPA a un nouveau refresh_token
 - L'ancien refresh_token est révoqué
 
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([SPA détecte expiration]) --> CheckExpiry{Access token<br/>expire dans < 5min?}
+    CheckExpiry -->|Non| Wait[Attendre]
+    CheckExpiry -->|Oui| RefreshRequest[POST /connect/token<br/>grant_type=refresh_token]
+    RefreshRequest --> ValidateRefresh{Refresh token<br/>valide?}
+    ValidateRefresh -->|Non| Error401Invalid[401 Invalid token]
+    ValidateRefresh -->|Oui| CheckExpired{Token expiré<br/>< 15 jours?}
+    CheckExpired -->|Oui| Error401Expired[401 Token expired]
+    CheckExpired -->|Non| CheckRevoked{Token révoqué?}
+    CheckRevoked -->|Oui| Error401Revoked[401 Token revoked]
+    CheckRevoked -->|Non| CheckClient{Client ID<br/>correspond?}
+    CheckClient -->|Non| Error401Client[401 Invalid client]
+    CheckClient -->|Oui| GenNewTokens[Générer nouveaux<br/>access + refresh tokens]
+    GenNewTokens --> RevokeOld[Révoquer ancien<br/>refresh token]
+    RevokeOld --> ResetExpiry[Réinitialiser expiration<br/>sliding 15 jours]
+    ResetExpiry --> Success[200 OK<br/>nouveaux tokens]
+    Success --> SPAUpdate[SPA remplace tokens]
+    SPAUpdate --> End([SESSION RENOUVELÉE<br/>User reste connecté])
+    
+    Error401Invalid --> ForceLogin[Redirection vers login]
+    Error401Expired --> ForceLogin
+    Error401Revoked --> ForceLogin
+    Error401Client --> ForceLogin
+    ForceLogin --> BlockedEnd([SESSION EXPIRÉE<br/>User DOIT se reconnecter<br/>Retour UC-06])
+    Wait --> End
+```
+
 ---
 
 ### UC-09: Personnalisation du Branding par Tenant (via CustomConfiguration)
@@ -1209,6 +1476,31 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - La page de login affiche le branding de la CustomConfiguration
 - L'expérience utilisateur est personnalisée
 - Les modifications de la CustomConfiguration sont appliquées à tous les Tenants qui l'utilisent
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([SPA/Browser]) --> Request["GET /api/tenant/TENANT_ID/branding.css"]
+    Request --> FetchTenant[(Récupérer Tenant)]
+    FetchTenant --> TenantExists{Tenant existe?}
+    TenantExists -->|Non| Error404[404 Not Found]
+    TenantExists -->|Oui| FetchConfig[(Récupérer CustomConfiguration<br/>via CustomConfigurationId)]
+    FetchConfig --> ConfigExists{Config existe<br/>et active?}
+    ConfigExists -->|Non| UseDefaults[Utiliser valeurs<br/>par défaut]
+    ConfigExists -->|Oui| ExtractBranding[Extraire branding:<br/>colors, logo, bg, CSS]
+    ExtractBranding --> GenCSS[Générer CSS dynamique:
+--primary-color
+--secondary-color
+--logo-url
+--bg-url]
+    UseDefaults --> GenCSS
+    GenCSS --> InjectCustom[Injecter custom CSS<br/>de la config]
+    InjectCustom --> SetHeaders[Content-Type: text/css<br/>Cache-Control]
+    SetHeaders --> Success[200 OK<br/>CSS généré]
+    Success --> BrowserApply[Browser applique<br/>le branding]
+    BrowserApply --> End([Pages personnalisées])
+    Error404 --> End
+```
 
 ---
 
@@ -1250,6 +1542,23 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - La SPA affiche les dates, heures et montants dans le format du tenant
 - La SPA affiche les langues disponibles de la CustomConfiguration
 - L'expérience utilisateur est localisée selon le Tenant et la CustomConfiguration
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([SPA]) --> Request["GET /api/tenant/TENANT_ID/language"]
+    Request --> FetchTenant[(Récupérer Tenant)]
+    FetchTenant --> TenantExists{Tenant existe?}
+    TenantExists -->|Non| Error404[404 Not Found]
+    TenantExists -->|Oui| FetchConfig[(Récupérer CustomConfiguration)]
+    FetchConfig --> ExtractLanguages[Extraire de CustomConfig:<br/>defaultLanguage<br/>supportedLanguages]
+    ExtractLanguages --> ExtractLocalization[Extraire du Tenant:<br/>timezone<br/>currency<br/>dateFormat<br/>timeFormat]
+    ExtractLocalization --> BuildResponse[Construire JSON response<br/>combinant config + tenant]
+    BuildResponse --> Success[200 OK<br/>JSON localization]
+    Success --> SPAConfig[SPA configure i18n:<br/>- Langues dispo<br/>- Formats dates/heures<br/>- Devise<br/>- Timezone]
+    SPAConfig --> End([UI localisée])
+    Error404 --> End
+```
 
 ---
 
@@ -1293,6 +1602,35 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - Un email avec le lien de réinitialisation est envoyé
 - L'utilisateur peut cliquer sur le lien pour réinitialiser son mot de passe
 - Aucune information n'est révélée sur l'existence ou non de l'email
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Utilisateur]) --> ClickLink[Cliquer Mot de passe oublié<br/>sur page login]
+    ClickLink --> DisplayForm[Afficher formulaire<br/>avec branding tenant]
+    DisplayForm --> EnterEmail[Entrer email]
+    EnterEmail --> Submit[POST /api/auth/forgot-password<br/>email + tenantName]
+    Submit --> ValidateTenant{Tenant existe<br/>et actif?}
+    ValidateTenant -->|Non| Error400[400 Tenant invalide]
+    ValidateTenant -->|Oui| FindUser[(Chercher User par<br/>email + tenantId)]
+    FindUser --> UserExists{User existe?}
+    UserExists -->|Non| FakeSuccess[Retourner message<br/>générique succès<br/>Anti-énumération]
+    UserExists -->|Oui| GenToken[Générer token reset<br/>UserManager.GeneratePasswordResetTokenAsync]
+    GenToken --> FetchName[(Récupérer prénom<br/>pour email personnalisé)]
+    FetchName --> SendEmail[Envoyer email<br/>avec token + lien reset]
+    SendEmail --> LogDev{Mode DEV?}
+    LogDev -->|Oui| LogToken[Logger token<br/>dans console]
+    LogDev -->|Non| SkipLog[Skip log]
+    LogToken --> BuildResponse[Construire response]
+    SkipLog --> BuildResponse
+    FakeSuccess --> Success[200 OK<br/>Message identique toujours]
+    BuildResponse --> SuccessDev{Mode DEV?}
+    SuccessDev -->|Oui| SuccessWithToken[200 OK + token visible]
+    SuccessDev -->|Non| Success
+    Success --> End([User attend email])
+    SuccessWithToken --> End
+    Error400 --> End
+```
 
 ---
 
@@ -1338,6 +1676,39 @@ Johodp implémente le standard OAuth2 avec les extensions suivantes :
 - Le token est invalidé et ne peut plus être réutilisé
 - L'utilisateur peut se connecter avec le nouveau mot de passe
 - Les anciennes sessions restent actives (pas de déconnexion forcée)
+
+**Flowchart:**
+```mermaid
+flowchart TD
+    Start([Utilisateur reçoit email]) --> ClickLink[Cliquer lien reset<br/>avec token + email + tenant]
+    ClickLink --> DisplayForm[Afficher formulaire<br/>avec branding tenant<br/>email pré-rempli]
+    DisplayForm --> EnterPassword[Entrer nouveau password<br/>+ confirmation]
+    EnterPassword --> Submit[POST /api/auth/reset-password]
+    Submit --> ValidateTenant{Tenant existe<br/>et actif?}
+    ValidateTenant -->|Non| Error400Tenant[400 Tenant invalide]
+    ValidateTenant -->|Oui| FindUser[(Chercher User par<br/>email + tenantId)]
+    FindUser --> UserExists{User existe?}
+    UserExists -->|Non| Error400User[400 Invalid token or email]
+    UserExists -->|Oui| CheckMatch{Password ==<br/>ConfirmPassword?}
+    CheckMatch -->|Non| Error400Match[400 Passwords do not match]
+    CheckMatch -->|Oui| ResetPassword[UserManager.ResetPasswordAsync<br/>user + token + newPassword]
+    ResetPassword --> ValidateToken{Token valide<br/>non expiré<br/>non utilisé?}
+    ValidateToken -->|Non| Error400Token[400 Password reset failed<br/>+ détails Identity]
+    ValidateToken -->|Oui| CheckComplexity{Mot de passe<br/>assez complexe?}
+    CheckComplexity -->|Non| Error400Complex[400 + règles complexité]
+    CheckComplexity -->|Oui| HashPassword[Hacher nouveau<br/>mot de passe BCrypt]
+    HashPassword --> UpdateDB[(Mettre à jour User<br/>PasswordHash)]
+    UpdateDB --> InvalidateToken[Invalider token<br/>one-time use]
+    InvalidateToken --> Success[200 OK<br/>Password reset successful]
+    Success --> RedirectLogin[Redirection vers login]
+    RedirectLogin --> SuccessEnd([RÉINITIALISATION RÉUSSIE<br/>User peut se connecter])
+    
+    Error400Tenant --> BlockedEnd([RÉINITIALISATION BLOQUÉE<br/>Tenant invalide])
+    Error400User --> BlockedEnd2([RÉINITIALISATION BLOQUÉE<br/>Token ou email invalide])
+    Error400Match --> BlockedEnd3([RÉINITIALISATION BLOQUÉE<br/>Mots de passe différents])
+    Error400Token --> BlockedEnd4([RÉINITIALISATION BLOQUÉE<br/>Token invalide/expiré])
+    Error400Complex --> BlockedEnd5([RÉINITIALISATION BLOQUÉE<br/>Mot de passe trop faible])
+```
 
 ---
 
@@ -1573,19 +1944,47 @@ sequenceDiagram
    participant IdP as IdentityServer/Johodp
    participant CS as CustomClientStore
    participant DB as DB
+   
    SPA->>SPA: Générer code_verifier + code_challenge
    SPA->>IdP: /connect/authorize (PKCE + acr_values tenant)
    IdP->>CS: FindClientByIdAsync(clientName)
    CS->>DB: Charger Client + Tenants
    DB-->>CS: Données
-   CS-->>IdP: Client agrégé (RedirectUris/CORS)
-   IdP-->>SPA: Redirection vers /account/login
-   SPA->>IdP: POST /account/login (credentials)
-   IdP->>DB: Vérifier utilisateur + tenant accès
-   IdP-->>SPA: Set session + redirect callback?code=XYZ
-   SPA->>IdP: POST /connect/token (code + code_verifier)
-   IdP->>IdP: Vérifier code + PKCE
-   IdP-->>SPA: access_token + id_token + refresh_token
+   
+   alt Client invalide ou sans tenants
+      CS-->>IdP: null (client non visible)
+      IdP-->>SPA: ❌ OAuth2 Error: unknown_client
+      Note over SPA: FIN: CONNEXION BLOQUÉE
+   else Client valide
+      CS-->>IdP: Client agrégé (RedirectUris/CORS)
+      IdP-->>SPA: Redirection vers /account/login
+      SPA->>IdP: POST /account/login (credentials)
+      IdP->>DB: Chercher user par (email, tenantId)
+      
+      alt Credentials invalides
+         DB-->>IdP: User non trouvé ou password incorrect
+         IdP-->>SPA: ❌ 401 Invalid credentials
+         Note over SPA: FIN: CONNEXION BLOQUÉE<br/>User doit réessayer
+      else User sans accès au tenant
+         DB-->>IdP: User.TenantId ≠ tenant demandé
+         IdP-->>SPA: ❌ 403 No access to tenant
+         Note over SPA: FIN: CONNEXION BLOQUÉE<br/>Accès refusé
+      else Credentials valides + tenant OK
+         DB-->>IdP: User valide
+         IdP->>IdP: Créer session (cookie)
+         IdP-->>SPA: ✅ Redirect callback?code=XYZ
+         SPA->>IdP: POST /connect/token (code + code_verifier)
+         IdP->>IdP: Vérifier code + PKCE
+         
+         alt PKCE invalide
+            IdP-->>SPA: ❌ 400 invalid_grant
+            Note over SPA: FIN: CONNEXION BLOQUÉE<br/>Erreur PKCE
+         else PKCE valide
+            IdP-->>SPA: ✅ access_token + id_token + refresh_token
+            Note over SPA: FIN: UTILISATEUR CONNECTÉ<br/>Peut appeler APIs
+         end
+      end
+   end
 ```
 
 ### UC-07: Appel API Protégé
@@ -1615,11 +2014,11 @@ sequenceDiagram
 ### UC-09: Multi-Tenant (Ajout/Retrait)
 ```mermaid
 flowchart LR
-   Admin[Admin System] --> POSTAdd[POST /api/users/{user}/tenants/{tenant}]
+   Admin[Admin System] --> POSTAdd["POST /api/users/USER_ID/tenants/TENANT_ID"]
    POSTAdd --> Domain[User.AddTenantId]
    Domain --> Persist[Save Changes]
    Persist --> Access[Utilisateur peut se connecter via tenant]
-   Admin --> DELRem[DELETE /api/users/{user}/tenants/{tenant}]
+   Admin --> DELRem["DELETE /api/users/USER_ID/tenants/TENANT_ID"]
    DELRem --> DomainRem[User.RemoveTenantId]
    DomainRem --> PersistRem[Save Changes]
    PersistRem --> Revoke[Accès révoqué]
@@ -1631,7 +2030,7 @@ sequenceDiagram
    participant SPA as SPA
    participant IdP as Johodp
    participant DB as DB
-   SPA->>IdP: GET /api/tenant/{tenant}/branding.css
+   SPA->>IdP: GET /api/tenant/TENANT_ID/branding.css
    IdP->>DB: Charger configuration branding
    IdP->>IdP: Générer variables CSS dynamiques
    IdP-->>SPA: Response text/css
@@ -1644,11 +2043,65 @@ sequenceDiagram
    participant SPA as SPA
    participant IdP as Johodp
    participant DB as DB
-   SPA->>IdP: GET /api/tenant/{tenant}/language
+   SPA->>IdP: GET /api/tenant/TENANT_ID/language
    IdP->>DB: Charger paramètres i18n
    DB-->>IdP: defaultLanguage + supportedLanguages + timezone
    IdP-->>SPA: JSON localisation
    SPA->>SPA: Configurer i18n + formats
+```
+
+### UC-12: Reset Password (Forgot Password Flow)
+```mermaid
+sequenceDiagram
+   participant U as Utilisateur
+   participant IdP as Johodp
+   participant DB as DB
+   participant Email as Service Email
+   
+   Note over U: ÉTAPE 1: Forgot Password
+   U->>IdP: POST /api/auth/forgot-password
+   IdP->>DB: Chercher user par (email, tenantId)
+   
+   alt User n'existe pas
+      DB-->>IdP: User non trouvé
+      IdP-->>U: ✅ 200 OK (message générique anti-énumération)
+      Note over U: FIN: Aucun email envoyé<br/>mais message succès affiché
+   else User existe
+      DB-->>IdP: User trouvé
+      IdP->>IdP: Générer token reset (24h expiration)
+      IdP->>Email: Envoyer email avec token
+      Email-->>U: Email reçu avec lien reset
+      IdP-->>U: ✅ 200 OK (message générique)
+      
+      Note over U: ÉTAPE 2: Reset Password
+      U->>IdP: POST /api/auth/reset-password<br/>(email + token + newPassword)
+      IdP->>DB: Chercher user par (email, tenantId)
+      
+      alt User n'existe pas
+         DB-->>IdP: User non trouvé
+         IdP-->>U: ❌ 400 Invalid token or email
+         Note over U: FIN: RESET BLOQUÉ<br/>Token/email invalide
+      else Token invalide/expiré
+         DB-->>IdP: User trouvé
+         IdP->>IdP: UserManager.ResetPasswordAsync
+         IdP-->>U: ❌ 400 Password reset failed<br/>Token invalide/expiré
+         Note over U: FIN: RESET BLOQUÉ<br/>Token expiré ou déjà utilisé
+      else Passwords ne correspondent pas
+         IdP-->>U: ❌ 400 Passwords do not match
+         Note over U: FIN: RESET BLOQUÉ<br/>Passwords mismatch
+      else Mot de passe trop faible
+         IdP->>IdP: Valider complexité
+         IdP-->>U: ❌ 400 Règles complexité non respectées
+         Note over U: FIN: RESET BLOQUÉ<br/>Mot de passe faible
+      else Tout OK
+         IdP->>IdP: Hacher nouveau mot de passe
+         IdP->>DB: Mettre à jour PasswordHash
+         IdP->>IdP: Invalider token (one-time use)
+         DB-->>IdP: Sauvegardé
+         IdP-->>U: ✅ 200 OK Password reset successful
+         Note over U: FIN: MOT DE PASSE RÉINITIALISÉ<br/>User peut se connecter
+      end
+   end
 ```
 
 ### UC-03 / Agrégation Dynamique (Focus Tenants)
