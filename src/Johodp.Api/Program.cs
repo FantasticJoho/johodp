@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 // Logging
 ConfigureLogging(builder);
 
@@ -138,6 +139,14 @@ static void ApplyDatabaseMigrations(WebApplication app)
     using var scope = app.Services.CreateScope();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     
+    // Skip migrations in test environment (uses EnsureCreated instead)
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    if (configuration.GetValue<bool>("Testing:SkipMigrations"))
+    {
+        logger.LogInformation("⚠️ Skipping migrations (test environment with in-memory database)");
+        return;
+    }
+    
     try
     {
         var johodpDb = scope.ServiceProvider.GetRequiredService<Johodp.Infrastructure.Persistence.DbContext.JohodpDbContext>();
@@ -251,3 +260,6 @@ static void ConfigureHealthCheckEndpoints(WebApplication app)
     // General health
     app.MapHealthChecks("/health", jsonOptions);
 }
+
+// Make Program class accessible to tests
+public partial class Program { }
