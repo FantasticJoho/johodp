@@ -2,6 +2,29 @@
 
 ## Vue d'ensemble - Architecture Multi-Tenant
 
+```mermaid
+graph TB
+    APP["APPLICATION TIERCE<br/>(OAuth2 Client)<br/>- Client Credentials<br/>- CRUD via API<br/>- Webhooks"]
+    
+    subgraph JOHODP["JOHODP IDENTITY PROVIDER"]
+        IS["IdentityServer<br/>/connect/authorize<br/>/connect/token<br/>CustomClientStore"]
+        API["API Layer<br/>AccountController<br/>ClientsController<br/>TenantsController<br/>UsersController"]
+    end
+    
+    SPA["APPLICATION SPA<br/>(End User)<br/>Authorization Code + PKCE<br/>Bearer tokens"]
+    
+    APP -->|Client Credentials| JOHODP
+    JOHODP -->|Authorization Code + PKCE| SPA
+    JOHODP -.->|Webhooks| APP
+    
+    style APP fill:#e1f5ff
+    style JOHODP fill:#fff4e1
+    style SPA fill:#e8f5e9
+```
+
+<details>
+<summary>Version ASCII</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   APPLICATION TIERCE (OAuth2 Client)             │
@@ -40,8 +63,49 @@
 │  - Refresh token pour renouvellement session                     │
 └──────────────────────────────────────────────────────────────────┘
 ```
+</details>
 
 ## Architecture en Couches (Clean Architecture)
+
+```mermaid
+graph TB
+    API["API LAYER<br/>Johodp.Api<br/>Controllers, Middleware<br/>IdentityServer config<br/>Health checks"]
+    
+    subgraph APP["APPLICATION LAYER"]
+        CMD["Commands<br/>Write operations<br/>RegisterUser, CreateTenant"]
+        QRY["Queries<br/>Read operations<br/>GetUserById, GetTenant"]
+        DTO["DTOs & Contracts<br/>UserDto, TenantDto"]
+    end
+    
+    subgraph DOM["DOMAIN LAYER"]
+        AGG["Aggregates<br/>User, Client, Tenant<br/>CustomConfiguration"]
+        VO["Value Objects<br/>Email, UserId, TenantId"]
+        EVT["Domain Events<br/>UserActivated, TenantCreated"]
+        ENUM["Enumerations<br/>UserStatus"]
+    end
+    
+    subgraph INFRA["INFRASTRUCTURE LAYER"]
+        DB["Persistence<br/>EF Core + PostgreSQL<br/>Repositories, UnitOfWork"]
+        IS["IdentityServer<br/>CustomClientStore<br/>CustomProfileService"]
+        EXT["External Services<br/>Email, Webhooks"]
+    end
+    
+    PGDB[("PostgreSQL<br/>users, clients<br/>tenants, configs")]
+    
+    API --> APP
+    APP --> DOM
+    DOM -.->|interfaces| INFRA
+    INFRA --> PGDB
+    
+    style API fill:#e3f2fd
+    style APP fill:#fff3e0
+    style DOM fill:#e8f5e9
+    style INFRA fill:#f3e5f5
+    style PGDB fill:#fce4ec
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -124,10 +188,56 @@
 │  - custom_configurations (id, name, colors, logo, languages)    │
 └──────────────────────────────────────────────────────────────────┘
 ```
+</details>
 
 ## Modèle de Données Multi-Tenant
 
 ### Relations entre Aggregates
+
+```mermaid
+erDiagram
+    CustomConfiguration ||--o{ Tenant : "1:N"
+    Tenant ||--o{ User : "1:N"
+    Tenant }o--|| Client : "N:1"
+    
+    CustomConfiguration {
+        uuid id PK
+        string name UK
+        jsonb branding
+        jsonb languages
+        bool is_active
+    }
+    
+    Tenant {
+        uuid id PK
+        string name UK
+        uuid custom_config_id FK
+        jsonb allowed_return_urls
+        jsonb allowed_cors_origins
+        string notification_url
+        jsonb localization
+        bool is_active
+    }
+    
+    User {
+        uuid id PK
+        string email
+        uuid tenant_id FK
+        string role
+        string scope
+        int status
+    }
+    
+    Client {
+        uuid id PK
+        string client_name UK
+        jsonb allowed_scopes
+        jsonb associated_tenant_ids
+    }
+```
+
+<details>
+<summary>Version ASCII</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -174,7 +284,43 @@ Legend:
 - N:1: Many-to-One relationship
 ```
 
+</details>
+
 ### Isolation Multi-Tenant
+
+```mermaid
+erDiagram
+    User {
+        uuid id PK
+        string email
+        uuid tenant_id FK
+        string role
+        string scope
+        int status
+    }
+    
+    User ||--o{ Tenant : "tenant_id"
+    
+    note "Composite Unique: (email, tenant_id)<br/>john@acme.com peut exister dans tenant-A ET tenant-B<br/>Mais email unique DANS un tenant"
+```
+
+**Exemple de données**
+
+| id | email | tenant_id | role | scope |
+|----|-------|-----------|------|-------|
+| 01 | john@acme.com | tenant-A | user | default |
+| 02 | jane@acme.com | tenant-A | admin | default |
+| 03 | bob@corp.com | tenant-B | user | premium |
+| 04 | john@acme.com | tenant-B | user | default ✅ |
+
+**Requête SQL**
+```sql
+FindByEmailAndTenantAsync(email, tenantId)
+WHERE email = @email AND tenant_id = @tenantId
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -201,8 +347,41 @@ Legend:
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+</details>
 
 ### Branding Partagé (CustomConfiguration)
+
+```mermaid
+erDiagram
+    CustomConfiguration ||--o{ Tenant : "custom_config_id"
+    
+    CustomConfiguration {
+        uuid id PK "cfg-1"
+        string name UK "acme-branding"
+        string primary_color "FF0000"
+        string logo_url "logo-red.png"
+    }
+    
+    Tenant {
+        uuid id PK
+        string name UK
+        uuid custom_config_id FK
+        uuid client_id FK
+    }
+```
+
+**Exemple de partage**
+
+| Tenant | CustomConfig | Client | Description |
+|--------|--------------|--------|-------------|
+| acme-us | cfg-1 (red) | client-X | 🇺🇸 US region |
+| acme-fr | cfg-1 (red) | client-X | 🇫🇷 FR region - **partage cfg-1** |
+| corp-main | cfg-2 (blue) | client-Y | 🏢 Corp branding |
+
+✅ **Avantages**: Branding cohérent, modification centralisée (1 update → N tenants), réutilisable cross-client
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -234,8 +413,48 @@ Legend:
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+</details>
 
 ## Flux de Création d'un Utilisateur (Onboarding avec Webhook)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant S as SPA
+    participant J as Johodp
+    participant A as App Tierce
+    participant E as Email Service
+    
+    U->>S: Clic "Créer un compte"
+    S->>J: GET /account/onboarding?tenant=acme-corp
+    J->>U: Afficher formulaire + branding
+    U->>J: Submit (email, firstName, lastName)
+    J->>J: Validation (unicité, format)
+    
+    J->>A: POST webhook (NotificationUrl)
+    Note over J,A: Headers: Bearer token<br/>Body: user data
+    
+    A->>A: Validation métier<br/>(contrat, CRM, quota)
+    
+    alt Validation OK
+        A->>J: POST /api/users/register<br/>(createAsPending=true)
+        J->>J: User.CreatePending()<br/>Status=PendingActivation
+        J->>E: Envoyer email activation
+        J->>U: "Email envoyé"
+        
+        U->>E: Clic lien activation
+        E->>J: GET /account/activate?token=xxx
+        J->>U: Formulaire mot de passe
+        U->>J: Submit mot de passe
+        J->>J: user.Activate()<br/>Status=Active
+        J->>U: Connexion automatique
+    else Validation KO / Timeout
+        J->>U: "Validation en cours, réessayez"
+    end
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -303,10 +522,41 @@ Legend:
     │
 15. Johodp → User: Connexion automatique + redirection
 ```
+</details>
 
 ## Intégration IdentityServer & CustomClientStore
 
 ### OAuth2/OIDC avec Agrégation Dynamique
+
+```mermaid
+sequenceDiagram
+    participant SPA as SPA Client
+    participant IS as IdentityServer
+    participant CS as CustomClientStore
+    participant DB as Database
+    participant U as User
+    
+    SPA->>SPA: Générer code_verifier<br/>Calculer code_challenge
+    SPA->>IS: GET /connect/authorize<br/>+ PKCE + acr_values=tenant:X
+    IS->>CS: FindClientByIdAsync(clientId)
+    CS->>DB: Query Client + Tenants
+    CS->>CS: Agréger RedirectURIs<br/>Agréger CorsOrigins
+    CS->>IS: Return Duende.Client
+    
+    IS->>U: Afficher formulaire login
+    U->>IS: Submit (email, password)
+    IS->>IS: FindByEmailAndTenantAsync()<br/>CheckPasswordAsync()
+    IS->>SPA: Redirect avec authorization_code
+    
+    SPA->>IS: POST /connect/token<br/>code + code_verifier
+    IS->>SPA: access_token (1h)<br/>id_token (claims)<br/>refresh_token (15j)
+    
+    SPA->>SPA: Stocker tokens<br/>localStorage
+    SPA->>IS: API calls avec Bearer token
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -391,7 +641,42 @@ Legend:
             └────────────────────────────┘
 ```
 
+</details>
+
 ### Règles de Visibilité Client
+
+```mermaid
+flowchart TB
+    START[Client créé]
+    
+    CHECK1{« Client.AssociatedTenantIds<br/>.Count > 0 »}
+    CHECK2{« Tenants.AllowedReturnUrls<br/>.Count > 0 »}
+    
+    VISIBLE["✅ Client VISIBLE<br/>IdentityServer"]
+    INVISIBLE["❌ Client INVISIBLE<br/>OAuth2 error: unknown_client"]
+    
+    FLOW1["1. POST /api/clients<br/>🔶 Création client"]
+    FLOW2["2. POST /api/custom-configurations<br/>🎨 Branding"]
+    FLOW3["3. POST /api/tenants<br/>🏢 Tenant + redirect URIs"]
+    FLOW4["✅ Client devient visible"]
+    
+    START --> CHECK1
+    CHECK1 -->|Non| INVISIBLE
+    CHECK1 -->|Oui| CHECK2
+    CHECK2 -->|Non| INVISIBLE
+    CHECK2 -->|Oui| VISIBLE
+    
+    FLOW1 --> FLOW2
+    FLOW2 --> FLOW3
+    FLOW3 --> FLOW4
+    
+    style VISIBLE fill:#c8e6c9
+    style INVISIBLE fill:#ffcdd2
+    style FLOW4 fill:#a5d6a7
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -426,9 +711,43 @@ Legend:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ## Pattern CQRS - Commandes vs Requêtes
 
 ### Architecture CQRS avec Mini Mediator
+
+```mermaid
+flowchart TB
+    subgraph WRITE["WRITE SIDE (Commands)"]
+        C1[Controller] --> C2[Command]
+        C2 --> C3[Handler]
+        C3 --> C4[Aggregate]
+        C4 --> C5[(UnitOfWork)]
+        
+        note1["Exemple: RegisterUser<br/>1. Validation<br/>2. Business logic<br/>3. Domain events<br/>4. Persist"]
+    end
+    
+    subgraph READ["READ SIDE (Queries)"]
+        Q1[Controller] --> Q2[Query]
+        Q2 --> Q3[Handler]
+        Q3 --> Q4[Repository]
+        Q4 --> Q5[DTO]
+        
+        note2["Exemple: GetUserById<br/>1. Data retrieval<br/>2. Map to DTO<br/>3. Return"]
+    end
+    
+    DB[(Database)]
+    C5 --> DB
+    Q4 --> DB
+    
+    style WRITE fill:#ffe0e0
+    style READ fill:#e0f0ff
+    style DB fill:#f0f0f0
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -519,6 +838,8 @@ Legend:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Avantages CQRS
 
 ✅ **Séparation responsabilités** - Write != Read logic
@@ -531,6 +852,33 @@ Legend:
 ## Gestion CORS et Sécurité
 
 ### Architecture CORS (Migration Client → Tenant)
+
+```mermaid
+flowchart TB
+    Client["Client Aggregate<br/>- ClientName<br/>- AllowedScopes<br/>- AssociatedTenantIds"]
+    
+    T1["Tenant A<br/>- AllowedReturnUrls<br/>- AllowedCorsOrigins"]
+    T2["Tenant B<br/>- AllowedReturnUrls<br/>- AllowedCorsOrigins"]
+    
+    CS["CustomClientStore<br/>Agrégation dynamique<br/>- Distinct RedirectURIs<br/>- Distinct CorsOrigins"]
+    
+    IS["IdentityServer<br/>Duende.Client"]
+    
+    Client -->|1:N| T1
+    Client -->|1:N| T2
+    T1 --> CS
+    T2 --> CS
+    CS --> IS
+    
+    style Client fill:#e1f5ff
+    style T1 fill:#fff9c4
+    style T2 fill:#fff9c4
+    style CS fill:#c8e6c9
+    style IS fill:#f3e5f5
+```
+
+<details>
+<summary>Version ASCII</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -580,6 +928,8 @@ Legend:
 └─────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Pourquoi CORS est géré au niveau Tenant ?
 
 ✅ **Cohérence architecturale** - AllowedReturnUrls et AllowedCorsOrigins au même endroit (Tenant)
@@ -593,7 +943,38 @@ Legend:
 
 **CORS ne protège QUE les navigateurs web !**
 
+```mermaid
+flowchart LR
+    subgraph PROT["✅ CORS Protège"]
+        B[Navigateur web]
+        JS[JavaScript/fetch]
+        SPA[Applications SPA]
+    end
+    
+    subgraph NOPROT["❌ CORS Ne Protège PAS"]
+        CURL[curl/wget/Postman]
+        SRV[Serveurs Node/C#/Python]
+        MOB[Apps mobiles natives]
+        API[API-to-API calls]
+    end
+    
+    API_SERVER[API Server]
+    
+    PROT -.->|CORS check| API_SERVER
+    NOPROT -->|Pas de CORS| API_SERVER
+    
+    style PROT fill:#c8e6c9
+    style NOPROT fill:#ffcdd2
+    style API_SERVER fill:#e1f5ff
 ```
+
+⚠️ **CORS est une COMMODITÉ UX, PAS une SÉCURITÉ**
+
+<details>
+<summary>Version ASCII</summary>mermaid
+
+```
+
 ┌──────────────────────────────────────────────────────┐
 │         CORS = Protection NAVIGATEUR uniquement       │
 ├──────────────────────────────────────────────────────┤
@@ -615,6 +996,7 @@ Legend:
 │                                                       │
 └──────────────────────────────────────────────────────┘
 ```
+</details>
 
 ### Exemple de contournement CORS
 
@@ -643,6 +1025,42 @@ response = requests.post('https://api.johodp.com/connect/token',
 ### Sécurité réelle : Defense in Depth
 
 **CORS est une COMMODITÉ, pas une SÉCURITÉ**
+
+```mermaid
+flowchart TB
+    REQ[Requête Utilisateur]
+    
+    L1["1. CORS<br/>🌐 Commodité UX navigateur"]
+    L2["2. Authentication<br/>🔑 OAuth2/OIDC"]
+    L3["3. Authorization<br/>🛡️ Scopes/Roles"]
+    L4["4. Rate Limiting<br/>⏱️ 100 req/min"]
+    L5["5. Client Auth<br/>📝 ClientId+Secret"]
+    L6["6. IP Whitelist<br/>🌍 Géo-restriction"]
+    L7["7. Audit Logging<br/>📊 Traçabilité"]
+    
+    API[API Protected Resource]
+    
+    REQ --> L1
+    L1 --> L2
+    L2 --> L3
+    L3 --> L4
+    L4 --> L5
+    L5 --> L6
+    L6 --> L7
+    L7 --> API
+    
+    style L1 fill:#fff9c4
+    style L2 fill:#c8e6c9
+    style L3 fill:#c8e6c9
+    style L4 fill:#b3e5fc
+    style L5 fill:#c8e6c9
+    style L6 fill:#b3e5fc
+    style L7 fill:#d1c4e9
+    style API fill:#a5d6a7
+```
+
+<details>
+<summary>Version ASCII détaillée</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -682,6 +1100,7 @@ response = requests.post('https://api.johodp.com/connect/token',
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
+</details>
 
 ### Configuration CORS dans Johodp
 
@@ -926,6 +1345,34 @@ public async Task<IActionResult> ReceiveWebhook([FromBody] WebhookPayload payloa
 
 ### Architecture Sécurité Webhook
 
+```mermaid
+sequenceDiagram
+    participant J as Johodp
+    participant TS as Third-party Identity Server
+    participant A as App Tierce
+    
+    Note over J: Événement onboarding
+    J->>TS: POST /connect/token<br/>grant_type=client_credentials<br/>scope=webhook.receive
+    TS->>J: access_token (JWT, 1h)
+    
+    J->>J: Cache token (50min)
+    J->>A: POST webhook<br/>Authorization: Bearer token<br/>X-Johodp-Request-Id: uuid
+    
+    A->>A: Valider JWT<br/>(signature, expiration)
+    A->>A: Vérifier scope<br/>webhook.receive
+    A->>A: Business validation<br/>(contrat, CRM, quota)
+    
+    alt Validation OK
+        A->>J: POST /api/users/register<br/>Bearer: johodp.admin token
+        J->>A: 201 Created
+    else Validation KO
+        A->>J: 400 Bad Request
+    end
+```
+
+<details>
+<summary>Version ASCII</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │            SÉCURITÉ WEBHOOK (OAuth2)                     │
@@ -967,6 +1414,8 @@ public async Task<IActionResult> ReceiveWebhook([FromBody] WebhookPayload payloa
 └─────────────────────────────────────────────────────────┘
 ```
 
+</details>
+
 ### Configuration Tenant
 
 ```csharp
@@ -1006,6 +1455,23 @@ public class WebhookConfiguration
 
 ### Différences vs Appels API Classiques
 
+```mermaid
+flowchart LR
+    subgraph WEBHOOK["Webhook (Push)"]
+        J1[Johodp] -->|🔴 Événement| W1[POST webhook]
+        W1 -->|OAuth2 Bearer| A1[App Tierce]
+        W1 -.->|Retry si échec| W1
+    end
+    
+    subgraph API["API Call (Pull)"]
+        A2[App Tierce] -->|🟢 Action user| R1[POST /api]
+        R1 -->|OAuth2 Bearer| J2[Johodp]
+    end
+    
+    style WEBHOOK fill:#ffe0e0
+    style API fill:#e0f0ff
+```
+
 | Caractéristique | Webhook (Johodp → App) | API Call (App → Johodp) |
 |----------------|------------------------|-------------------------|
 | **Direction** | Sortante (push) | Entrante (pull) |
@@ -1022,6 +1488,45 @@ public class WebhookConfiguration
 ### Extension / Évolutions futures
 
 #### File d'attente persistée (Outbox Pattern)
+
+```mermaid
+erDiagram
+    webhook_outbox {
+        uuid id PK
+        uuid tenant_id FK
+        varchar event_type "user.verification"
+        jsonb payload
+        varchar status "pending/sent/failed"
+        int attempts
+        int max_attempts
+        timestamp next_retry_at
+        timestamp created_at
+        timestamp sent_at
+        timestamp failed_at
+        text error_message
+    }
+    
+    webhook_outbox }o--|| Tenant : "tenant_id"
+```
+
+**Workflow**
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: Création webhook
+    Pending --> Sending: Retry job
+    Sending --> Sent: ✅ HTTP 200
+    Sending --> Pending: ❌ Retry (attempts < max)
+    Sending --> Failed: ❌ Max attempts
+    Sent --> [*]
+    Failed --> [*]
+    
+    note right of Pending
+        Delays: 0s, 30s, 5min, 30min
+    end note
+```
+
+<details>
+<summary>Version SQL</summary>
 
 ```sql
 CREATE TABLE webhook_outbox (
@@ -1044,8 +1549,39 @@ CREATE INDEX idx_webhook_outbox_status ON webhook_outbox(status);
 CREATE INDEX idx_webhook_outbox_next_retry ON webhook_outbox(next_retry_at) 
     WHERE status = 'pending';
 ```
+</details>
 
 #### Retry avec Exponential Backoff
+
+```mermaid
+sequenceDiagram
+    participant S as Webhook Sender
+    participant C as Token Cache
+    participant A as App Tierce
+    
+    Note over S: Tentative 1 (0s)
+    S->>C: Get cached token
+    S->>A: POST webhook + Bearer
+    A--xS: ❌ 500 Error
+    
+    Note over S: Wait 30s
+    Note over S: Tentative 2 (30s)
+    S->>C: Get cached token
+    S->>A: POST webhook + Bearer
+    A--xS: ❌ 401 Unauthorized
+    S->>C: ❌ Clear cache
+    
+    Note over S: Wait 5min
+    Note over S: Tentative 3 (5min)
+    S->>C: Get NEW token
+    S->>A: POST webhook + NEW Bearer
+    A-->>S: ✅ 200 OK
+    
+    Note over S: Success - Mark as sent
+```
+
+<details>
+<summary>Version code C#</summary>
 
 ```csharp
 public async Task<bool> SendWebhookWithRetry(WebhookOutboxMessage message)
@@ -1098,6 +1634,8 @@ public async Task<bool> SendWebhookWithRetry(WebhookOutboxMessage message)
     return false;
 }
 ```
+
+</details>
 
 #### Token Caching (Performance)
 
@@ -1162,6 +1700,30 @@ public class WebhookTokenCache
 
 ## Schéma de Dépendances (Dependency Inversion)
 
+```mermaid
+graph TB
+    API["API Layer<br/>Controllers<br/>Middleware"]
+    APP["Application Layer<br/>Commands, Queries<br/>DTOs"]
+    DOM["Domain Layer<br/>Aggregates<br/>Value Objects<br/>Interfaces"]
+    INFRA["Infrastructure Layer<br/>EF Core, SMTP<br/>IdentityServer"]
+    
+    API -->|référence| APP
+    API -->|référence| INFRA
+    APP -->|référence| DOM
+    INFRA -->|implémente| DOM
+    INFRA -.->|injection DI| APP
+    
+    style DOM fill:#4caf50,color:#fff
+    style API fill:#2196f3,color:#fff
+    style APP fill:#ff9800,color:#fff
+    style INFRA fill:#9c27b0,color:#fff
+    
+    note1["Les dépendances pointent<br/>TOUJOURS vers le Domain"]
+```
+
+<details>
+<summary>Version ASCII</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    API Layer                             │
@@ -1196,17 +1758,19 @@ public class WebhookTokenCache
 Principe: Les dépendances pointent TOUJOURS vers le domaine (centre)
 ```
 
+</details>
+
 ## Pattern DDD Enumeration
 
 ### Pourquoi Enumeration class plutôt que enum C# ?
 
 Les `enum` C# ont des limitations importantes en Domain-Driven Design :
-
+```
 ❌ **Valeurs par défaut problématiques** - `default(UserStatus)` = 0, peut causer des bugs
 ❌ **Pas de comportement** - Impossible d'ajouter de la logique métier
 ❌ **Primitive obsession** - Les enums sont essentiellement des int
 ❌ **Pas extensible** - Impossible d'ajouter des méthodes ou propriétés
-
+```
 ### Solution : Enumeration base class
 
 Notre implémentation suit le pattern de **Jimmy Bogard** :
@@ -1331,6 +1895,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
 ### Avantages obtenus
 
+```
 ✅ **Type-safe** - Impossible d'utiliser des valeurs invalides
 ✅ **Pas de valeur par défaut** - `Status = UserStatus.PendingActivation` est explicite
 ✅ **Comportement riche** - `Status.CanActivate()`, `Status.CanLogin()`
@@ -1339,6 +1904,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 ✅ **Lisibilité** - `if (user.Status.CanLogin())` vs `if (user.Status == 1)`
 ✅ **Refactoring-friendly** - Changements de valeurs sans casser le code
 ✅ **Compatible EF Core** - Stockage en int, conversion transparente
+```
 
 ### Comparaison enum vs Enumeration
 
