@@ -457,8 +457,18 @@ public class AccountController : ControllerBase
     // ========== PASSWORD RESET FLOW ==========
 
     /// <summary>
-    /// Request password reset (sends email with token)
+    /// Initie une demande de réinitialisation de mot de passe (Étape 1/2)
     /// </summary>
+    /// <remarks>
+    /// Cette méthode génère un token de réinitialisation sécurisé et l'envoie par email à l'utilisateur.
+    /// Le token est nécessaire pour compléter la réinitialisation via l'endpoint /reset-password.
+    /// Pour des raisons de sécurité, retourne toujours un message de succès même si l'email n'existe pas.
+    /// </remarks>
+    /// <param name="request">Contient l'email et le nom du tenant de l'utilisateur</param>
+    /// <returns>
+    /// - 200 OK : Token généré et email envoyé (en DEV, inclut le token pour test)
+    /// - 400 BadRequest : Tenant manquant ou invalide
+    /// </returns>
     [HttpPost("forgot-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
@@ -466,12 +476,25 @@ public class AccountController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(new { error = "Invalid request" });
 
-        _logger.LogInformation("Password reset requested: {Email}", request.Email);
+        _logger.LogInformation("Password reset requested: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
 
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null)
+        // Validate tenant (required)
+        if (string.IsNullOrEmpty(request.TenantName))
         {
-            _logger.LogWarning("Password reset - user not found: {Email}", request.Email);
+            _logger.LogWarning("Password reset failed - tenant required: {Email}", request.Email);
+            return BadRequest(new { error = "Tenant name is required" });
+        }
+
+        var tenantResult = await ValidateActiveTenantAsync(request.TenantName);
+        if (tenantResult.error != null)
+            return tenantResult.error;
+        var tenant = tenantResult.tenant!;
+
+        // Find user by email + tenant (composite key)
+        var user = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, tenant.Id);
+        if (user == null || !user.BelongsToTenant(tenant.Id))
+        {
+            _logger.LogWarning("Password reset - user not found: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
             return Ok(new { message = "If the email exists, a password reset link has been sent" });
         }
 
@@ -492,8 +515,18 @@ public class AccountController : ControllerBase
     }
 
     /// <summary>
-    /// Reset password with token
+    /// Réinitialise le mot de passe avec le token reçu par email (Étape 2/2)
     /// </summary>
+    /// <remarks>
+    /// Cette méthode valide le token de réinitialisation généré par /forgot-password
+    /// et change effectivement le mot de passe de l'utilisateur dans la base de données.
+    /// Le token expire après un certain temps (configurable dans Identity).
+    /// </remarks>
+    /// <param name="request">Contient l'email, le tenant, le token, et le nouveau mot de passe</param>
+    /// <returns>
+    /// - 200 OK : Mot de passe réinitialisé avec succès
+    /// - 400 BadRequest : Token invalide/expiré, mots de passe non concordants, ou tenant invalide
+    /// </returns>
     [HttpPost("reset-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
@@ -501,7 +534,7 @@ public class AccountController : ControllerBase
         if (!ModelState.IsValid)
             return BadRequest(new { error = "Invalid request", errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage) });
 
-        _logger.LogInformation("Password reset attempt: {Email}", request.Email);
+        _logger.LogInformation("Password reset attempt: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
 
         if (request.Password != request.ConfirmPassword)
         {
@@ -509,10 +542,23 @@ public class AccountController : ControllerBase
             return BadRequest(new { error = "Passwords do not match" });
         }
 
-        var user = await _userManager.FindByEmailAsync(request.Email);
-        if (user == null)
+        // Validate tenant (required)
+        if (string.IsNullOrEmpty(request.TenantName))
         {
-            _logger.LogWarning("Password reset failed - user not found: {Email}", request.Email);
+            _logger.LogWarning("Password reset failed - tenant required: {Email}", request.Email);
+            return BadRequest(new { error = "Tenant name is required" });
+        }
+
+        var tenantResult = await ValidateActiveTenantAsync(request.TenantName);
+        if (tenantResult.error != null)
+            return tenantResult.error;
+        var tenant = tenantResult.tenant!;
+
+        // Find user by email + tenant (composite key)
+        var user = await _unitOfWork.Users.GetByEmailAndTenantAsync(request.Email, tenant.Id);
+        if (user == null || !user.BelongsToTenant(tenant.Id))
+        {
+            _logger.LogWarning("Password reset failed - user not found: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
             return BadRequest(new { error = "Invalid reset token or email" });
         }
 
@@ -524,7 +570,7 @@ public class AccountController : ControllerBase
             return BadRequest(new { error = "Password reset failed", details = errors });
         }
 
-        _logger.LogInformation("Password reset successful: {Email}", request.Email);
+        _logger.LogInformation("Password reset successful: {Email}, tenant: {TenantName}", request.Email, request.TenantName);
         return Ok(new { message = "Password reset successful", email = request.Email });
     }
 
@@ -581,11 +627,13 @@ public class ActivateRequest
 public class ForgotPasswordRequest
 {
     public string Email { get; set; } = string.Empty;
+    public string TenantName { get; set; } = string.Empty;
 }
 
 public class ResetPasswordRequest
 {
     public string Email { get; set; } = string.Empty;
+    public string TenantName { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string ConfirmPassword { get; set; } = string.Empty;
