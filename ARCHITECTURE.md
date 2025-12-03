@@ -428,14 +428,14 @@ Legend:
 
 ## Pattern CQRS - Commandes vs Requêtes
 
-### Architecture CQRS avec MediatR
+### Architecture CQRS avec Mini Mediator
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    WRITE SIDE (Commands)                     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
-│  Controller → Command → Validator → Handler → Aggregate     │
+│  Controller → Command → Handler → Aggregate                 │
 │                                                              │
 │  Exemple: RegisterUserCommand                                │
 │  ┌────────────────────────────────────────────────────┐     │
@@ -539,7 +539,6 @@ Legend:
 │  - AllowedScopes (openid, profile, email, api)          │
 │  - RequireConsent, RequirePkce                          │
 │  - AssociatedTenantIds (List<TenantId>)                 │
-│  ❌ AllowedCorsOrigins (DÉPLACÉ vers Tenant)           │
 └────────────────────────┬────────────────────────────────┘
                          │
                          │ 1:N (via AssociatedTenantIds)
@@ -549,7 +548,7 @@ Legend:
 │  - TenantId, Name, DisplayName                          │
 │  - CustomConfigurationId (FK - required)                │
 │  - AllowedReturnUrls (OAuth2 redirect URIs)             │
-│  ✅ AllowedCorsOrigins (Liste des origines CORS)       │
+│  - AllowedCorsOrigins (Liste des origines CORS)         │
 │  - NotificationUrl (webhook user verification)          │
 │  - Localization (timezone, currency, formats)           │
 │  - IsActive                                             │
@@ -766,41 +765,12 @@ public void AddAllowedCorsOrigin(string origin)
 }
 ```
 
-### Migration CORS (Client → Tenant)
+### Configuration CORS Multi-Tenant
 
-**Base de données (EF Core Migration)**
-```sql
--- Migration: MoveCorsOriginsFromClientToTenant
-
--- Étape 1: Ajouter colonne nullable sur tenants
-ALTER TABLE tenants 
-ADD COLUMN "AllowedCorsOrigins" jsonb NULL;
-
--- Étape 2: Copier les CORS du client vers tous ses tenants (si migration de données existantes)
--- (Code applicatif ou script SQL personnalisé)
-
--- Étape 3: Définir valeur par défaut (liste vide) pour nouveaux tenants
-UPDATE tenants 
-SET "AllowedCorsOrigins" = '[]'::jsonb 
-WHERE "AllowedCorsOrigins" IS NULL;
-
--- Étape 4: Rendre la colonne NOT NULL
-ALTER TABLE tenants 
-ALTER COLUMN "AllowedCorsOrigins" SET NOT NULL;
-
--- Étape 5: Supprimer ancienne colonne du client (après vérification)
-ALTER TABLE clients 
-DROP COLUMN IF EXISTS "AllowedCorsOrigins";
-```
-
-**Code impacté par la migration**
-- ✅ `Domain/Clients/Aggregates/Client.cs` - AllowedCorsOrigins supprimé
-- ✅ `Domain/Tenants/Aggregates/Tenant.cs` - AllowedCorsOrigins ajouté avec méthodes
-- ✅ `Application/Clients/DTOs/*` - AllowedCorsOrigins supprimé des DTOs
-- ✅ `Application/Tenants/DTOs/*` - AllowedCorsOrigins ajouté aux DTOs
-- ✅ `Application/Tenants/Commands/*` - Gestion AllowedCorsOrigins dans CreateTenantCommand
-- ✅ `Infrastructure/IdentityServer/CustomClientStore.cs` - Agrégation depuis tenants
-- ✅ `Infrastructure/Persistence/Configurations/*` - Mapping jsonb pour AllowedCorsOrigins
+**Structure actuelle**
+- CORS configuré au niveau Tenant (pas au niveau Client)
+- Agrégation dynamique dans CustomClientStore pour IdentityServer
+- Stockage en JSONB dans PostgreSQL
 
 ## Webhook de Vérification Utilisateur (Onboarding)
 
@@ -986,7 +956,7 @@ public async Task<IActionResult> ReceiveWebhook([FromBody] WebhookPayload payloa
 │     if (!User.HasClaim("scope", "webhook.receive"))     │
 │         return Forbid();                                │
 │                                                          │
-│  Avantages vs HMAC:                                     │
+│  Avantages OAuth2:                                      │
 │  ✅ Standard OAuth2 (pas de crypto custom)              │
 │  ✅ Tokens expirables (refresh automatique)             │
 │  ✅ Révocation centralisée (Identity Server)            │
