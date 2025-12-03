@@ -4,11 +4,71 @@
 
 Ce document liste toutes les User Stories nécessaires pour construire le système Johodp Identity Provider, organisées par epic et priorité.
 
+## 📦 Stratégie de Livraison par Lots
+
+Le projet est divisé en **3 lots principaux** pour faciliter le déploiement progressif:
+
+### ✅ LOT 1 - Fonctionnalités Core (IMPLÉMENTÉ)
+**Scope:** OAuth2/OIDC complet, gestion multi-tenant, authentification de base
+- Epic 1: Gestion des Clients OAuth2
+- Epic 2: Gestion des Tenants
+- Epic 3: Gestion des Utilisateurs
+- Epic 4: Onboarding et Activation
+- Epic 5: Authentification et Session
+- Epic 7: Intégration IdentityServer
+- Epic 8: Notifications
+
+**Status:** ✅ **IMPLÉMENTÉ** - Infrastructure complète fonctionnelle en production
+
+---
+
+### 🔄 LOT 2 - Authentification Multi-Facteurs (IMPLÉMENTÉ MAIS À DOCUMENTER)
+**Scope:** MFA/TOTP avec Google Authenticator, codes de récupération
+- Epic 6: Authentification Multi-Facteurs (MFA/TOTP)
+  - US-6.1: Inscrire un Authenticator TOTP ✅ Implémenté
+  - US-6.2: Vérifier et Activer la MFA ✅ Implémenté
+  - US-6.3: Se Connecter avec MFA/TOTP ✅ Implémenté
+  - US-6.4: Désactiver la MFA ❌ Non implémenté
+  - US-6.5: Utiliser un Recovery Code ❌ Non implémenté
+
+**Status:** 🔄 **PARTIELLEMENT IMPLÉMENTÉ** (3/5 US)
+- ✅ Code implémenté dans `AccountController` (lignes 288-455)
+- ✅ Service `IMfaService` fonctionnel
+- ✅ Endpoints API fonctionnels
+- ❌ Tests d'intégration à créer
+- ❌ Documentation utilisateur à écrire
+- ❌ Mise à jour de `complete-workflow.http`
+
+**Priorité:** Phase 2 - Déploiement après stabilisation Lot 1
+
+---
+
+### 📋 LOT 3 - Fonctionnalités Avancées (À VENIR)
+**Scope:** Administration, monitoring, outils avancés
+- Epic 9: Administration et Monitoring
+- Epic 10: Tests et Qualité (tests E2E avancés)
+- Webhooks avancés
+- Dashboard administrateur
+- Métriques et observabilité
+
+**Status:** 📋 **PLANIFIÉ** - Développement futur
+
+---
+
+## 📊 Tableau de Bord Lots
+
+| Lot | Epics | User Stories | Story Points | Status |
+|-----|-------|--------------|--------------|--------|
+| **LOT 1** | 7 | 38 US | 144 SP | ✅ Implémenté |
+| **LOT 2 (MFA)** | 1 | 5 US | 13 SP | 🔄 Partiel (3/5) |
+| **LOT 3** | 2 | 5+ US | 29+ SP | 📋 Planifié |
+| **TOTAL** | 10 | 48+ US | 186+ SP | - |
+
 ---
 
 ## 🎯 Epic 1: Gestion des Clients OAuth2
 
-### US-1.1: Créer un Client OAuth2 (DOIT AVOIR)
+### US-1.1: Créer un Client OAuth2 (DOIT AVOIR - LOT 1 ✅)
 **En tant qu'** administrateur système  
 **Je veux** créer un nouveau client OAuth2  
 **Afin que** les applications tierces puissent s'intégrer avec Johodp
@@ -1015,9 +1075,225 @@ POST /account/reset-password
 
 ---
 
-## 🔗 Epic 6: Intégration IdentityServer
+## 🔐 Epic 6: Authentification Multi-Facteurs (MFA/TOTP) - 🔄 LOT 2
 
-### US-6.1: Charger un Client Dynamiquement depuis la Base (DOIT AVOIR)
+> **🚨 LOT 2** - Ces fonctionnalités sont IMPLÉMENTÉES mais considérées comme une phase 2.  
+> Le code est en production, mais la documentation et les tests sont à compléter.
+
+### US-6.1: Inscrire un Authenticator TOTP (LOT 2 - IMPLÉMENTÉ)
+**En tant qu'** utilisateur dont le client impose la MFA  
+**Je veux** configurer un authenticator TOTP (Google Authenticator, Authy)  
+**Afin de** sécuriser mon compte avec un deuxième facteur
+
+**Critères d'acceptation:**
+- [x] Je peux appeler POST `/api/auth/mfa/enroll` (authentifié)
+- [x] Le système vérifie que la MFA est requise pour mon tenant/client
+- [x] Le système génère un secret TOTP unique via UserManager.ResetAuthenticatorKeyAsync
+- [x] Le système retourne un QR code scannable (otpauth:// URI)
+- [x] Le système retourne aussi la clé manuelle pour saisie (format espacé)
+- [x] Le secret est stocké dans AspNetUsers.AuthenticatorKey
+- [x] Le système retourne 400 si MFA n'est pas requise pour ce client
+- [x] Le système retourne 401 si l'utilisateur n'est pas authentifié
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/mfa/enroll
+Authorization: Bearer <token>
+→ 200 OK
+{
+  "sharedKey": "JBSWY3DPEHPK3PXP",
+  "qrCodeUri": "otpauth://totp/Johodp:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Johodp",
+  "manualEntryKey": "JBSW Y3DP EHPK 3PXP"
+}
+```
+
+**DoD:**
+- [x] AccountController.EnrollTotp() implémenté
+- [x] IMfaService.GenerateQrCodeUri() implémenté
+- [x] IMfaService.FormatKey() implémenté
+- [ ] Tests d'intégration (à créer)
+- [ ] Documentation utilisateur (guide Google Authenticator)
+
+**Implémentation:**
+- Controller: `AccountController.cs` ligne 288
+- Service: `IMfaService` (Application layer)
+- Endpoint: `POST /api/auth/mfa/enroll`
+
+---
+
+### US-6.2: Vérifier et Activer la MFA (LOT 2 - IMPLÉMENTÉ)
+**En tant qu'** utilisateur en cours d'inscription TOTP  
+**Je veux** vérifier mon code à 6 chiffres  
+**Afin d'** activer définitivement la double authentification
+
+**Critères d'acceptation:**
+- [x] Je peux appeler POST `/api/auth/mfa/verify-enrollment` avec { "code": "123456" }
+- [x] Le système vérifie le code TOTP via UserManager.VerifyTwoFactorTokenAsync
+- [x] Le système active TwoFactorEnabled sur l'utilisateur AspNetCore.Identity
+- [x] Le système active MFA sur l'entité domaine (User.EnableMFA())
+- [x] Le système génère 10 codes de récupération
+- [x] Le système retourne les recovery codes dans la réponse
+- [x] Le système retourne 400 si le code TOTP est invalide
+- [x] Le système retourne 401 si l'utilisateur n'est pas authentifié
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/mfa/verify-enrollment
+Authorization: Bearer <token>
+{
+  "code": "123456"
+}
+→ 200 OK
+{
+  "message": "Two-factor authentication enabled successfully",
+  "recoveryCodes": ["ABC123", "DEF456", ...]
+}
+```
+
+**DoD:**
+- [x] AccountController.VerifyTotpEnrollment() implémenté
+- [x] Génération des recovery codes
+- [x] Activation de TwoFactorEnabled
+- [x] Sauvegarde dans la base (User.IsMfaEnabled)
+- [ ] Tests d'intégration (à créer)
+- [ ] Documentation des recovery codes
+
+**Implémentation:**
+- Controller: `AccountController.cs` ligne 331
+- Service: `UserManager<User>` (ASP.NET Identity)
+- Endpoint: `POST /api/auth/mfa/verify-enrollment`
+
+---
+
+### US-6.3: Se Connecter avec MFA/TOTP (LOT 2 - IMPLÉMENTÉ)
+**En tant qu'** utilisateur avec MFA activée  
+**Je veux** me connecter avec email + password + code TOTP  
+**Afin d'** accéder à mon compte de manière sécurisée
+
+**Critères d'acceptation:**
+- [x] Je peux appeler POST `/api/auth/login-with-totp` avec { email, password, totpCode }
+- [x] Le système vérifie d'abord email + password
+- [x] Le système vérifie si la MFA est requise pour ce tenant/client
+- [x] Si MFA requise mais non inscrite → Retourne { mfaEnrollmentRequired: true }
+- [x] Si MFA requise et inscrite → Vérifie le code TOTP
+- [x] Le système valide le code TOTP via VerifyTwoFactorTokenAsync
+- [x] Le système crée une session SignInAsync
+- [x] Le système retourne 200 avec { message, userId, email, mfaVerified: true }
+- [x] Le système retourne 401 si le code TOTP est invalide
+- [x] Le système retourne 401 si email/password invalides
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/login-with-totp
+{
+  "email": "john.doe@acme.com",
+  "password": "SecureP@ss123",
+  "totpCode": "654321"
+}
+→ 200 OK
+{
+  "message": "Login successful",
+  "userId": "guid",
+  "email": "john.doe@acme.com",
+  "mfaVerified": true
+}
+```
+
+**DoD:**
+- [x] AccountController.LoginWithTotp() implémenté
+- [x] IMfaService.IsMfaRequiredForUserAsync() implémenté
+- [x] Vérification TOTP intégrée
+- [x] Gestion cas non-inscrit (enrollment requis)
+- [ ] Tests d'intégration (à créer)
+- [ ] Mise à jour de complete-workflow.http
+
+**Implémentation:**
+- Controller: `AccountController.cs` ligne 377
+- Service: `IMfaService.IsMfaRequiredForUserAsync()`
+- Endpoint: `POST /api/auth/login-with-totp`
+
+---
+
+### US-6.4: Désactiver la MFA (LOT 2 - NON IMPLÉMENTÉ)
+**En tant qu'** utilisateur avec MFA activée  
+**Je veux** désactiver la double authentification  
+**Afin de** simplifier ma connexion si je le souhaite
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler POST `/api/auth/mfa/disable` (authentifié)
+- [ ] Le système demande confirmation avec mot de passe
+- [ ] Le système désactive TwoFactorEnabled via UserManager
+- [ ] Le système désactive MFA sur l'entité domaine (User.DisableMFA())
+- [ ] Le système révoque tous les recovery codes
+- [ ] Le système retourne 200 avec { message: "MFA disabled" }
+- [ ] Le système retourne 400 si MFA est imposée par le client (ne peut pas désactiver)
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/mfa/disable
+Authorization: Bearer <token>
+{
+  "password": "SecureP@ss123"
+}
+→ 200 OK
+{
+  "message": "Two-factor authentication disabled successfully"
+}
+```
+
+**DoD:**
+- [ ] AccountController.DisableMfa() à implémenter
+- [ ] Vérification que MFA n'est pas imposée (Client.RequireMfa)
+- [ ] Révocation des recovery codes
+- [ ] Tests d'intégration
+
+**État:** ❌ Non implémenté - Lot 2 futur
+
+---
+
+### US-6.5: Utiliser un Recovery Code (LOT 2 - NON IMPLÉMENTÉ)
+**En tant qu'** utilisateur ayant perdu mon téléphone  
+**Je veux** utiliser un code de récupération  
+**Afin de** regagner l'accès à mon compte
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler POST `/api/auth/login-with-recovery-code` avec { email, password, recoveryCode }
+- [ ] Le système vérifie email + password
+- [ ] Le système valide le recovery code via UserManager.RedeemTwoFactorRecoveryCodeAsync
+- [ ] Le code est à usage unique (marqué comme utilisé)
+- [ ] Le système crée une session SignInAsync
+- [ ] Le système retourne 200 avec { message, userId, warningCodesRemaining }
+- [ ] Le système retourne 401 si le code est invalide ou déjà utilisé
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/login-with-recovery-code
+{
+  "email": "john.doe@acme.com",
+  "password": "SecureP@ss123",
+  "recoveryCode": "ABC123-DEF456"
+}
+→ 200 OK
+{
+  "message": "Login successful with recovery code",
+  "userId": "guid",
+  "warningCodesRemaining": 9
+}
+```
+
+**DoD:**
+- [ ] AccountController.LoginWithRecoveryCode() à implémenter
+- [ ] Validation code unique (ASP.NET Identity gère déjà)
+- [ ] Warning si moins de 3 codes restants
+- [ ] Tests d'intégration
+
+**État:** ❌ Non implémenté - Lot 2 futur
+
+---
+
+## 🔗 Epic 7: Intégration IdentityServer
+
+### US-7.1: Charger un Client Dynamiquement depuis la Base (DOIT AVOIR)
 **En tant qu'** IdentityServer  
 **Je veux** charger un client depuis CustomClientStore  
 **Afin d'** utiliser la configuration dynamique
@@ -2041,18 +2317,21 @@ sequenceDiagram
 
 ## 📋 Estimation Globale
 
-| Epic | User Stories | Story Points | Priorité |
-|------|--------------|--------------|----------|
-| Epic 1 - Clients | 5 US | 13 | DOIT AVOIR |
-| Epic 2 - Tenants | 8 US | 21 | DOIT AVOIR |
-| Epic 3 - Utilisateurs | 5 US | 13 | DOIT AVOIR |
-| Epic 4 - Onboarding | 5 US | 21 | DOIT AVOIR |
-| Epic 5 - Authentification | 6 US | 21 | DOIT AVOIR |
-| Epic 6 - IdentityServer | 7 US | 34 | DOIT AVOIR |
-| Epic 7 - Notifications | 1 US | 5 | DOIT AVOIR |
-| Epic 8 - Administration | 3 US | 8 | DEVRAIT AVOIR |
-| Epic 9 - Tests | 3 US | 21 | DOIT AVOIR |
-| **TOTAL** | **43 US** | **157 SP** | **~6 sprints** |
+| Epic | User Stories | Story Points | Priorité | LOT |
+|------|--------------|--------------|----------|-----|
+| Epic 1 - Clients | 5 US | 13 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 2 - Tenants | 8 US | 21 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 3 - Utilisateurs | 5 US | 13 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 4 - Onboarding | 5 US | 21 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 5 - Authentification | 6 US | 21 | DOIT AVOIR | LOT 1 ✅ |
+| **Epic 6 - MFA/TOTP** | **5 US** | **13** | **DEVRAIT AVOIR** | **LOT 2 🔄** |
+| Epic 7 - IdentityServer | 7 US | 34 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 8 - Notifications | 1 US | 5 | DOIT AVOIR | LOT 1 ✅ |
+| Epic 9 - Administration | 3 US | 8 | DEVRAIT AVOIR | LOT 3 📋 |
+| Epic 10 - Tests | 3 US | 21 | DOIT AVOIR | LOT 1 ✅ |
+| **TOTAL LOT 1** | **38 US** | **144 SP** | **~5-6 sprints** | ✅ |
+| **TOTAL LOT 2 (MFA)** | **5 US** | **13 SP** | **~1 sprint** | 🔄 |
+| **TOTAL PROJET** | **48 US** | **170 SP** | **~7 sprints** | - |
 
 ---
 
