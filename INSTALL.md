@@ -238,21 +238,126 @@ Vous devriez voir le document de découverte OIDC avec tous les endpoints Identi
 
 ## 🔐 Configuration IdentityServer
 
-### 1. Clés de signature
+### 1. Clés de signature (Certificats X.509)
 
-Les clés de signature sont générées automatiquement au premier démarrage dans `src/Johodp.Api/keys/`.
+#### Développement
 
-**Production** : Utiliser des clés persistées et rotatives.
+En développement, IdentityServer génère automatiquement une clé temporaire au démarrage. Aucune action requise.
 
-```bash
-# Générer une nouvelle clé manuellement
-cd tools/KeyGenerator
-dotnet run -- generate --output ../../src/Johodp.Api/keys
+#### Production
 
-# Voir tools/KeyGenerator/README.md pour plus d'options
+##### Étape 1 : Générer le certificat de signature
+
+**Option A : Avec dotnet dev-certs (rapide, pour staging)**
+```powershell
+# Créer le dossier des clés
+mkdir src/Johodp.Api/keys
+
+# Générer le certificat
+dotnet dev-certs https -ep src/Johodp.Api/keys/signing-key.pfx -p "VotreMotDePasseSecurise123!"
+
+# Vérifier la création
+dir src/Johodp.Api/keys/signing-key.pfx
 ```
 
-**Rotation automatique** : Voir `CERTIFICATE_ROTATION.md` et `tools/rotate-certificate.ps1`.
+**Option B : Avec OpenSSL (recommandé pour production)**
+```bash
+# Générer la clé privée et le certificat
+openssl req -x509 -newkey rsa:4096 \
+    -keyout temp-key.pem \
+    -out temp-cert.pem \
+    -days 365 \
+    -nodes \
+    -subj "/CN=Johodp IdentityServer/O=VotreOrganisation/C=FR"
+
+# Convertir en format PFX
+openssl pkcs12 -export \
+    -out src/Johodp.Api/keys/signing-key.pfx \
+    -inkey temp-key.pem \
+    -in temp-cert.pem \
+    -passout pass:VotreMotDePasseSecurise123!
+
+# Nettoyer les fichiers temporaires
+rm temp-key.pem temp-cert.pem
+```
+
+##### Étape 2 : Configurer les permissions
+
+```powershell
+# Windows - Restreindre l'accès au fichier
+icacls src/Johodp.Api/keys/signing-key.pfx /inheritance:r
+icacls src/Johodp.Api/keys/signing-key.pfx /grant:r "$env:USERNAME:(R)"
+```
+
+```bash
+# Linux/macOS - Restreindre l'accès au fichier
+chmod 600 src/Johodp.Api/keys/signing-key.pfx
+```
+
+##### Étape 3 : Configurer l'application
+
+**Créer/Modifier `appsettings.Production.json` :**
+```json
+{
+  "IdentityServer": {
+    "SigningMethod": "Certificate",
+    "SigningKeyPath": "keys/signing-key.pfx",
+    "SigningKeyPassword": "VotreMotDePasseSecurise123!"
+  }
+}
+```
+
+⚠️ **Important** : En production, ne stockez JAMAIS le mot de passe en clair !
+
+**Utiliser une variable d'environnement :**
+```powershell
+# Windows
+$env:IDENTITYSERVER_SIGNING_PASSWORD="VotreMotDePasseSecurise123!"
+
+# Linux/macOS
+export IDENTITYSERVER_SIGNING_PASSWORD="VotreMotDePasseSecurise123!"
+```
+
+**Puis dans `appsettings.Production.json` :**
+```json
+{
+  "IdentityServer": {
+    "SigningMethod": "Certificate",
+    "SigningKeyPath": "keys/signing-key.pfx",
+    "SigningKeyPassword": ""
+  }
+}
+```
+
+Le mot de passe sera lu depuis la variable d'environnement `IDENTITYSERVER_SIGNING_PASSWORD`.
+
+##### Étape 4 : Exclure du contrôle de version
+
+**Vérifier que `.gitignore` contient :**
+```
+# Signing keys
+**/keys/*.pfx
+**/keys/*.jwk
+```
+
+##### Étape 5 : Tester la configuration
+
+```powershell
+# Démarrer l'application
+dotnet run --project src/Johodp.Api --launch-profile https
+
+# Dans les logs, vous devriez voir :
+# "Using certificate signing credential from: keys/signing-key.pfx"
+```
+
+**Vérifier le endpoint de découverte :**
+```powershell
+curl https://localhost:5001/.well-known/openid-configuration
+```
+
+Le JSON retourné doit contenir `jwks_uri` pointant vers les clés publiques.
+
+**Rotation automatique** : Voir `CERTIFICATE_ROTATION.md` pour la rotation sans coupure.
 
 ### 2. Configuration des clients OAuth2
 

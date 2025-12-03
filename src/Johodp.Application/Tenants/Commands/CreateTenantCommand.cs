@@ -4,7 +4,7 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
 using Johodp.Application.Common.Handlers;
-using Johodp.Application.Tenants.DTOs;
+using Johodp.Contracts.Tenants;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 using Microsoft.Extensions.Logging;

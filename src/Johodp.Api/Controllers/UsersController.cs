@@ -3,6 +3,7 @@ namespace Johodp.Api.Controllers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Johodp.Contracts.Users;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Users.Commands;
 using Johodp.Application.Users.Queries;
@@ -76,7 +77,7 @@ public class UsersController : ControllerBase
     /// Get user by ID
     /// </summary>
     [HttpGet("{userId}")]
-    public async Task<ActionResult<Johodp.Application.Users.DTOs.UserDto>> GetUser(Guid userId)
+    public async Task<ActionResult<UserDto>> GetUser(Guid userId)
     {
         var result = await _sender.Send(new GetUserByIdQuery(userId));
         if (result.IsSuccess)

@@ -2,6 +2,7 @@ namespace Johodp.Application.Users.Commands;
 
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Results;
+using Johodp.Contracts.Users;
 using Johodp.Domain.Tenants.ValueObjects;
 
 public class RegisterUserCommand : IRequest<Result<RegisterUserResponse>>
@@ -27,10 +28,4 @@ public class RegisterUserCommand : IRequest<Result<RegisterUserResponse>>
     
     public bool CreateAsPending { get; set; } = false;
     public string? Password { get; set; }
-}
-
-public class RegisterUserResponse
-{
-    public Guid UserId { get; set; }
-    public string Email { get; set; } = null!;
 }

@@ -1,5 +1,8 @@
-namespace Johodp.Application.Users.DTOs;
+namespace Johodp.Contracts.Users;
 
+/// <summary>
+/// User data transfer object
+/// </summary>
 public class UserDto
 {
     public Guid Id { get; set; }
@@ -9,4 +12,13 @@ public class UserDto
     public bool EmailConfirmed { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Response after user registration
+/// </summary>
+public class RegisterUserResponse
+{
+    public Guid UserId { get; set; }
+    public string Email { get; set; } = null!;
 }

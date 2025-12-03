@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.CustomConfigurations.Commands;
-using Johodp.Application.CustomConfigurations.DTOs;
+using Johodp.Contracts.CustomConfigurations;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 using Johodp.Application.Common.Results;
 using Johodp.Api.Extensions;

@@ -60,11 +60,10 @@ public static class ServiceCollectionExtensions
         services.AddMediator(typeof(Johodp.Application.Users.Commands.RegisterUserCommand).Assembly);
 
         // ====================================================================
-        // DOMAIN EVENTS (Event-Driven Architecture)
+        // DOMAIN EVENTS (Event-Driven Architecture - Simple Event Aggregator)
         // ====================================================================
-        services.AddSingleton<Johodp.Application.Common.Events.IEventBus, Johodp.Infrastructure.Services.ChannelEventBus>();
+        services.AddScoped<Johodp.Application.Common.Events.IEventBus, Johodp.Infrastructure.Services.EventAggregator>();
         services.AddScoped<IDomainEventPublisher, DomainEventPublisher>();
-        services.AddHostedService<Johodp.Infrastructure.Services.DomainEventProcessor>();
         
         // Event Handlers
         services.AddScoped<Johodp.Application.Common.Events.IEventHandler<Johodp.Domain.Users.Events.UserPendingActivationEvent>, 

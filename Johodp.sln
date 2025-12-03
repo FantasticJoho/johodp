@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31919.166
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -10,7 +10,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Johodp.Infrastructure", "sr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Johodp.Api", "src\Johodp.Api\Johodp.Api.csproj", "{D4E5F6A7-B8C9-0123-DEF0-234567890123}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Johodp.Tests", "tests\Johodp.Tests\Johodp.Tests.csproj", "{E5F6A7B8-C9D0-1234-EF01-345678901234}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{E50F9F6D-8800-4BF1-8980-75D618EE1C82}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Johodp.Contracts", "src\Johodp.Contracts\Johodp.Contracts.csproj", "{A949C223-4B38-47A4-8972-33E00A87B03D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -34,9 +36,12 @@ Global
 		{D4E5F6A7-B8C9-0123-DEF0-234567890123}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D4E5F6A7-B8C9-0123-DEF0-234567890123}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D4E5F6A7-B8C9-0123-DEF0-234567890123}.Release|Any CPU.Build.0 = Release|Any CPU
-		{E5F6A7B8-C9D0-1234-EF01-345678901234}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{E5F6A7B8-C9D0-1234-EF01-345678901234}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{E5F6A7B8-C9D0-1234-EF01-345678901234}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{E5F6A7B8-C9D0-1234-EF01-345678901234}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A949C223-4B38-47A4-8972-33E00A87B03D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A949C223-4B38-47A4-8972-33E00A87B03D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A949C223-4B38-47A4-8972-33E00A87B03D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A949C223-4B38-47A4-8972-33E00A87B03D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A949C223-4B38-47A4-8972-33E00A87B03D} = {E50F9F6D-8800-4BF1-8980-75D618EE1C82}
 	EndGlobalSection
 EndGlobal

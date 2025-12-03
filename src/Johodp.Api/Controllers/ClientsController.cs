@@ -6,7 +6,7 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Clients.Commands;
 using Johodp.Application.Clients.Queries;
-using Johodp.Application.Clients.DTOs;
+using Johodp.Contracts.Clients;
 using Johodp.Domain.Clients.ValueObjects;
 using Johodp.Application.Common.Results;
 using Johodp.Api.Extensions;

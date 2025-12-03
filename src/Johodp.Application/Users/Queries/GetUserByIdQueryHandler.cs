@@ -1,6 +1,6 @@
 namespace Johodp.Application.Users.Queries;
 
-using Johodp.Application.Users.DTOs;
+using Johodp.Contracts.Users;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Handlers;
 using Johodp.Domain.Users.ValueObjects;

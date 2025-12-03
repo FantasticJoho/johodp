@@ -1,5 +1,6 @@
 namespace Johodp.Application.Users.Commands;
 
+using Johodp.Contracts.Users;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Users.ValueObjects;
 using Johodp.Application.Common.Interfaces;

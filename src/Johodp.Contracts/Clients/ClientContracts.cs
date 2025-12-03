@@ -1,5 +1,8 @@
-namespace Johodp.Application.Clients.DTOs;
+namespace Johodp.Contracts.Clients;
 
+/// <summary>
+/// OAuth2/OIDC Client data transfer object
+/// </summary>
 public class ClientDto
 {
     public Guid Id { get; set; }
@@ -13,6 +16,9 @@ public class ClientDto
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// DTO to create a new OAuth2/OIDC client
+/// </summary>
 public class CreateClientDto
 {
     public string ClientName { get; set; } = string.Empty;
@@ -21,6 +27,9 @@ public class CreateClientDto
     public bool RequireMfa { get; set; } = false;
 }
 
+/// <summary>
+/// DTO to update an existing OAuth2/OIDC client
+/// </summary>
 public class UpdateClientDto
 {
     public List<string>? AllowedScopes { get; set; }

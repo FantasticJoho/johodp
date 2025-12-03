@@ -1,6 +1,6 @@
 namespace Johodp.Application.Clients.Queries;
 
-using Johodp.Application.Clients.DTOs;
+using Johodp.Contracts.Clients;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 

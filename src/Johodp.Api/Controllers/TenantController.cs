@@ -6,7 +6,7 @@ using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Common.Mediator;
 using Johodp.Application.Tenants.Commands;
 using Johodp.Application.Tenants.Queries;
-using Johodp.Application.Tenants.DTOs;
+using Johodp.Contracts.Tenants;
 using Johodp.Application.CustomConfigurations.Queries;
 using Johodp.Application.Common.Results;
 using Johodp.Api.Extensions;
