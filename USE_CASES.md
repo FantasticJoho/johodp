@@ -508,7 +508,58 @@ L'utilisateur doit pouvoir se connecter une seule fois et accéder à toutes les
 
 ---
 
-### Besoin 6 : Isoler les utilisateurs par tenant (multi-tenancy)
+### Besoin 6 : Sécuriser les comptes avec une authentification multi-facteurs (MFA)
+
+**Contexte:**
+Certaines applications traitent des données sensibles (financières, médicales, RH) et doivent renforcer la sécurité des comptes utilisateurs au-delà du simple mot de passe.
+
+**Besoin:**
+- Les clients doivent pouvoir **imposer** l'authentification multi-facteurs (MFA) à leurs utilisateurs
+- Les utilisateurs doivent pouvoir configurer un code TOTP (Time-based One-Time Password) avec une application comme Google Authenticator ou Microsoft Authenticator
+- Les utilisateurs ayant perdu leur authenticator doivent pouvoir retrouver l'accès à leur compte de manière sécurisée
+
+**Solution:**
+Johodp implémente 3 parcours MFA :
+
+**Parcours 1 - Onboarding MFA (première configuration)** :
+- Lorsqu'un utilisateur se connecte pour la première fois et que son client impose la MFA (`Client.RequireMfa = true`), le système le redirige automatiquement vers l'enrollment MFA
+- L'utilisateur scanne un QR code avec son application authenticator
+- L'utilisateur entre son premier code TOTP à 6 chiffres pour activer la MFA
+- Le système génère 10 codes de récupération à usage unique
+- L'utilisateur peut ensuite se connecter normalement
+
+**Parcours 2 - Login avec TOTP (utilisateurs existants)** :
+- Un utilisateur avec MFA activée se connecte avec email + password
+- Le système crée un cookie sécurisé "pending_mfa" (valide 5 minutes)
+- L'utilisateur est redirigé vers une page demandant son code TOTP
+- L'utilisateur ouvre son application authenticator et entre le code à 6 chiffres
+- Le système valide le code et génère un JWT token
+- L'utilisateur est connecté avec le claim `mfa_verified = true`
+
+**Parcours 3 - Lost Device Recovery (perte d'authenticator)** :
+- Un utilisateur bloqué à l'étape MFA clique sur "J'ai perdu mon authenticator"
+- Le système envoie un email avec un lien de vérification (validité 1 heure)
+- L'utilisateur clique sur le lien et répond à des questions de sécurité (optionnel)
+- Après vérification d'identité réussie, le système désactive temporairement la MFA
+- Au prochain login, l'utilisateur doit configurer un nouveau TOTP (retour au Parcours 1)
+
+**Bénéfices:**
+- **Sécurité renforcée** : protection contre le vol de mots de passe
+- **Conformité** : répond aux exigences de sécurité (RGPD, ISO 27001, SOC2)
+- **Flexibilité** : MFA imposée ou optionnelle selon les besoins du client
+- **Récupération sécurisée** : processus de lost device sans intervention support
+- **Standard TOTP (RFC 6238)** : compatible avec toutes les applications authenticator du marché
+
+**Règles métier:**
+- Si `Client.RequireMfa = true` et `User.MFAEnabled = false` → L'utilisateur **ne peut pas se connecter** sans configurer MFA
+- Si `Client.RequireMfa = false` → La MFA est optionnelle, l'utilisateur peut l'activer/désactiver
+- Les codes de récupération sont à usage unique (10 codes générés à l'activation)
+- La réinitialisation MFA nécessite une vérification d'identité par email
+- Le cookie "pending_mfa" expire après 5 minutes pour limiter les attaques
+
+---
+
+### Besoin 7 : Isoler les utilisateurs par tenant (multi-tenancy)
 
 **Contexte:**
 Une application tierce a plusieurs clients finaux qui ne doivent pas voir les données des autres.
@@ -530,7 +581,7 @@ Un utilisateur ne doit pouvoir se connecter qu'aux tenants auxquels il a explici
 
 ---
 
-### Besoin 7 : Personnaliser l'apparence des pages d'authentification
+### Besoin 8 : Personnaliser l'apparence des pages d'authentification
 
 **Contexte:**
 Chaque client final de l'application tierce veut son propre branding (logo, couleurs, charte graphique).
@@ -550,7 +601,7 @@ Les pages de login, inscription et activation doivent afficher le branding du te
 
 ---
 
-### Besoin 8 : Gérer les paramètres régionaux par tenant
+### Besoin 9 : Gérer les paramètres régionaux par tenant
 
 **Contexte:**
 Les clients finaux sont dans différents pays avec des langues, fuseaux horaires et devises différents.
@@ -570,7 +621,7 @@ Chaque tenant doit pouvoir configurer ses paramètres régionaux (langue, timezo
 
 ---
 
-### Besoin 9 : Renouveler les sessions utilisateur de manière transparente
+### Besoin 10 : Renouveler les sessions utilisateur de manière transparente
 
 **Contexte:**
 Un utilisateur connecté ne doit pas être déconnecté brusquement après expiration du token.
@@ -590,7 +641,7 @@ L'application doit pouvoir renouveler automatiquement les tokens sans interventi
 
 ---
 
-### Besoin 10 : Authentifier l'application tierce elle-même (machine-to-machine)
+### Besoin 11 : Authentifier l'application tierce elle-même (machine-to-machine)
 
 **Contexte:**
 L'application tierce doit pouvoir appeler les APIs Johodp pour créer des clients, des tenants et des utilisateurs.
@@ -608,6 +659,57 @@ L'application tierce doit s'authentifier de manière sécurisée sans interactio
 - Sécurité : pas de mot de passe utilisateur, pas de clé API statique
 - Standard OAuth2
 - Traçabilité des actions (quel client a fait quoi)
+
+---
+
+# PARTIE 2 : SPÉCIFICATIONS TECHNIQUES
+
+**Contexte:**
+Certaines applications traitent des données sensibles (financières, médicales, RH) et doivent renforcer la sécurité des comptes utilisateurs au-delà du simple mot de passe.
+
+**Besoin:**
+- Les clients doivent pouvoir **imposer** l'authentification multi-facteurs (MFA) à leurs utilisateurs
+- Les utilisateurs doivent pouvoir configurer un code TOTP (Time-based One-Time Password) avec une application comme Google Authenticator ou Microsoft Authenticator
+- Les utilisateurs ayant perdu leur authenticator doivent pouvoir retrouver l'accès à leur compte de manière sécurisée
+
+**Solution:**
+Johodp implémente 3 parcours MFA :
+
+**Parcours 1 - Onboarding MFA (première configuration)** :
+- Lorsqu'un utilisateur se connecte pour la première fois et que son client impose la MFA (`Client.RequireMfa = true`), le système le redirige automatiquement vers l'enrollment MFA
+- L'utilisateur scanne un QR code avec son application authenticator
+- L'utilisateur entre son premier code TOTP à 6 chiffres pour activer la MFA
+- Le système génère 10 codes de récupération à usage unique
+- L'utilisateur peut ensuite se connecter normalement
+
+**Parcours 2 - Login avec TOTP (utilisateurs existants)** :
+- Un utilisateur avec MFA activée se connecte avec email + password
+- Le système crée un cookie sécurisé "pending_mfa" (valide 5 minutes)
+- L'utilisateur est redirigé vers une page demandant son code TOTP
+- L'utilisateur ouvre son application authenticator et entre le code à 6 chiffres
+- Le système valide le code et génère un JWT token
+- L'utilisateur est connecté avec le claim `mfa_verified = true`
+
+**Parcours 3 - Lost Device Recovery (perte d'authenticator)** :
+- Un utilisateur bloqué à l'étape MFA clique sur "J'ai perdu mon authenticator"
+- Le système envoie un email avec un lien de vérification (validité 1 heure)
+- L'utilisateur clique sur le lien et répond à des questions de sécurité (optionnel)
+- Après vérification d'identité réussie, le système désactive temporairement la MFA
+- Au prochain login, l'utilisateur doit configurer un nouveau TOTP (retour au Parcours 1)
+
+**Bénéfices:**
+- **Sécurité renforcée** : protection contre le vol de mots de passe
+- **Conformité** : répond aux exigences de sécurité (RGPD, ISO 27001, SOC2)
+- **Flexibilité** : MFA imposée ou optionnelle selon les besoins du client
+- **Récupération sécurisée** : processus de lost device sans intervention support
+- **Standard TOTP (RFC 6238)** : compatible avec toutes les applications authenticator du marché
+
+**Règles métier:**
+- Si `Client.RequireMfa = true` et `User.MFAEnabled = false` → L'utilisateur **ne peut pas se connecter** sans configurer MFA
+- Si `Client.RequireMfa = false` → La MFA est optionnelle, l'utilisateur peut l'activer/désactiver
+- Les codes de récupération sont à usage unique (10 codes générés à l'activation)
+- La réinitialisation MFA nécessite une vérification d'identité par email
+- Le cookie "pending_mfa" expire après 5 minutes pour limiter les attaques
 
 ---
 
@@ -2118,6 +2220,339 @@ sequenceDiagram
    Store->>Store: Agréger + dédupliquer
    Store-->>IdP: Duende Client configuré
 ```
+
+---
+
+# CHAPITRE 13 : AUTHENTIFICATION MULTI-FACTEURS (MFA/TOTP)
+
+## UC-13.1 : Onboarding MFA (First-time Setup)
+
+### Objectif
+Permettre à un utilisateur d'activer l'authentification multi-facteurs (MFA) via TOTP lors de sa première connexion si le client l'exige.
+
+### Acteurs
+- **Utilisateur** : User final qui doit configurer MFA
+- **Application SPA** : Frontend qui affiche le QR code
+- **Johodp IdP** : Backend qui gère l'enrollment
+- **Authenticator App** : Google Authenticator, Microsoft Authenticator, etc.
+
+### Préconditions
+- Client.RequireMfa = true
+- User.MFAEnabled = false
+- User a des credentials valides (email + password)
+
+### Flux Principal
+1. User se connecte → POST /login (email + password)
+2. Credentials valides → Client.RequireMfa = true → User.MFAEnabled = false
+3. System redirige automatiquement vers POST /mfa/enroll
+4. System génère secret TOTP (RFC 6238)
+5. System retourne QR code (data URI) + manualEntryKey
+6. User scanne QR code avec authenticator app
+7. User entre code TOTP (6 chiffres) → POST /mfa/verify-enrollment
+8. System valide code TOTP
+9. System active MFA : User.MFAEnabled = true
+10. System génère 10 recovery codes
+11. System retourne JWT token
+12. User connecté ✅
+
+### Règles de Gestion
+- **RG-MFA-01** : Le secret TOTP est unique par utilisateur
+- **RG-MFA-02** : Le QR code encode : `otpauth://totp/Johodp:{email}?secret={secret}&issuer=Johodp`
+- **RG-MFA-03** : Les recovery codes sont des chaînes alphanumériques (format: ABC123-DEF456)
+- **RG-MFA-04** : L'enrollment doit être complété en une seule session (pas de sauvegarde partielle)
+- **RG-MFA-05** : Si MFA obligatoire et non configuré, login bloqué
+
+### Endpoints
+```
+POST /api/auth/mfa/enroll
+GET /api/auth/mfa/status
+POST /api/auth/mfa/verify-enrollment
+```
+
+### Scénarios Alternatifs
+- **Alt-1** : Code TOTP invalide → 400 Bad Request "Invalid TOTP code"
+- **Alt-2** : User annule l'enrollment → Reste bloqué (doit recommencer)
+
+---
+
+## UC-13.2 : Login avec TOTP (Existing Users)
+
+### Objectif
+Permettre à un utilisateur existant avec MFA activé de se connecter en fournissant son code TOTP.
+
+### Acteurs
+- **Utilisateur** : User avec MFA déjà configuré
+- **Application SPA** : Frontend qui affiche le formulaire TOTP
+- **Johodp IdP** : Backend qui valide le code
+
+### Préconditions
+- Client.RequireMfa = true
+- User.MFAEnabled = true
+- User a des credentials valides (email + password)
+
+### Flux Principal
+1. User se connecte → POST /login (email + password)
+2. Credentials valides → Client.RequireMfa = true → User.MFAEnabled = true
+3. System crée cookie "pending_mfa" (UserId + ClientId, 5 min expiration)
+4. System redirige vers /mfa-verification (formulaire TOTP)
+5. User entre code TOTP (6 chiffres) de son authenticator app
+6. User soumet → POST /mfa-verify (totpCode + cookie)
+7. System valide code TOTP via UserManager
+8. System génère JWT token
+9. System supprime cookie "pending_mfa"
+10. User connecté ✅
+
+### Règles de Gestion
+- **RG-MFA-06** : Le cookie "pending_mfa" expire après 5 minutes
+- **RG-MFA-07** : Le code TOTP est valide pour une fenêtre de ±30 secondes
+- **RG-MFA-08** : Maximum 5 tentatives échouées → blocage temporaire (rate limiting)
+- **RG-MFA-09** : Le cookie doit être HttpOnly + Secure + SameSite=Strict
+- **RG-MFA-10** : JWT inclut claim "mfa_verified"="true" après validation
+
+### Endpoints
+```
+POST /api/auth/login (génère cookie)
+POST /api/auth/mfa-verify (valide TOTP)
+```
+
+### Scénarios Alternatifs
+- **Alt-1** : Code TOTP invalide → 400 Bad Request "Invalid TOTP code, please try again"
+- **Alt-2** : Cookie expiré → 401 Unauthorized "Session expired, please log in again"
+- **Alt-3** : User clique "Lost Device" → Redirection vers UC-13.3
+
+---
+
+## UC-13.3 : Lost Device Recovery
+
+### Objectif
+Permettre à un utilisateur ayant perdu son authenticator de réinitialiser son MFA via vérification d'identité.
+
+### Acteurs
+- **Utilisateur** : User qui a perdu son téléphone/authenticator
+- **Johodp IdP** : Backend qui gère la vérification
+- **Email Service** : Service d'envoi d'emails
+
+### Préconditions
+- User.MFAEnabled = true
+- User n'a pas accès à son code TOTP
+- User a accès à son email
+
+### Flux Principal
+1. User tente de se connecter → Bloqué à l'étape MFA
+2. User clique "J'ai perdu mon authenticator"
+3. User entre son email → POST /mfa/lost-device
+4. System génère token de vérification (1h expiration)
+5. System envoie email avec lien de vérification
+6. User clique lien → GET /mfa/verify-identity?token=xxx
+7. System affiche formulaire de vérification
+8. User répond à questions de sécurité (optionnel)
+9. User soumet → POST /mfa/verify-identity (token + réponses)
+10. System valide identité
+11. System génère token "verified_identity" (30 min)
+12. User soumet → POST /mfa/reset-enrollment (verified_token)
+13. System désactive MFA : User.MFAEnabled = false
+14. System invalide tous les recovery codes
+15. System envoie email de confirmation "MFA réinitialisé"
+16. User se reconnecte → POST /login (sans TOTP)
+17. System force re-enrollment → Redirection vers UC-13.1
+18. User configure nouveau MFA avec nouveau téléphone
+19. User connecté ✅
+
+### Règles de Gestion
+- **RG-MFA-11** : Le lien de vérification expire après 1 heure
+- **RG-MFA-12** : Le token "verified_identity" expire après 30 minutes
+- **RG-MFA-13** : Les questions de sécurité sont optionnelles mais recommandées
+- **RG-MFA-14** : L'email de vérification ne révèle pas si l'email existe (sécurité)
+- **RG-MFA-15** : Maximum 3 tentatives de vérification → blocage temporaire
+- **RG-MFA-16** : Après reset, re-enrollment obligatoire avant accès complet
+- **RG-MFA-17** : Audit log complet de toutes les actions (lost-device, verify, reset)
+
+### Endpoints
+```
+POST /api/auth/mfa/lost-device
+POST /api/auth/mfa/verify-identity
+POST /api/auth/mfa/reset-enrollment
+```
+
+### Scénarios Alternatifs
+- **Alt-1** : Token expiré → 401 Unauthorized "Token expired, request a new one"
+- **Alt-2** : Questions de sécurité incorrectes → 401 Unauthorized "Wrong answers"
+- **Alt-3** : Email service down → 500 Internal Server Error (retry automatique)
+
+---
+
+## UC-13.4 : Désactivation MFA (Optionnel)
+
+### Objectif
+Permettre à un utilisateur de désactiver volontairement son MFA si le client ne l'exige pas.
+
+### Acteurs
+- **Utilisateur** : User authentifié qui veut désactiver MFA
+- **Johodp IdP** : Backend qui gère la désactivation
+
+### Préconditions
+- User.MFAEnabled = true
+- Client.RequireMfa = false (MFA optionnel)
+- User authentifié avec JWT valide
+
+### Flux Principal
+1. User accède à /settings/mfa
+2. User clique "Désactiver MFA"
+3. User entre son password (confirmation) → POST /mfa/disable
+4. System valide password
+5. System désactive MFA : User.MFAEnabled = false
+6. System invalide recovery codes
+7. System envoie email d'alerte sécurité
+8. System retourne confirmation
+9. MFA désactivé ✅
+
+### Règles de Gestion
+- **RG-MFA-18** : Si Client.RequireMfa = true → Désactivation INTERDITE (409 Conflict)
+- **RG-MFA-19** : Confirmation password obligatoire
+- **RG-MFA-20** : Email d'alerte sécurité envoyé systématiquement
+- **RG-MFA-21** : Audit log de la désactivation avec raison
+
+### Endpoints
+```
+POST /api/auth/mfa/disable
+GET /api/auth/mfa/status
+```
+
+### Scénarios Alternatifs
+- **Alt-1** : MFA obligatoire → 409 Conflict "Cannot disable MFA (required by organization)"
+- **Alt-2** : Password invalide → 401 Unauthorized "Invalid password"
+
+---
+
+## Diagrammes de Séquence MFA
+
+### UC-13.1 : Onboarding MFA
+```mermaid
+sequenceDiagram
+   participant U as User
+   participant SPA as Application SPA
+   participant IdP as Johodp IdP
+   participant DB as Database
+   participant Auth as Authenticator App
+
+   U->>SPA: POST /login (email + password)
+   SPA->>IdP: Authentifier
+   IdP->>DB: Vérifier credentials
+   DB-->>IdP: ✅ User valide
+   IdP->>IdP: Client.RequireMfa = true<br/>User.MFAEnabled = false
+   IdP-->>SPA: 302 Redirect /mfa/enroll
+   
+   SPA->>IdP: POST /mfa/enroll
+   IdP->>IdP: Générer secret TOTP
+   IdP->>IdP: Générer QR code URI
+   IdP-->>SPA: 200 OK { qrCodeUri, manualEntryKey }
+   SPA-->>U: Afficher QR code
+   
+   U->>Auth: Scanner QR code
+   Auth-->>U: Code TOTP (123456)
+   
+   U->>SPA: Entrer code TOTP
+   SPA->>IdP: POST /mfa/verify-enrollment { totpCode }
+   IdP->>IdP: Valider code TOTP
+   IdP->>DB: User.MFAEnabled = true
+   IdP->>IdP: Générer 10 recovery codes
+   IdP-->>SPA: 200 OK { mfaEnabled, recoveryCodes[], jwt }
+   SPA-->>U: ✅ MFA activé + recovery codes
+```
+
+### UC-13.2 : Login avec TOTP
+```mermaid
+sequenceDiagram
+   participant U as User
+   participant SPA as Application SPA
+   participant IdP as Johodp IdP
+   participant DB as Database
+   participant Auth as Authenticator App
+
+   U->>SPA: POST /login (email + password)
+   SPA->>IdP: Authentifier
+   IdP->>DB: Vérifier credentials
+   DB-->>IdP: ✅ User valide
+   IdP->>IdP: Client.RequireMfa = true<br/>User.MFAEnabled = true
+   IdP->>IdP: Créer cookie "pending_mfa"<br/>(5 min expiration)
+   IdP-->>SPA: 302 Redirect /mfa-verification + cookie
+   
+   SPA-->>U: Formulaire TOTP
+   U->>Auth: Ouvrir app
+   Auth-->>U: Code TOTP (123456)
+   
+   U->>SPA: Entrer code TOTP
+   SPA->>IdP: POST /mfa-verify { totpCode } + cookie
+   IdP->>IdP: Lire cookie "pending_mfa"
+   IdP->>DB: Charger User
+   IdP->>IdP: Valider code TOTP
+   IdP->>IdP: Générer JWT (claim: mfa_verified=true)
+   IdP->>IdP: Supprimer cookie
+   IdP-->>SPA: 200 OK { jwt }
+   SPA-->>U: ✅ Connecté
+```
+
+### UC-13.3 : Lost Device Recovery
+```mermaid
+sequenceDiagram
+   participant U as User
+   participant SPA as Application SPA
+   participant IdP as Johodp IdP
+   participant DB as Database
+   participant Email as Email Service
+
+   U->>SPA: Clic "J'ai perdu mon authenticator"
+   U->>SPA: Entrer email
+   SPA->>IdP: POST /mfa/lost-device { email }
+   IdP->>DB: Chercher User par email
+   DB-->>IdP: User trouvé
+   IdP->>IdP: Générer token vérification (1h)
+   IdP->>Email: Envoyer email avec lien
+   Email-->>U: 📧 Email reçu
+   IdP-->>SPA: 200 OK "Check your email"
+   
+   U->>SPA: Cliquer lien email
+   SPA->>IdP: GET /verify-identity?token=xxx
+   IdP-->>SPA: Formulaire vérification
+   
+   U->>SPA: Répondre questions sécurité
+   SPA->>IdP: POST /mfa/verify-identity { token, answers }
+   IdP->>IdP: Valider token (1h)
+   IdP->>IdP: Valider réponses
+   IdP->>IdP: Générer token "verified_identity" (30 min)
+   IdP-->>SPA: 200 OK { verifiedToken }
+   
+   SPA->>IdP: POST /mfa/reset-enrollment { verifiedToken }
+   IdP->>IdP: Valider verifiedToken
+   IdP->>DB: User.MFAEnabled = false
+   IdP->>DB: Invalider recovery codes
+   IdP->>Email: Email confirmation
+   Email-->>U: 📧 "MFA réinitialisé"
+   IdP-->>SPA: 200 OK "MFA disabled"
+   
+   U->>SPA: POST /login (email + password)
+   SPA->>IdP: Authentifier
+   IdP-->>SPA: 302 Redirect /mfa/enroll (UC-13.1)
+   SPA-->>U: Re-enrollment obligatoire
+```
+
+---
+
+## États Utilisateur MFA
+
+```mermaid
+stateDiagram-v2
+   [*] --> Active : User activé
+   Active --> MfaEnrollmentRequired : Client.RequireMfa = true<br/>User.MFAEnabled = false
+   MfaEnrollmentRequired --> MfaEnabled : POST /mfa/verify-enrollment
+   MfaEnabled --> MfaEnabled : Login normal avec TOTP
+   MfaEnabled --> MfaResetPending : POST /mfa/lost-device
+   MfaResetPending --> MfaIdentityVerified : POST /mfa/verify-identity
+   MfaIdentityVerified --> MfaEnrollmentRequired : POST /mfa/reset-enrollment
+   MfaEnabled --> Active : POST /mfa/disable<br/>(si Client.RequireMfa = false)
+```
+
+---
 
 ### Vue d'État Utilisateur (Pending → Active)
 ```mermaid

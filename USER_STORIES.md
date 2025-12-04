@@ -1275,33 +1275,60 @@ Content-Type: application/json
 
 ## 🔐 Epic 6: Authentification Multi-Facteurs (MFA/TOTP) - 🔄 LOT 2
 
-> **🚨 LOT 2** - Ces fonctionnalités sont IMPLÉMENTÉES mais considérées comme une phase 2.  
-> Le code est en production, mais la documentation et les tests sont à compléter.
+> **🚨 LOT 2** - Authentification multi-facteurs via TOTP (RFC 6238) avec 3 parcours principaux.  
+> Voir documentation complète dans `MFA_TOTP_MISSING.md` et `USE_CASES.md` (CHAPITRE 13).
 
-### US-6.1: Inscrire un Authenticator TOTP (LOT 2 - IMPLÉMENTÉ)
+### 📋 Récapitulatif des 3 Parcours MFA
+
+| Parcours | Objectif | Endpoints | État |
+|----------|----------|-----------|------|
+| **Parcours 1: Onboarding MFA** | Configuration initiale TOTP | `/mfa/enroll`, `/mfa/verify-enrollment` | 🔄 Partiel |
+| **Parcours 2: Login avec TOTP** | Connexion utilisateurs existants | `/login`, `/mfa-verify` | 🔄 Partiel |
+| **Parcours 3: Lost Device** | Récupération après perte authenticator | `/mfa/lost-device`, `/mfa/verify-identity`, `/mfa/reset-enrollment` | ❌ À créer |
+
+---
+
+## Parcours 1: Onboarding MFA (First-time Setup)
+
+### US-6.1: Inscrire un Authenticator TOTP
 **En tant qu'** utilisateur dont le client impose la MFA  
-**Je veux** configurer un authenticator TOTP (Google Authenticator, Authy)  
+**Je veux** configurer un authenticator TOTP (Google Authenticator, Microsoft Authenticator)  
 **Afin de** sécuriser mon compte avec un deuxième facteur
 
+**Préconditions:**
+- Client.RequireMfa = true
+- User.MFAEnabled = false
+- User authentifié avec credentials valides
+
 **Critères d'acceptation:**
-- [x] Je peux appeler POST `/api/auth/mfa/enroll` (authentifié)
-- [x] Le système vérifie que la MFA est requise pour mon tenant/client
-- [x] Le système génère un secret TOTP unique via UserManager.ResetAuthenticatorKeyAsync
-- [x] Le système retourne un QR code scannable (otpauth:// URI)
-- [x] Le système retourne aussi la clé manuelle pour saisie (format espacé)
+- [x] Je peux appeler POST `/api/auth/mfa/enroll` après login réussi
+- [x] Le système vérifie que Client.RequireMfa = true
+- [x] Le système génère secret TOTP unique (RFC 6238)
+- [x] Le système retourne QR code scannable (data URI)
+- [x] Le QR code encode: `otpauth://totp/Johodp:{email}?secret={secret}&issuer=Johodp`
+- [x] Le système retourne manualEntryKey formaté (espaces tous les 4 chars)
 - [x] Le secret est stocké dans AspNetUsers.AuthenticatorKey
-- [x] Le système retourne 400 si MFA n'est pas requise pour ce client
-- [x] Le système retourne 401 si l'utilisateur n'est pas authentifié
+- [ ] Le système bloque login si MFA requise mais non configurée
+- [ ] Redirection automatique vers /mfa/enroll après login si MFA manquante
 
 **Tests d'acceptation:**
 ```http
+### Scenario: Première connexion avec MFA obligatoire
+POST /api/auth/login
+{
+  "email": "john.doe@acme.com",
+  "password": "SecureP@ss123"
+}
+→ 302 Redirect /mfa/enroll (MFA enrollment required)
+
+### User est redirigé vers enrollment
 POST /api/auth/mfa/enroll
 Authorization: Bearer <token>
 → 200 OK
 {
-  "sharedKey": "JBSWY3DPEHPK3PXP",
-  "qrCodeUri": "otpauth://totp/Johodp:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Johodp",
-  "manualEntryKey": "JBSW Y3DP EHPK 3PXP"
+  "qrCodeUri": "data:image/png;base64,iVBORw0KGgoAAAANSU...",
+  "manualEntryKey": "JBSW Y3DP EHPK 3PXP",
+  "message": "Scan QR code with your authenticator app"
 }
 ```
 
@@ -1309,122 +1336,379 @@ Authorization: Bearer <token>
 - [x] AccountController.EnrollTotp() implémenté
 - [x] IMfaService.GenerateQrCodeUri() implémenté
 - [x] IMfaService.FormatKey() implémenté
-- [ ] Tests d'intégration (à créer)
-- [ ] Documentation utilisateur (guide Google Authenticator)
-
-**Implémentation:**
-- Controller: `AccountController.cs` ligne 288
-- Service: `IMfaService` (Application layer)
-- Endpoint: `POST /api/auth/mfa/enroll`
+- [ ] Strategy Pattern: Redirection automatique si MFA manquante
+- [ ] Tests d'intégration enrollment complet
+- [ ] Documentation utilisateur (guide Google Authenticator + Microsoft Authenticator)
 
 ---
 
-### US-6.2: Vérifier et Activer la MFA (LOT 2 - IMPLÉMENTÉ)
+### US-6.2: Vérifier et Activer la MFA
 **En tant qu'** utilisateur en cours d'inscription TOTP  
 **Je veux** vérifier mon code à 6 chiffres  
-**Afin d'** activer définitivement la double authentification
+**Afin d'** activer définitivement la double authentification et recevoir recovery codes
 
 **Critères d'acceptation:**
-- [x] Je peux appeler POST `/api/auth/mfa/verify-enrollment` avec { "code": "123456" }
-- [x] Le système vérifie le code TOTP via UserManager.VerifyTwoFactorTokenAsync
-- [x] Le système active TwoFactorEnabled sur l'utilisateur AspNetCore.Identity
-- [x] Le système active MFA sur l'entité domaine (User.EnableMFA())
-- [x] Le système génère 10 codes de récupération
-- [x] Le système retourne les recovery codes dans la réponse
-- [x] Le système retourne 400 si le code TOTP est invalide
-- [x] Le système retourne 401 si l'utilisateur n'est pas authentifié
+- [x] Je peux appeler POST `/api/auth/mfa/verify-enrollment` avec { "totpCode": "123456" }
+- [x] Le système vérifie code TOTP via UserManager.VerifyTwoFactorTokenAsync
+- [x] Le système active TwoFactorEnabled sur AspNetCore.Identity
+- [x] Le système active MFA sur entité domaine (User.EnableMFA())
+- [x] Le système génère 10 codes de récupération (format: ABC123-DEF456)
+- [x] Le système retourne recovery codes dans la réponse
+- [x] Le système retourne JWT token après activation réussie
+- [ ] Le système publie domain event: MfaEnabledEvent
+- [ ] Le système envoie email confirmation "MFA activée"
+- [x] Le système retourne 400 si code TOTP invalide
+- [x] Le système retourne 401 si utilisateur non authentifié
 
 **Tests d'acceptation:**
 ```http
 POST /api/auth/mfa/verify-enrollment
 Authorization: Bearer <token>
 {
-  "code": "123456"
+  "totpCode": "123456"
 }
 → 200 OK
 {
-  "message": "Two-factor authentication enabled successfully",
-  "recoveryCodes": ["ABC123", "DEF456", ...]
+  "mfaEnabled": true,
+  "recoveryCodes": [
+    "ABC123-DEF456",
+    "GHI789-JKL012",
+    ... (8 autres)
+  ],
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "message": "MFA enabled successfully. Save your recovery codes!"
 }
 ```
 
 **DoD:**
 - [x] AccountController.VerifyTotpEnrollment() implémenté
-- [x] Génération des recovery codes
-- [x] Activation de TwoFactorEnabled
-- [x] Sauvegarde dans la base (User.IsMfaEnabled)
-- [ ] Tests d'intégration (à créer)
-- [ ] Documentation des recovery codes
-
-**Implémentation:**
-- Controller: `AccountController.cs` ligne 331
-- Service: `UserManager<User>` (ASP.NET Identity)
-- Endpoint: `POST /api/auth/mfa/verify-enrollment`
+- [x] Génération 10 recovery codes alphanumériques
+- [x] Activation TwoFactorEnabled + User.IsMfaEnabled
+- [x] JWT token generation après enrollment
+- [ ] MfaEnabledEvent publié (domain event)
+- [ ] Email confirmation avec recovery codes
+- [ ] Tests d'intégration verify-enrollment
+- [ ] Warning UI: "Sauvegardez vos recovery codes (affichage unique)"
 
 ---
 
-### US-6.3: Se Connecter avec MFA/TOTP (LOT 2 - IMPLÉMENTÉ)
+## Parcours 2: Login avec TOTP (Existing Users)
+
+### US-6.3: Se Connecter avec MFA/TOTP (Cookie-based Flow)
 **En tant qu'** utilisateur avec MFA activée  
-**Je veux** me connecter avec email + password + code TOTP  
+**Je veux** me connecter avec email + password, puis TOTP code  
 **Afin d'** accéder à mon compte de manière sécurisée
 
+**Préconditions:**
+- Client.RequireMfa = true
+- User.MFAEnabled = true
+
 **Critères d'acceptation:**
-- [x] Je peux appeler POST `/api/auth/login-with-totp` avec { email, password, totpCode }
-- [x] Le système vérifie d'abord email + password
-- [x] Le système vérifie si la MFA est requise pour ce tenant/client
-- [x] Si MFA requise mais non inscrite → Retourne { mfaEnrollmentRequired: true }
-- [x] Si MFA requise et inscrite → Vérifie le code TOTP
-- [x] Le système valide le code TOTP via VerifyTwoFactorTokenAsync
-- [x] Le système crée une session SignInAsync
-- [x] Le système retourne 200 avec { message, userId, email, mfaVerified: true }
-- [x] Le système retourne 401 si le code TOTP est invalide
-- [x] Le système retourne 401 si email/password invalides
+- [x] Je peux appeler POST `/api/auth/login` avec { email, password }
+- [x] Le système vérifie credentials (email + password)
+- [x] Le système détecte Client.RequireMfa = true && User.MFAEnabled = true
+- [ ] Le système crée cookie "pending_mfa" (HttpOnly + Secure + SameSite=Strict)
+- [ ] Cookie contient: UserId + ClientId + CreatedAt (5 min expiration)
+- [ ] Le système retourne 302 Redirect /mfa-verification (formulaire TOTP)
+- [ ] Je peux appeler POST `/api/auth/mfa-verify` avec { totpCode } + cookie
+- [ ] Le système lit cookie "pending_mfa" pour récupérer UserId
+- [ ] Le système valide code TOTP via VerifyTwoFactorTokenAsync
+- [ ] Le système génère JWT token avec claim "mfa_verified"="true"
+- [ ] Le système supprime cookie "pending_mfa"
+- [ ] Le système retourne 401 si code TOTP invalide
+- [ ] Le système retourne 401 si cookie expiré/manquant
 
 **Tests d'acceptation:**
 ```http
-POST /api/auth/login-with-totp
+### Step 1: Login avec credentials
+POST /api/auth/login
 {
   "email": "john.doe@acme.com",
-  "password": "SecureP@ss123",
+  "password": "SecureP@ss123"
+}
+→ 302 Redirect /mfa-verification
+Set-Cookie: pending_mfa=<encrypted_data>; HttpOnly; Secure; SameSite=Strict; Max-Age=300
+
+### Step 2: User entre code TOTP de son authenticator app
+POST /api/auth/mfa-verify
+Cookie: pending_mfa=<encrypted_data>
+{
   "totpCode": "654321"
 }
 → 200 OK
 {
-  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "mfaVerified": true,
   "userId": "guid",
-  "email": "john.doe@acme.com",
-  "mfaVerified": true
+  "email": "john.doe@acme.com"
+}
+Set-Cookie: pending_mfa=; Expires=Thu, 01 Jan 1970 00:00:00 GMT (cookie deleted)
+```
+
+**DoD:**
+- [x] AccountController.Login() détecte MFA requirement
+- [ ] Strategy Pattern: MfaLoginStrategy crée cookie "pending_mfa"
+- [ ] AccountController.VerifyMfa() valide TOTP + cookie
+- [ ] Cookie crypté avec Data Protection API
+- [ ] JWT claim "mfa_verified" = "true"
+- [ ] Rate limiting: max 5 tentatives par session
+- [ ] Tests d'intégration login flow complet
+- [ ] Mise à jour complete-workflow.http
+
+---
+
+### US-6.4: Gérer Lien "J'ai perdu mon authenticator"
+**En tant qu'** utilisateur bloqué à l'étape MFA  
+**Je veux** cliquer "J'ai perdu mon authenticator"  
+**Afin d'** être redirigé vers le parcours de récupération
+
+**Critères d'acceptation:**
+- [ ] L'écran /mfa-verification affiche lien "J'ai perdu mon authenticator"
+- [ ] Clic redirige vers POST `/api/auth/mfa/lost-device`
+- [ ] Redirection inclut email pré-rempli depuis cookie "pending_mfa"
+- [ ] Le système lance Parcours 3: Lost Device Recovery
+
+**Tests d'acceptation:**
+```http
+### User clique lien "Lost Device" sur page MFA
+POST /api/auth/mfa/lost-device
+{
+  "email": "john.doe@acme.com"
+}
+→ 200 OK
+{
+  "message": "Verification email sent. Check your inbox."
 }
 ```
 
 **DoD:**
-- [x] AccountController.LoginWithTotp() implémenté
-- [x] IMfaService.IsMfaRequiredForUserAsync() implémenté
-- [x] Vérification TOTP intégrée
-- [x] Gestion cas non-inscrit (enrollment requis)
-- [ ] Tests d'intégration (à créer)
-- [ ] Mise à jour de complete-workflow.http
-
-**Implémentation:**
-- Controller: `AccountController.cs` ligne 377
-- Service: `IMfaService.IsMfaRequiredForUserAsync()`
-- Endpoint: `POST /api/auth/login-with-totp`
+- [ ] UI: Lien visible sur page MFA verification
+- [ ] Redirection automatique vers lost-device endpoint
+- [ ] Tests E2E du flow complet
 
 ---
 
-### US-6.4: Désactiver la MFA (LOT 2 - NON IMPLÉMENTÉ)
-**En tant qu'** utilisateur avec MFA activée  
-**Je veux** désactiver la double authentification  
-**Afin de** simplifier ma connexion si je le souhaite
+## Parcours 3: Lost Device Recovery (3-Step Process)
+
+### US-6.5: Initier Récupération Lost Device
+**En tant qu'** utilisateur ayant perdu mon authenticator  
+**Je veux** demander réinitialisation MFA par email  
+**Afin de** retrouver accès à mon compte
+
+**Préconditions:**
+- User.MFAEnabled = true
+- User n'a pas accès à son code TOTP
+- User a accès à son email
 
 **Critères d'acceptation:**
-- [ ] Je peux appeler POST `/api/auth/mfa/disable` (authentifié)
-- [ ] Le système demande confirmation avec mot de passe
-- [ ] Le système désactive TwoFactorEnabled via UserManager
-- [ ] Le système désactive MFA sur l'entité domaine (User.DisableMFA())
-- [ ] Le système révoque tous les recovery codes
-- [ ] Le système retourne 200 avec { message: "MFA disabled" }
-- [ ] Le système retourne 400 si MFA est imposée par le client (ne peut pas désactiver)
+- [ ] Je peux appeler POST `/api/auth/mfa/lost-device` avec { email }
+- [ ] Le système génère token de vérification (1h expiration)
+- [ ] Le système envoie email avec lien `https://app.johodp.com/verify-identity?token=<token>`
+- [ ] Le lien est valide 1 heure
+- [ ] Le système retourne 200 même si email n'existe pas (sécurité)
+- [ ] Le système log tentative dans audit log
+- [ ] Email inclut: nom utilisateur, date/heure, lien expiration
+- [ ] Email template: "Demande de réinitialisation MFA - Cliquez pour vérifier votre identité"
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/mfa/lost-device
+{
+  "email": "john.doe@acme.com"
+}
+→ 200 OK
+{
+  "message": "If the email exists, a verification link has been sent. Check your inbox.",
+  "expiresIn": "1 hour"
+}
+
+### Email reçu:
+Subject: Demande de réinitialisation MFA - Johodp
+Body:
+Bonjour John Doe,
+
+Nous avons reçu une demande de réinitialisation de votre authentification multi-facteurs.
+
+Cliquez sur le lien ci-dessous pour vérifier votre identité:
+https://app.johodp.com/verify-identity?token=abc123xyz789
+
+Ce lien expire dans 1 heure.
+
+Si vous n'avez pas fait cette demande, ignorez cet email.
+```
+
+**DoD:**
+- [ ] AccountController.InitiateLostDeviceRecovery() créé
+- [ ] Service: IMfaService.GenerateIdentityVerificationToken()
+- [ ] Email template avec lien + expiration
+- [ ] Token stocké avec expiration (1h)
+- [ ] Audit log: MfaRecoveryInitiatedEvent
+- [ ] Tests: envoi email + token validation
+- [ ] Rate limiting: max 3 demandes par heure
+
+---
+
+### US-6.6: Vérifier Identité Utilisateur
+**En tant qu'** utilisateur cliquant sur lien email  
+**Je veux** répondre à questions de sécurité  
+**Afin de** prouver mon identité avant réinitialisation MFA
+
+**Critères d'acceptation:**
+- [ ] Je peux cliquer lien email → GET `/verify-identity?token=<token>`
+- [ ] Le système affiche formulaire avec questions sécurité (optionnel)
+- [ ] Questions possibles: "Quelle est votre ville de naissance?", "Nom de votre premier animal?"
+- [ ] Je peux soumettre → POST `/api/auth/mfa/verify-identity` avec { token, answers }
+- [ ] Le système valide token (1h expiration)
+- [ ] Le système valide réponses si questions configurées
+- [ ] Le système génère nouveau token "verified_identity" (30 min)
+- [ ] Le système retourne 200 avec { verifiedToken, expiresIn }
+- [ ] Le système retourne 401 si token expiré
+- [ ] Le système retourne 401 si réponses incorrectes
+- [ ] Le système log validation dans audit log
+
+**Tests d'acceptation:**
+```http
+### User clique lien email
+GET /verify-identity?token=abc123xyz789
+→ 200 OK (affiche formulaire)
+
+### User soumet réponses
+POST /api/auth/mfa/verify-identity
+{
+  "token": "abc123xyz789",
+  "securityAnswers": {
+    "birthCity": "Paris",
+    "firstPet": "Rex"
+  }
+}
+→ 200 OK
+{
+  "verifiedToken": "def456uvw012",
+  "expiresIn": "30 minutes",
+  "message": "Identity verified. You can now reset your MFA enrollment."
+}
+```
+
+**DoD:**
+- [ ] AccountController.VerifyIdentity() créé
+- [ ] Service: IMfaService.ValidateSecurityQuestions()
+- [ ] Token "verified_identity" généré (30 min expiration)
+- [ ] Support questions sécurité optionnelles
+- [ ] Audit log: MfaIdentityVerifiedEvent
+- [ ] Tests: validation token + questions
+- [ ] Rate limiting: max 3 tentatives
+
+---
+
+### US-6.7: Réinitialiser Enrollment MFA
+**En tant qu'** utilisateur avec identité vérifiée  
+**Je veux** réinitialiser mon MFA  
+**Afin de** configurer nouveau TOTP sur nouveau téléphone
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler POST `/api/auth/mfa/reset-enrollment` avec { verifiedToken }
+- [ ] Le système valide verifiedToken (30 min expiration)
+- [ ] Le système désactive MFA: User.MFAEnabled = false
+- [ ] Le système supprime ancien secret TOTP
+- [ ] Le système invalide tous les recovery codes
+- [ ] Le système publie domain event: MfaDisabledEvent
+- [ ] Le système envoie email confirmation "MFA réinitialisée"
+- [ ] Le système force re-enrollment au prochain login
+- [ ] Le système retourne 200 avec { message, nextStep: "Re-enroll required" }
+- [ ] Le système retourne 401 si verifiedToken expiré/invalide
+- [ ] Le système log reset dans audit log
+
+**Tests d'acceptation:**
+```http
+POST /api/auth/mfa/reset-enrollment
+{
+  "verifiedToken": "def456uvw012"
+}
+→ 200 OK
+{
+  "message": "MFA disabled successfully. You must re-enroll on next login.",
+  "mfaEnabled": false,
+  "nextStep": "Login and complete MFA enrollment (Parcours 1)"
+}
+
+### Email confirmation reçu:
+Subject: Votre MFA a été réinitialisée - Johodp
+Body:
+Bonjour John Doe,
+
+Votre authentification multi-facteurs a été réinitialisée avec succès.
+
+Lors de votre prochaine connexion, vous devrez configurer un nouveau code TOTP.
+
+Date/heure: 2025-01-15 14:30 UTC
+IP: 192.168.1.1
+
+Si vous n'avez pas effectué cette action, contactez le support immédiatement.
+```
+
+**DoD:**
+- [ ] AccountController.ResetMfaEnrollment() créé
+- [ ] Service: IMfaService.DisableMfaForUser()
+- [ ] MfaDisabledEvent publié (domain event)
+- [ ] Email confirmation avec détails sécurité
+- [ ] Suppression secret TOTP + recovery codes
+- [ ] Flag "RequiresMfaReEnrollment" = true
+- [ ] Audit log complet du reset
+- [ ] Tests: reset + re-enrollment obligatoire
+- [ ] Tests E2E: Lost Device → Verify → Reset → Re-enroll
+
+---
+
+## US Complémentaires
+
+### US-6.8: Consulter Statut MFA
+**En tant qu'** utilisateur authentifié  
+**Je veux** consulter statut de ma MFA  
+**Afin de** savoir si elle est activée et voir mes paramètres
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler GET `/api/auth/mfa/status` (authentifié)
+- [ ] Le système retourne: { mfaEnabled, enrolledAt, recoveryCodesCount, isMfaRequired }
+- [ ] Le système retourne 401 si non authentifié
+
+**Tests d'acceptation:**
+```http
+GET /api/auth/mfa/status
+Authorization: Bearer <token>
+→ 200 OK
+{
+  "mfaEnabled": true,
+  "enrolledAt": "2025-01-10T10:30:00Z",
+  "recoveryCodesRemaining": 8,
+  "isMfaRequired": true,
+  "clientRequiresMfa": true
+}
+```
+
+**DoD:**
+- [ ] AccountController.GetMfaStatus() créé
+- [ ] Tests intégration
+
+---
+
+### US-6.9: Désactiver MFA (Optionnel)
+**En tant qu'** utilisateur avec MFA activée (optionnelle)  
+**Je veux** désactiver la double authentification  
+**Afin de** simplifier ma connexion si le client ne l'impose pas
+
+**Préconditions:**
+- User.MFAEnabled = true
+- Client.RequireMfa = **false** (MFA optionnelle)
+
+**Critères d'acceptation:**
+- [ ] Je peux appeler POST `/api/auth/mfa/disable` avec { password }
+- [ ] Le système vérifie Client.RequireMfa = false
+- [ ] Le système valide password
+- [ ] Le système désactive TwoFactorEnabled + User.MFAEnabled = false
+- [ ] Le système invalide recovery codes
+- [ ] Le système envoie email alerte sécurité
+- [ ] Le système retourne 409 si Client.RequireMfa = true (interdiction)
+- [ ] Le système retourne 401 si password invalide
 
 **Tests d'acceptation:**
 ```http
@@ -1435,17 +1719,22 @@ Authorization: Bearer <token>
 }
 → 200 OK
 {
-  "message": "Two-factor authentication disabled successfully"
+  "mfaEnabled": false,
+  "message": "MFA disabled successfully"
+}
+
+### Si MFA imposée par client:
+→ 409 Conflict
+{
+  "error": "Cannot disable MFA (required by organization policy)"
 }
 ```
 
 **DoD:**
-- [ ] AccountController.DisableMfa() à implémenter
-- [ ] Vérification que MFA n'est pas imposée (Client.RequireMfa)
-- [ ] Révocation des recovery codes
-- [ ] Tests d'intégration
-
-**État:** ❌ Non implémenté - Lot 2 futur
+- [ ] AccountController.DisableMfa() créé
+- [ ] Vérification Client.RequireMfa
+- [ ] Email alerte sécurité
+- [ ] Tests: disable autorisé vs interdit
 
 ---
 
