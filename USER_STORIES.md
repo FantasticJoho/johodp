@@ -22,24 +22,40 @@ Le projet est divisé en **3 lots principaux** pour faciliter le déploiement pr
 
 ---
 
-### 🔄 LOT 2 - Authentification Multi-Facteurs (IMPLÉMENTÉ MAIS À DOCUMENTER)
-**Scope:** MFA/TOTP avec Google Authenticator, codes de récupération
+### 🔄 LOT 2 - Authentification Multi-Facteurs (PARTIELLEMENT IMPLÉMENTÉ)
+**Scope:** MFA/TOTP avec 3 parcours (Onboarding, Login, Lost Device Recovery)
 - Epic 6: Authentification Multi-Facteurs (MFA/TOTP)
-  - US-6.1: Inscrire un Authenticator TOTP ✅ Implémenté
-  - US-6.2: Vérifier et Activer la MFA ✅ Implémenté
-  - US-6.3: Se Connecter avec MFA/TOTP ✅ Implémenté
-  - US-6.4: Désactiver la MFA ❌ Non implémenté
-  - US-6.5: Utiliser un Recovery Code ❌ Non implémenté
+  
+  **Parcours 1 - Onboarding MFA:**
+  - US-6.1: Inscrire Authenticator TOTP 🔄 Partiel
+  - US-6.2: Vérifier et Activer MFA 🔄 Partiel
+  
+  **Parcours 2 - Login avec TOTP:**
+  - US-6.3: Login avec MFA/TOTP (cookie-based) ❌ À compléter
+  - US-6.4: Gérer lien "Lost Device" ❌ À créer
+  
+  **Parcours 3 - Lost Device Recovery:**
+  - US-6.5: Initier récupération lost device ❌ À créer
+  - US-6.6: Vérifier identité utilisateur ❌ À créer
+  - US-6.7: Réinitialiser enrollment MFA ❌ À créer
+  
+  **US Complémentaires:**
+  - US-6.8: Consulter statut MFA ❌ À créer
+  - US-6.9: Désactiver MFA (optionnel) ❌ À créer
 
-**Status:** 🔄 **PARTIELLEMENT IMPLÉMENTÉ** (3/5 US)
-- ✅ Code implémenté dans `AccountController` (lignes 288-455)
+**Status:** 🔄 **PARTIELLEMENT IMPLÉMENTÉ** (2/9 US partiellement implémentées)
+- ✅ Code enrollment TOTP implémenté dans `AccountController` (lignes 288-455)
 - ✅ Service `IMfaService` fonctionnel
-- ✅ Endpoints API fonctionnels
+- ✅ Endpoints `/mfa/enroll` et `/mfa/verify-enrollment` fonctionnels
+- ❌ Strategy Pattern (ILoginStrategy) à implémenter
+- ❌ Cookie "pending_mfa" à créer
+- ❌ Parcours 3 (Lost Device Recovery) complet à développer
 - ❌ Tests d'intégration à créer
 - ❌ Documentation utilisateur à écrire
 - ❌ Mise à jour de `complete-workflow.http`
 
 **Priorité:** Phase 2 - Déploiement après stabilisation Lot 1
+**Documentation:** Voir `USE_CASES.md` (Besoin 6 + CHAPITRE 13)
 
 ---
 
@@ -1276,7 +1292,7 @@ Content-Type: application/json
 ## 🔐 Epic 6: Authentification Multi-Facteurs (MFA/TOTP) - 🔄 LOT 2
 
 > **🚨 LOT 2** - Authentification multi-facteurs via TOTP (RFC 6238) avec 3 parcours principaux.  
-> Voir documentation complète dans `MFA_TOTP_MISSING.md` et `USE_CASES.md` (CHAPITRE 13).
+> Voir documentation complète dans `USE_CASES.md` (Besoin 6 + CHAPITRE 13).
 
 ### 📋 Récapitulatif des 3 Parcours MFA
 
@@ -1735,46 +1751,6 @@ Authorization: Bearer <token>
 - [ ] Vérification Client.RequireMfa
 - [ ] Email alerte sécurité
 - [ ] Tests: disable autorisé vs interdit
-
----
-
-### US-6.5: Utiliser un Recovery Code (LOT 2 - NON IMPLÉMENTÉ)
-**En tant qu'** utilisateur ayant perdu mon téléphone  
-**Je veux** utiliser un code de récupération  
-**Afin de** regagner l'accès à mon compte
-
-**Critères d'acceptation:**
-- [ ] Je peux appeler POST `/api/auth/login-with-recovery-code` avec { email, password, recoveryCode }
-- [ ] Le système vérifie email + password
-- [ ] Le système valide le recovery code via UserManager.RedeemTwoFactorRecoveryCodeAsync
-- [ ] Le code est à usage unique (marqué comme utilisé)
-- [ ] Le système crée une session SignInAsync
-- [ ] Le système retourne 200 avec { message, userId, warningCodesRemaining }
-- [ ] Le système retourne 401 si le code est invalide ou déjà utilisé
-
-**Tests d'acceptation:**
-```http
-POST /api/auth/login-with-recovery-code
-{
-  "email": "john.doe@acme.com",
-  "password": "SecureP@ss123",
-  "recoveryCode": "ABC123-DEF456"
-}
-→ 200 OK
-{
-  "message": "Login successful with recovery code",
-  "userId": "guid",
-  "warningCodesRemaining": 9
-}
-```
-
-**DoD:**
-- [ ] AccountController.LoginWithRecoveryCode() à implémenter
-- [ ] Validation code unique (ASP.NET Identity gère déjà)
-- [ ] Warning si moins de 3 codes restants
-- [ ] Tests d'intégration
-
-**État:** ❌ Non implémenté - Lot 2 futur
 
 ---
 

@@ -97,7 +97,7 @@ public class CreateTenantCommandWithBaseHandlerHandler : BaseHandler<CreateTenan
         // Associate with client
         if (!string.IsNullOrWhiteSpace(dto.ClientId))
         {
-            tenant.SetClient(dto.ClientId);
+            tenant.SetClient(Johodp.Domain.Clients.ValueObjects.ClientId.From(Guid.Parse(dto.ClientId)));
         }
 
         // Add URLs if provided
@@ -158,7 +158,7 @@ public class CreateTenantCommandWithBaseHandlerHandler : BaseHandler<CreateTenan
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }

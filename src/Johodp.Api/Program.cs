@@ -3,12 +3,16 @@ using Johodp.Api.Middleware;
 using Serilog;
 using Scalar.AspNetCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
 
 // Logging
 ConfigureLogging(builder);
+
+// Forwarded Headers (pour proxy nginx, Azure App Gateway, etc.)
+ConfigureForwardedHeaders(builder.Services);
 
 // Authentication
 ConfigureAuthentication(builder.Services);
@@ -108,7 +112,8 @@ static void ConfigureLogging(WebApplicationBuilder builder)
            .Enrich.FromLogContext()
            .Enrich.WithProperty("Application", "Johodp")
            .Enrich.With(new Johodp.Api.Logging.TenantClientEnricher(services.GetRequiredService<IHttpContextAccessor>()))
-           .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] {TenantId} {ClientId} {Message:lj}{NewLine}{Exception}");
+           .Enrich.With(new Johodp.Api.Logging.TraceIdEnricher(services.GetRequiredService<IHttpContextAccessor>()))
+           .WriteTo.Console(outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff}] [{Level:u3}] [{TraceId}] {TenantId} {ClientId} {ClientIP} {Message:lj}{NewLine}{Exception}");
     });
 }
 
@@ -130,6 +135,36 @@ static void ConfigureAuthentication(IServiceCollection services)
         options.Cookie.Name = ".AspNetCore.Identity.Application";
         options.Cookie.SameSite = Microsoft.AspNetCore.Http.SameSiteMode.Lax;
         options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+    });
+}
+
+static void ConfigureForwardedHeaders(IServiceCollection services)
+{
+    // Configure Forwarded Headers Middleware pour lire X-Forwarded-* headers
+    // Utilisé quand l'API est derrière un reverse proxy (nginx, Azure App Gateway, etc.)
+    services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        // Accepter X-Forwarded-For (IP réelle du client)
+        // Accepter X-Forwarded-Proto (http ou https)
+        // Accepter X-Forwarded-Host (domaine original)
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor 
+                                  | ForwardedHeaders.XForwardedProto 
+                                  | ForwardedHeaders.XForwardedHost;
+
+        // Effacer les réseaux connus par défaut (pour accepter tous les proxies)
+        // ⚠️ PRODUCTION: Configurer uniquement les IPs des proxies de confiance
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        // Nombre maximum de proxies à traverser (limite de sécurité)
+        options.ForwardLimit = 2;
+
+        // PRODUCTION: Ajouter les IPs de tes proxies de confiance
+        // Exemple pour nginx local:
+        // options.KnownProxies.Add(IPAddress.Parse("10.0.0.100"));
+        
+        // Exemple pour Azure Application Gateway:
+        // options.KnownNetworks.Add(new IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
     });
 }
 
@@ -168,6 +203,10 @@ static void ApplyDatabaseMigrations(WebApplication app)
 
 static void ConfigureMiddlewarePipeline(WebApplication app)
 {
+    // IMPORTANT: UseForwardedHeaders doit être appelé AVANT tout autre middleware
+    // pour que les headers X-Forwarded-* soient lus correctement
+    app.UseForwardedHeaders();
+    
     app.UseRequestLogging();
 
     app.UseSerilogRequestLogging(options =>
@@ -175,9 +214,29 @@ static void ConfigureMiddlewarePipeline(WebApplication app)
         options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} {StatusCode} in {Elapsed:0.0000}ms";
         options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
         {
+            // TraceId unique par requête
+            diagnosticContext.Set("TraceId", httpContext.TraceIdentifier);
+            
+            // IP réelle du client (via X-Forwarded-For si présent)
+            var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            diagnosticContext.Set("ClientIP", clientIp);
+            
+            // Host et protocole originaux
             diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
             diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
             
+            // Headers X-Forwarded si présents (pour debug)
+            if (httpContext.Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor))
+                diagnosticContext.Set("X-Forwarded-For", forwardedFor.ToString());
+            
+            if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Proto", out var forwardedProto))
+                diagnosticContext.Set("X-Forwarded-Proto", forwardedProto.ToString());
+            
+            if (httpContext.Request.Headers.TryGetValue("X-Forwarded-Host", out var forwardedHost))
+                diagnosticContext.Set("X-Forwarded-Host", forwardedHost.ToString());
+            
+            // Utilisateur authentifié
             if (httpContext.User?.Identity?.IsAuthenticated == true)
             {
                 diagnosticContext.Set("UserEmail", httpContext.User.FindFirst("email")?.Value);

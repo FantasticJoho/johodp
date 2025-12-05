@@ -1918,3 +1918,121 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 | Performance | ✅ Rapide | ⚠️ Légèrement plus lent |
 | Storage DB | ✅ int | ✅ int (HasConversion) |
 
+
+---
+
+## 🔐 Flux MFA/TOTP avec OAuth2 (Parcours 2)
+
+### Schéma de séquence - Login avec MFA puis génération JWT
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User as 👤 Utilisateur
+    participant SPA as 🌐 SPA Client
+    participant API as 🔐 /api/auth
+    participant IS as 🔑 IdentityServer
+    participant PS as 📋 ProfileService
+    
+    Note over User,IS: Étape 1: Authentification email/password
+    User->>SPA: Clic "Se connecter"
+    SPA->>API: POST /login { email, password, tenantName }
+    API->>API: Valide credentials + tenant
+    API->>API: Détecte MFA requis (IMfaService)
+    API->>API: Crée cookie "pending_mfa" (5 min)
+    API-->>SPA: 200 OK { mfaVerificationRequired: true, redirectUrl: /mfa-verification }
+    Note over API: Cookie "pending_mfa" = userId|clientId|timestamp (HttpOnly, Secure)
+    
+    Note over User,IS: Étape 2: Vérification TOTP
+    SPA->>User: Affiche page TOTP
+    User->>SPA: Entre code 6 chiffres (Microsoft Authenticator)
+    SPA->>API: POST /mfa-verify { totpCode } + cookie "pending_mfa"
+    API->>API: Parse cookie (userId|clientId|timestamp)
+    API->>API: Valide expiration (< 5 min)
+    API->>API: Vérifie TOTP via UserManager.VerifyTwoFactorTokenAsync
+    API->>API: SignInWithClaimsAsync(user, [mfa_verified=true])
+    API->>API: Supprime cookie "pending_mfa"
+    Note over API: Cookie ".AspNetCore.Identity.Application" créé avec claim mfa_verified
+    API-->>SPA: 200 OK { redirectUrl: /connect/authorize?...&acr_values=tenant:xxx }
+    
+    Note over User,IS: Étape 3: Flux OAuth2 standard pour générer JWT
+    SPA->>SPA: Génère PKCE (code_verifier, code_challenge)
+    SPA->>IS: GET /connect/authorize + cookie auth
+    Note over IS: Client_id, redirect_uri, scope, acr_values=tenant:xxx
+    IS->>IS: Vérifie cookie ".AspNetCore.Identity.Application"
+    IS->>IS: Lit claim "mfa_verified" du cookie
+    IS->>PS: GetProfileDataAsync(context)
+    PS->>PS: Charge User depuis repository
+    PS->>PS: Ajoute claims: tenant_id, role, scope, mfa_enabled, mfa_verified
+    PS-->>IS: Claims JWT
+    IS->>IS: Génère authorization code
+    IS-->>SPA: 302 Redirect callback?code=ABC123&state=xyz
+    
+    SPA->>IS: POST /connect/token { code, code_verifier }
+    IS->>IS: Valide PKCE
+    IS->>IS: Génère JWT access_token avec tous claims
+    IS-->>SPA: 200 OK { access_token, id_token, refresh_token }
+    Note over SPA: JWT contient: sub, email, tenant_id, role, scope, mfa_verified=true, mfa_enabled=true
+    
+    SPA->>API: GET /connect/userinfo (Bearer token)
+    API-->>SPA: Claims utilisateur + MFA status
+```
+
+### Détails des cookies et tokens
+
+| Élément | Type | Durée | Contenu | Sécurité |
+|---------|------|-------|---------|----------|
+| `pending_mfa` | Cookie temporaire | 5 minutes | userId\|clientId\|timestamp | HttpOnly, Secure, SameSite=Strict |
+| `.AspNetCore.Identity.Application` | Cookie session | 7 jours | Claims ASP.NET Identity + mfa_verified | HttpOnly, Secure, SameSite=Lax |
+| `access_token` (JWT) | Bearer token | 1 heure | sub, email, tenant_id, role, scope, mfa_verified, mfa_enabled | Signé RSA256, validé par middleware |
+| `refresh_token` | Opaque token | 14 jours | Stocké dans PersistedGrants | Rotation automatique |
+
+### Points clés de l'architecture
+
+1. **Séparation des responsabilités** :
+   - `/api/auth/*` : Authentification infrastructure (UserManager, SignInManager, cookies)
+   - IdentityServer : Génération tokens OAuth2/OIDC standardisés
+   - ProfileService : Injection claims custom dans JWT
+
+2. **Cookie "pending_mfa"** :
+   - Temporaire (5 min) pour prouver que password est validé
+   - Ne contient PAS de token JWT (juste métadonnées)
+   - Supprimé après vérification TOTP réussie
+
+3. **Cookie ".AspNetCore.Identity.Application"** :
+   - Session authentifiée avec claim `mfa_verified=true`
+   - Permet à IdentityServer de savoir que MFA est validé
+   - ProfileService lit ce claim et l'injecte dans le JWT final
+
+4. **Claim `mfa_verified`** :
+   - Ajouté au cookie session lors de SignInWithClaimsAsync
+   - Propagé dans le JWT par ProfileService
+   - Permet aux APIs de vérifier que MFA a été complété
+
+5. **Préservation de `acr_values`** :
+   - Le tenant est conservé dans `acr_values=tenant:xxx`
+   - IdentityServer utilise cette valeur pour charger le bon client
+   - Les claims JWT contiennent `tenant_id` du tenant vérifié
+
+### Avantages de cette approche
+
+```
+✅ **Réutilisation OAuth2** - Pas de duplication de logique JWT
+✅ **Claims standards** - JWT contient tous les claims (tenant, role, scope, MFA)
+✅ **Cookie temporaire** - pending_mfa sert uniquement de preuve pour 5 min
+✅ **Sécurité** - Token généré par IdentityServer avec clé de signature centralisée
+✅ **Refresh tokens** - Client peut renouveler session sans re-login
+✅ **Stateless APIs** - JWT Bearer token pour toutes les requêtes API
+✅ **Multi-tenant** - acr_values préserve le contexte tenant
+```
+
+### Implémentation
+
+- **AccountController.cs** : `/login` (crée pending_mfa) et `/mfa-verify` (vérifie TOTP + SignInWithClaims)
+- **IdentityServerProfileService.cs** : Injecte claims `mfa_verified` et `mfa_enabled` dans JWT
+- **IMfaService** : Logique métier (IsMfaRequiredForUserAsync, FormatKey, GenerateQrCodeUri)
+- **complete-workflow.http** : Tests STEP 20 (Parcours 1, 2, 3)
+
+---
+
+

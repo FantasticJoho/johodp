@@ -2,6 +2,7 @@ namespace Johodp.Domain.Tenants.Specifications;
 
 using Johodp.Domain.Common.Specifications;
 using Johodp.Domain.Tenants.Aggregates;
+using Johodp.Domain.Clients.ValueObjects;
 
 /// <summary>
 /// EXAMPLE: Specification for active tenants
@@ -19,7 +20,7 @@ public class ActiveTenantSpecification : Specification<Tenant>
 /// </summary>
 public class TenantByClientSpecification : Specification<Tenant>
 {
-    public TenantByClientSpecification(string clientId)
+    public TenantByClientSpecification(ClientId clientId)
     {
         Criteria = tenant => tenant.ClientId != null && tenant.ClientId == clientId;
     }
@@ -71,7 +72,7 @@ public class TenantSpecificationExamples
     /// <summary>
     /// Example: Active tenants for a specific client
     /// </summary>
-    public static Specification<Tenant> ActiveTenantsForClient(string clientId)
+    public static Specification<Tenant> ActiveTenantsForClient(ClientId clientId)
     {
         return new ActiveTenantSpecification()
             .And(new TenantByClientSpecification(clientId));

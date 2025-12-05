@@ -49,7 +49,7 @@ public class GetTenantByIdQueryHandler : BaseHandler<GetTenantByIdQuery, Result<
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }
@@ -86,7 +86,7 @@ public class GetAllTenantsQueryHandler : BaseHandler<GetAllTenantsQuery, IEnumer
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }
@@ -132,7 +132,7 @@ public class GetTenantByNameQueryHandler : BaseHandler<GetTenantByNameQuery, Res
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }

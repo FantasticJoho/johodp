@@ -37,7 +37,7 @@ public class MfaService : IMfaService
         var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);
         if (tenant?.ClientId == null) return false;
 
-        var client = await _clientRepository.GetByClientNameAsync(tenant.ClientId);
+        var client = await _clientRepository.GetByIdAsync(tenant.ClientId);
         return client?.RequireMfa ?? false;
     }
 

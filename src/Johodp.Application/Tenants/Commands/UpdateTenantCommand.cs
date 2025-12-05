@@ -116,38 +116,33 @@ public class UpdateTenantCommandHandler : BaseHandler<UpdateTenantCommand, Resul
 
             // Update the client association
             var oldClientId = tenant.ClientId;
-            tenant.SetClient(string.IsNullOrWhiteSpace(dto.ClientId) ? null : dto.ClientId);
+            var newClientId = string.IsNullOrWhiteSpace(dto.ClientId) 
+                ? null 
+                : Johodp.Domain.Clients.ValueObjects.ClientId.From(Guid.Parse(dto.ClientId));
+            tenant.SetClient(newClientId);
 
             // If client changed, update bidirectional associations
             if (oldClientId != tenant.ClientId)
             {
                 // Remove tenant from old client
-                if (!string.IsNullOrWhiteSpace(oldClientId))
+                if (oldClientId != null)
                 {
-                    if (Guid.TryParse(oldClientId, out var oldClientGuid))
+                    var oldClient = await _clientRepository.GetByIdAsync(oldClientId);
+                    if (oldClient != null)
                     {
-                        var oldClientId_ValueObject = Johodp.Domain.Clients.ValueObjects.ClientId.From(oldClientGuid);
-                        var oldClient = await _clientRepository.GetByIdAsync(oldClientId_ValueObject);
-                        if (oldClient != null)
-                        {
-                            oldClient.DissociateTenant(tenant.Id.Value.ToString());
-                            await _clientRepository.UpdateAsync(oldClient);
-                        }
+                        oldClient.DissociateTenant(tenant.Id.Value.ToString());
+                        await _clientRepository.UpdateAsync(oldClient);
                     }
                 }
 
                 // Add tenant to new client
-                if (!string.IsNullOrWhiteSpace(tenant.ClientId))
+                if (tenant.ClientId != null)
                 {
-                    if (Guid.TryParse(tenant.ClientId, out var newClientGuid))
+                    var newClient = await _clientRepository.GetByIdAsync(tenant.ClientId);
+                    if (newClient != null && !newClient.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
                     {
-                        var newClientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(newClientGuid);
-                        var newClient = await _clientRepository.GetByIdAsync(newClientId);
-                        if (newClient != null && !newClient.AssociatedTenantIds.Contains(tenant.Id.Value.ToString()))
-                        {
-                            newClient.AssociateTenant(tenant.Id.Value.ToString());
-                            await _clientRepository.UpdateAsync(newClient);
-                        }
+                        newClient.AssociateTenant(tenant.Id.Value.ToString());
+                        await _clientRepository.UpdateAsync(newClient);
                     }
                 }
             }
@@ -194,7 +189,7 @@ public class UpdateTenantCommandHandler : BaseHandler<UpdateTenantCommand, Resul
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }

@@ -93,7 +93,7 @@ public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, Resul
         }
 
         // Set associated client (required)
-        tenant.SetClient(dto.ClientId);
+        tenant.SetClient(Johodp.Domain.Clients.ValueObjects.ClientId.From(Guid.Parse(dto.ClientId)));
 
         // Save tenant
         await _tenantRepository.AddAsync(tenant);
@@ -108,14 +108,10 @@ public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, Resul
     private async Task UpdateAssociatedClientAsync(Tenant tenant)
     {
         // Associate the tenant with the client (bidirectional relationship)
-        // Parse ClientId as GUID to retrieve the client
-        if (!Guid.TryParse(tenant.ClientId, out var clientGuid))
-        {
-            throw new InvalidOperationException($"Invalid ClientId format: {tenant.ClientId}");
-        }
+        if (tenant.ClientId == null)
+            return;
 
-        var clientId = Johodp.Domain.Clients.ValueObjects.ClientId.From(clientGuid);
-        var client = await _clientRepository.GetByIdAsync(clientId);
+        var client = await _clientRepository.GetByIdAsync(tenant.ClientId);
         
         if (client != null)
         {
@@ -142,7 +138,7 @@ public class CreateTenantCommandHandler : BaseHandler<CreateTenantCommand, Resul
             CustomConfigurationId = tenant.CustomConfigurationId.Value,
             AllowedReturnUrls = tenant.AllowedReturnUrls.ToList(),
             AllowedCorsOrigins = tenant.AllowedCorsOrigins.ToList(),
-            ClientId = tenant.ClientId
+            ClientId = tenant.ClientId?.Value.ToString()
         };
     }
 }

@@ -2,6 +2,7 @@ namespace Johodp.Domain.Tenants.Aggregates;
 
 using Johodp.Domain.Common;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Domain.Clients.ValueObjects;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 /// <summary>
@@ -64,7 +65,7 @@ public class Tenant : AggregateRoot
     public IReadOnlyList<string> AllowedCorsOrigins => _allowedCorsOrigins.AsReadOnly();
 
     // Associated client (a tenant can only be associated with one client)
-    public string? ClientId { get; private set; }
+    public ClientId? ClientId { get; private set; }
 
     private Tenant() { }
 
@@ -223,11 +224,8 @@ public class Tenant : AggregateRoot
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void SetClient(string? clientId)
+    public void SetClient(ClientId? clientId)
     {
-        if (clientId != null && string.IsNullOrWhiteSpace(clientId))
-            throw new ArgumentException("Client ID cannot be empty", nameof(clientId));
-
         ClientId = clientId;
         UpdatedAt = DateTime.UtcNow;
     }

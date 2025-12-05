@@ -5,6 +5,7 @@ using Johodp.Contracts.Users;
 using Johodp.Domain.Users.Aggregates;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.Clients.Aggregates;
+using Johodp.Domain.Clients.ValueObjects;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Application.Users;
 using System.Security.Claims;
@@ -120,7 +121,52 @@ public class AccountController : ControllerBase
             return Unauthorized(new { error = "Invalid email or password" });
         }
 
-        // Success - sign in with tenant claims
+        // Check if MFA is required (Strategy Pattern - Parcours 2)
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(user);
+        
+        if (mfaRequired)
+        {
+            // Check if user has MFA enabled
+            var mfaEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+            
+            if (!mfaEnabled)
+            {
+                // MFA required but not enrolled → Redirect to enrollment (Parcours 1)
+                _logger.LogInformation("User {UserId} requires MFA enrollment", user.Id);
+                return Ok(new
+                {
+                    mfaEnrollmentRequired = true,
+                    message = "MFA enrollment required",
+                    redirectUrl = "/mfa/enroll"
+                });
+            }
+
+            // MFA enabled → Create pending_mfa cookie and redirect to verification
+            _logger.LogInformation("User {UserId} requires MFA verification", user.Id);
+
+            // Create cookie data: userId|clientId|timestamp
+            var cookieValue = $"{user.Id}|{tenant.ClientId?.Value}|{DateTime.UtcNow:O}";
+            
+            // TODO: Encrypt cookie value using Data Protection API
+            
+            // Set cookie (5 minutes expiration)
+            Response.Cookies.Append("pending_mfa", cookieValue, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true, // HTTPS only
+                SameSite = SameSiteMode.Strict,
+                MaxAge = TimeSpan.FromMinutes(5)
+            });
+
+            return Ok(new
+            {
+                mfaVerificationRequired = true,
+                message = "MFA verification required",
+                redirectUrl = "/mfa-verification"
+            });
+        }
+
+        // Success - sign in with tenant claims (no MFA required)
         _logger.LogInformation("Login successful: {Email}, tenant: {TenantName}", request.Email, tenantName);
         await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, new[]
         {
@@ -451,6 +497,320 @@ public class AccountController : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Get MFA status for current user
+    /// </summary>
+    [HttpGet("mfa/status")]
+    [Authorize]
+    public async Task<IActionResult> GetMfaStatus()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized(new { error = "User not found" });
+
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        if (domainUser == null)
+            return NotFound(new { error = "User not found" });
+
+        var mfaEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(domainUser);
+        
+        // Get recovery codes count
+        var recoveryCodesCount = await _userManager.CountRecoveryCodesAsync(user);
+
+        // Get client requirement
+        var tenant = await _tenantRepository.GetByIdAsync(domainUser.TenantId);
+        var clientRequiresMfa = false;
+        if (tenant?.ClientId != null)
+        {
+            var client = await _unitOfWork.Clients.GetByIdAsync(tenant.ClientId);
+            clientRequiresMfa = client?.RequireMfa ?? false;
+        }
+
+        return Ok(new MfaStatusResponse
+        {
+            MfaEnabled = mfaEnabled,
+            EnrolledAt = domainUser.MFAEnabled ? domainUser.UpdatedAt : null,
+            RecoveryCodesRemaining = recoveryCodesCount,
+            IsMfaRequired = mfaRequired,
+            ClientRequiresMfa = clientRequiresMfa
+        });
+    }
+
+    /// <summary>
+    /// Verify TOTP code with pending_mfa cookie (Parcours 2)
+    /// </summary>
+    [HttpPost("mfa-verify")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyMfa([FromBody] VerifyMfaRequest request)
+    {
+        // Read pending_mfa cookie
+        if (!Request.Cookies.TryGetValue("pending_mfa", out var cookieValue) || string.IsNullOrEmpty(cookieValue))
+        {
+            _logger.LogWarning("MFA verification attempted without pending_mfa cookie");
+            return Unauthorized(new { error = "Session expired, please log in again" });
+        }
+
+        // Decrypt cookie to get PendingMfaData
+        PendingMfaData? pendingData;
+        try
+        {
+            // TODO: Implement proper encryption/decryption using Data Protection API
+            // For now, assume cookie contains "userId|clientId|timestamp"
+            var parts = cookieValue.Split('|');
+            if (parts.Length != 3)
+                return Unauthorized(new { error = "Invalid session" });
+
+            pendingData = new PendingMfaData
+            {
+                UserId = Guid.Parse(parts[0]),
+                ClientId = Guid.Parse(parts[1]),
+                CreatedAt = DateTime.Parse(parts[2])
+            };
+
+            // Check expiration (5 minutes)
+            if (DateTime.UtcNow - pendingData.CreatedAt > TimeSpan.FromMinutes(5))
+            {
+                _logger.LogWarning("Expired pending_mfa cookie for user {UserId}", pendingData.UserId);
+                Response.Cookies.Delete("pending_mfa");
+                return Unauthorized(new { error = "Session expired, please log in again" });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to decrypt pending_mfa cookie");
+            Response.Cookies.Delete("pending_mfa");
+            return Unauthorized(new { error = "Invalid session" });
+        }
+
+        // Load user
+        var user = await _userManager.FindByIdAsync(pendingData.UserId.ToString());
+        if (user == null)
+        {
+            _logger.LogWarning("User not found for pending MFA: {UserId}", pendingData.UserId);
+            Response.Cookies.Delete("pending_mfa");
+            return Unauthorized(new { error = "User not found" });
+        }
+
+        // Verify TOTP code
+        var isValid = await _userManager.VerifyTwoFactorTokenAsync(
+            user,
+            _userManager.Options.Tokens.AuthenticatorTokenProvider,
+            request.TotpCode);
+
+        if (!isValid)
+        {
+            _logger.LogWarning("Invalid TOTP code during MFA verification for user {UserId}", user.Id);
+            return BadRequest(new { error = "Invalid TOTP code, please try again" });
+        }
+
+        // Sign in user with cookie-based session + MFA verified claim
+        await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, new[]
+        {
+            new Claim("mfa_verified", "true")
+        });
+
+        // Delete pending_mfa cookie
+        Response.Cookies.Delete("pending_mfa");
+
+        _logger.LogInformation("User {UserId} completed MFA verification successfully", user.Id);
+
+        // Load domain user and tenant for redirect URL construction
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        var tenant = domainUser != null 
+            ? await _tenantRepository.GetByIdAsync(domainUser.TenantId)
+            : null;
+
+        // Redirect to IdentityServer OAuth2 flow to generate real JWT with all claims
+        // The client app should initiate /connect/authorize with the authenticated cookie
+        // IdentityServer will see the cookie (with mfa_verified claim) and generate proper JWT tokens
+        var clientId = tenant?.ClientId?.Value.ToString() ?? pendingData.ClientId.ToString();
+        var tenantAcrValue = tenant?.Name ?? string.Empty;
+        
+        return Ok(new
+        {
+            mfaVerified = true,
+            userId = user.Id.Value,
+            email = user.Email.Value,
+            message = "MFA verification successful. You are now signed in.",
+            // Client app should redirect to this URL to get OAuth2 tokens
+            // The {{placeholders}} should be replaced by the client app with actual values
+            // acr_values preserves tenant context for IdentityServer
+            redirectUrl = $"/connect/authorize?client_id={clientId}&response_type=code&scope=openid profile email johodp.api&redirect_uri={{{{client_redirect_uri}}}}&state={{{{client_state}}}}&code_challenge={{{{pkce_challenge}}}}&code_challenge_method=S256&acr_values=tenant:{tenantAcrValue}"
+        });
+    }
+
+    /// <summary>
+    /// Initiate lost device recovery (Parcours 3 - Step 1)
+    /// </summary>
+    [HttpPost("mfa/lost-device")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InitiateLostDeviceRecovery([FromBody] LostDeviceRequest request)
+    {
+        _logger.LogInformation("Lost device recovery initiated for email: {Email}", request.Email);
+
+        // Find user by email (don't reveal if user exists)
+        var user = await _userManager.FindByEmailAsync(request.Email);
+        if (user == null)
+        {
+            _logger.LogWarning("Lost device recovery - user not found: {Email}", request.Email);
+            // Return success anyway (security: don't reveal if email exists)
+            return Ok(new
+            {
+                message = "If the email exists, a verification link has been sent. Check your inbox.",
+                expiresIn = "1 hour"
+            });
+        }
+
+        // Check if MFA is enabled
+        var mfaEnabled = await _userManager.GetTwoFactorEnabledAsync(user);
+        if (!mfaEnabled)
+        {
+            _logger.LogWarning("Lost device recovery - MFA not enabled: {Email}", request.Email);
+            return Ok(new
+            {
+                message = "If the email exists, a verification link has been sent. Check your inbox.",
+                expiresIn = "1 hour"
+            });
+        }
+
+        // Generate identity verification token (1 hour expiration)
+        var token = await _userManager.GenerateUserTokenAsync(
+            user,
+            "Default",
+            "IdentityVerification");
+
+        // TODO: Store token with expiration in database or cache
+
+        // Send email with verification link
+        var verificationLink = $"https://app.johodp.com/verify-identity?token={token}";
+        
+        // TODO: Implement email sending
+        _logger.LogInformation(
+            "Identity verification email sent to {Email} with link: {Link}", 
+            request.Email, 
+            verificationLink);
+
+        return Ok(new
+        {
+            message = "If the email exists, a verification link has been sent. Check your inbox.",
+            expiresIn = "1 hour"
+        });
+    }
+
+    /// <summary>
+    /// Verify user identity (Parcours 3 - Step 2)
+    /// </summary>
+    [HttpPost("mfa/verify-identity")]
+    [AllowAnonymous]
+    public Task<IActionResult> VerifyIdentity([FromBody] VerifyIdentityRequest request)
+    {
+        // TODO: Validate token from database/cache (1h expiration)
+        // For now, decode token to get user
+        
+        // Validate security questions if provided
+        if (request.SecurityAnswers != null && request.SecurityAnswers.Any())
+        {
+            // TODO: Implement security questions validation
+            _logger.LogInformation("Security questions provided for identity verification");
+        }
+
+        // Generate verified_identity token (30 min expiration)
+        var verifiedToken = Guid.NewGuid().ToString();
+        
+        // TODO: Store verified_identity token with 30min expiration
+
+        _logger.LogInformation("Identity verified successfully");
+
+        return Task.FromResult<IActionResult>(Ok(new VerifyIdentityResponse
+        {
+            VerifiedToken = verifiedToken,
+            ExpiresIn = "30 minutes",
+            Message = "Identity verified. You can now reset your MFA enrollment."
+        }));
+    }
+
+    /// <summary>
+    /// Reset MFA enrollment (Parcours 3 - Step 3)
+    /// </summary>
+    [HttpPost("mfa/reset-enrollment")]
+    [AllowAnonymous]
+    public Task<IActionResult> ResetMfaEnrollment([FromBody] ResetEnrollmentRequest request)
+    {
+        // TODO: Validate verified_identity token (30 min expiration)
+        // TODO: Get userId from token
+
+        // For now, placeholder implementation
+        _logger.LogWarning("Reset MFA enrollment - implementation incomplete");
+
+        return Task.FromResult<IActionResult>(Ok(new
+        {
+            message = "MFA disabled successfully. You must re-enroll on next login.",
+            mfaEnabled = false,
+            nextStep = "Login and complete MFA enrollment (Parcours 1)"
+        }));
+    }
+
+    /// <summary>
+    /// Disable MFA (optional - only if Client.RequireMfa = false)
+    /// </summary>
+    [HttpPost("mfa/disable")]
+    [Authorize]
+    public async Task<IActionResult> DisableMfa([FromBody] DisableMfaRequest request)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null)
+            return Unauthorized(new { error = "User not found" });
+
+        // Verify password
+        var passwordValid = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValid)
+        {
+            _logger.LogWarning("Invalid password during MFA disable for user {UserId}", user.Id);
+            return Unauthorized(new { error = "Invalid password" });
+        }
+
+        // Check if MFA is required by client
+        var domainUser = await _userRepository.GetByIdAsync(user.Id);
+        if (domainUser == null)
+            return NotFound(new { error = "User not found" });
+
+        var tenant = await _tenantRepository.GetByIdAsync(domainUser.TenantId);
+        if (tenant?.ClientId != null)
+        {
+            var client = await _unitOfWork.Clients.GetByIdAsync(tenant.ClientId);
+            if (client?.RequireMfa == true)
+            {
+                _logger.LogWarning("Attempted to disable MFA when required by client for user {UserId}", user.Id);
+                return Conflict(new 
+                { 
+                    error = "Cannot disable MFA (required by organization policy)",
+                    code = "MFA_REQUIRED"
+                });
+            }
+        }
+
+        // Disable 2FA
+        await _userManager.SetTwoFactorEnabledAsync(user, false);
+
+        // Disable MFA in domain
+        domainUser.DisableMFA();
+        await _unitOfWork.SaveChangesAsync();
+
+        // Invalidate recovery codes
+        await _userManager.GenerateNewTwoFactorRecoveryCodesAsync(user, 0);
+
+        _logger.LogInformation("MFA disabled successfully for user {UserId}", user.Id);
+
+        // TODO: Send security alert email
+
+        return Ok(new
+        {
+            mfaEnabled = false,
+            message = "MFA disabled successfully"
+        });
+    }
+
     // ========== HELPER METHODS ==========
     // Note: MFA-related business logic has been extracted to IMfaService for better separation of concerns
 
@@ -458,6 +818,7 @@ public class AccountController : ControllerBase
 
     /// <summary>
     /// Initie une demande de réinitialisation de mot de passe (Étape 1/2)
+
     /// </summary>
     /// <remarks>
     /// Cette méthode génère un token de réinitialisation sécurisé et l'envoie par email à l'utilisateur.

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Johodp.Domain.Tenants.Aggregates;
 using Johodp.Domain.Tenants.ValueObjects;
+using Johodp.Domain.Clients.ValueObjects;
 using Johodp.Domain.CustomConfigurations.ValueObjects;
 
 public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
@@ -79,6 +80,9 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
 
         // Associated client (a tenant can only have one client)
         builder.Property(t => t.ClientId)
+            .HasConversion(
+                v => v != null ? v.Value.ToString() : null,
+                v => v != null ? ClientId.From(Guid.Parse(v)) : null)
             .HasMaxLength(200)
             .IsRequired(false);
     }

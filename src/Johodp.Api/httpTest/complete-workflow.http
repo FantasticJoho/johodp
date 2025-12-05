@@ -6,7 +6,7 @@
 ### CONFIGURATION VARIABLES
 ###############################################################################
 
-@baseUrl = http://localhost.fiddler:5000
+@baseUrl = http://localhost:5000
 @clientName = {{createClient.response.body.clientName}}
 @redirectUri = http://localhost:4200/callback
 @scope = openid profile email johodp.identity johodp.api offline_access
@@ -25,7 +25,7 @@
 @customConfigName = workflow-branding3
 
 # User credentials
-@userEmail = workflow.test6@example.com
+@userEmail = workflow.test9@example.com
 @userFirstName = Workflow
 @userLastName = TestUser
 @userPassword = SecureP@ssw0rd123!
@@ -36,9 +36,9 @@
 @customConfigId = {{createCustomConfig.response.body.id}}
 @tenantId = {{createTenant.response.body.id}}
 @userId = {{registerUser.response.body.id}}
-@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQEHztXJFmxrfLm4qNRotL6x/0En6KZTzHASKn+DKDNmrnO+I05MgUhnzzvqtOLb/NNe5hlVPHugU8nZIpzk0BSjjqi8VpnRhgk6MMSRmt4+lD+cnGcYDrJ2Giv/MlcRQ/tOVekkVvkqDFGjHIRmKMytyDYLlBDCiHVy+tXSi3QQTLDO7/zeAsT0br16piFo6eU=
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQEnZmvcspNAH3FRkzEkJjW0xr0lH1vgtw8TSYbr5eoZkU+O4TR5EthL5GBz+shiOLpqhS8+ok9fSJw2CYH2YhMWESmPgUB+UrGC8NnwP95uiLTFOovjxmvwK3lfCtSt71mv+Lx9DjnSO4bneKANwPDirW8RedEsnhkUI2rH42oDAWuSxQ2lJev6h0WgJqzbAXg=
 @authCode = 95101CB108A5C535A56396301EBE3821E45EF7775DADB5D96E849AE54233D87E-1
-@accessToken = eyJhbGciOiJSUzI1NiIsImtpZCI6IjNGODNDODU3MzBDMjQ4NTU2NTUyNjc4MzRGQTY0RUQwIiwidHlwIjoiYXQrand0In0.eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjUwMDAiLCJuYmYiOjE3NjQ2MTAxMTQsImlhdCI6MTc2NDYxMDExNCwiZXhwIjoxNzY0NjEzNzE0LCJhdWQiOiJqb2hvZHAiLCJzY29wZSI6WyJvcGVuaWQiLCJwcm9maWxlIiwiZW1haWwiLCJqb2hvZHAuaWRlbnRpdHkiLCJqb2hvZHAuYXBpIl0sImFtciI6WyJwd2QiXSwiY2xpZW50X2lkIjoid29ya2Zsb3ctdGVzdC1zcGEtMTc2NDYwODQ2MyIsInN1YiI6ImE3YThlMGI5LWFkMWEtNDcxNi05MDQ5LWQxNWUzMTA5ZWViZiIsImF1dGhfdGltZSI6MTc2NDYwOTkzMSwiaWRwIjoibG9jYWwiLCJlbWFpbCI6IndvcmtmbG93LnRlc3Q1QGV4YW1wbGUuY29tIiwidGVuYW50X2lkIjoiMWZiNzYzMzMtYjg5Zi00ZmYwLTk4MTktYzNkMDFmNzYwNzFiIiwidGVuYW50X3JvbGUiOiJVc2VyIiwidGVuYW50X3Njb3BlIjoiZnVsbF9hY2Nlc3MiLCJzaWQiOiI3Njk1QjI1NzFGOUYxQjYxNjQ0NDlBMzJFRjM5Q0NFRiIsImp0aSI6IjkxNDJCQTREREEyRURDMzIyODFBREQyMzVENzk5NzRBIn0.tgEtbyLput8dFZooaYuwyZSq78BPyvivmeziHRbSltzbju0Z-lFr2HbKAD-xzMuHffU1yK0dApj3DafpgXTaQkp0Rg-mOEScFDYn4BTot16s6iwoTBa72n4pfBca795p2YcquCtGNN5RI35-hfPprtkKf4xh-ZQTVISpy8TQMCXm_KpcScr9_dEId2Bk_2gX5NKUQLHyKu_Y1OrxNyHT-QiHC-X7kgG6xxeVqsqRdyBAsvh-ro6kPjMjaxYlcjjQfjyBNxym_xYpTEUAg89R7npK3Zli1g3d8eVeTmF-cLhySZmrmXnDXW16fBR3MNSnhI3TPDeNdEXegBZ-sZcxhA
+@accessToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQH0JLRdRWVOFgENT7JqqiajawnTlX94jedTFKmOuzZx2FZo9EVe6TFymM47rmbL38AJyp7j6bhaBK/aThYr8wTsQ4CKUX73kOB1ugUv5GFo70gmxZBsDip5A2TBUO0LxfCNs93M+FXcEMIwuYrpkf/gNbO/4PjjbOs6HwRyPl4Ma/RvaClvW27QXLOUTaePZGE=
 @refreshToken = 
 
 
@@ -314,7 +314,7 @@ Content-Type: application/json
 
 {
   "token": "{{activationToken}}",
-  "userId": "afb2ac7b-c973-47fe-8c4c-ca6191370206",
+  "userId": "e1826f1b-1278-4a41-883a-a8efd4d38aa3",
   "newPassword": "{{userPassword}}",
   "confirmPassword": "{{userPassword}}"
 }
@@ -731,5 +731,448 @@ GET {{baseUrl}}/.well-known/openid-configuration/jwks
 # - 404 Not Found: Resource not found (ErrorType.NotFound)
 # - 409 Conflict: Duplicate resource (ErrorType.Conflict)
 # - 500 Internal Server Error: Unexpected errors (ErrorType.Failure)
+
+###############################################################################
+
+
+###############################################################################
+### STEP 20: MFA/TOTP WORKFLOWS (3 PARCOURS)
+###############################################################################
+
+# Prerequisites: 
+# - User must be created, activated, and logged in
+# - Client.RequireMfa must be set to true for mandatory MFA
+# - Use userId and accessToken from previous steps
+
+### MFA Configuration Variables
+@totpCode = 123456
+@recoveryCode = ABC123-DEF456
+@verifiedToken = verified-identity-token-xyz
+@mfaAccessToken = {{accessToken}}
+
+###############################################################################
+### PARCOURS 1: ONBOARDING MFA (First-time Setup)
+###############################################################################
+
+### 20.1 Enable MFA Requirement on Client (if not already done)
+PUT {{baseUrl}}/api/clients/{{clientId}}
+Content-Type: application/json
+
+{
+  "clientName": "{{clientName}}",
+  "allowedScopes": [
+    "openid",
+    "profile",
+    "email",
+    "johodp.identity",
+    "johodp.api",
+    "offline_access"
+  ],
+  "requireConsent": false,
+  "requireMfa": true,
+  "isActive": true
+}
+
+### 20.2 User Login (First time with MFA required)
+# Expected: If Client.RequireMfa=true and User.MFAEnabled=false
+# System should redirect to MFA enrollment
+# @name loginMfaRequired
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "tenantname": "{{TenantNameResult}}"
+}
+### Expected Response: 302 Redirect to /mfa/enroll OR { mfaEnrollmentRequired: true }
+
+### 20.3 Enroll TOTP (Get QR Code)
+# @name enrollTotp
+POST {{baseUrl}}/api/auth/mfa/enroll
+Authorization: Bearer {{mfaAccessToken}}
+Content-Type: application/json
+
+### Expected Response: 200 OK
+# {
+#   "qrCodeUri": "data:image/png;base64,iVBORw0KG...",
+#   "manualEntryKey": "JBSW Y3DP EHPK 3PXP",
+#   "message": "Scan QR code with your authenticator app"
+# }
+
+### 20.4 Verify TOTP and Activate MFA
+# User scans QR code with Google Authenticator/Microsoft Authenticator
+# User enters 6-digit code from authenticator app
+# @name verifyTotpEnrollment
+POST {{baseUrl}}/api/auth/mfa/verify-enrollment
+Authorization: Bearer {{mfaAccessToken}}
+Content-Type: application/json
+
+{
+  "totpCode": "{{totpCode}}"
+}
+
+### Expected Response: 200 OK
+# {
+#   "mfaEnabled": true,
+#   "recoveryCodes": [
+#     "ABC123-DEF456",
+#     "GHI789-JKL012",
+#     "MNO345-PQR678",
+#     ... (10 codes total)
+#   ],
+#   "token": "eyJhbGciOiJSUzI1NiIs...",
+#   "message": "MFA enabled successfully. Save your recovery codes!"
+# }
+
+### 20.5 Get MFA Status (Verify Enrollment)
+GET {{baseUrl}}/api/auth/mfa/status
+Authorization: Bearer {{mfaAccessToken}}
+
+### Expected Response: 200 OK
+# {
+#   "mfaEnabled": true,
+#   "enrolledAt": "2025-12-05T10:30:00Z",
+#   "recoveryCodesRemaining": 10,
+#   "isMfaRequired": true,
+#   "clientRequiresMfa": true
+# }
+
+
+###############################################################################
+### PARCOURS 2: LOGIN WITH TOTP (Existing Users)
+###############################################################################
+
+### 20.6 Login Step 1 - Email + Password
+# User with MFA already enabled logs in
+# Expected: Cookie "pending_mfa" created (5 min expiration)
+# @name loginWithMfaStep1
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "tenantname": "{{TenantNameResult}}"
+}
+
+### Expected Response: 302 Redirect to /mfa-verification
+# Set-Cookie: pending_mfa=<encrypted_data>; HttpOnly; Secure; SameSite=Strict; Max-Age=300
+
+### Capture pending_mfa cookie
+@pendingMfaCookie = {{loginWithMfaStep1.response.headers.Set-Cookie}}
+
+### 20.7 Login Step 2 - Verify TOTP Code
+# User enters 6-digit code from authenticator app
+# @name verifyMfaLogin
+POST {{baseUrl}}/api/auth/mfa-verify
+Cookie: {{pendingMfaCookie}}
+Content-Type: application/json
+
+{
+  "totpCode": "{{totpCode}}"
+}
+
+### Expected Response: 200 OK
+# {
+#   "mfaVerified": true,
+#   "userId": "guid",
+#   "email": "user@example.com",
+#   "message": "MFA verification successful. You are now signed in.",
+#   "redirectUrl": "/connect/authorize?client_id=xxx&response_type=code&scope=openid profile email johodp.api&redirect_uri={{client_redirect_uri}}&..."
+# }
+# Cookie set: .AspNetCore.Identity.Application with mfa_verified claim
+# Cookie deleted: pending_mfa
+
+### 20.8 Complete OAuth2 Flow - Get Tokens with MFA Claim
+# Client app redirects to OAuth2 authorization endpoint (using cookie from step 20.7)
+# @name getOAuth2Tokens
+POST {{baseUrl}}/connect/authorize
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{clientName}}
+&response_type=code
+&scope=openid profile email johodp.api
+&redirect_uri=http://localhost:4200/callback
+&state=random_state_value
+&code_challenge=random_pkce_challenge
+&code_challenge_method=S256
+
+### Expected: 302 Redirect to redirect_uri with authorization code
+# Then exchange code for tokens:
+
+# @name exchangeCodeForTokens
+POST {{baseUrl}}/connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code
+&code={{getOAuth2Tokens.response.headers.Location}}
+&redirect_uri=http://localhost:4200/callback
+&client_id={{clientName}}
+&code_verifier=original_pkce_verifier
+
+### Expected Response:
+# {
+#   "access_token": "eyJhbGciOiJSUzI1NiIs...",
+#   "id_token": "eyJhbGciOiJSUzI1NiIs...",
+#   "token_type": "Bearer",
+#   "expires_in": 3600,
+#   "refresh_token": "..."
+# }
+
+### 20.9 Verify Token Contains MFA Claims
+GET {{baseUrl}}/connect/userinfo
+Authorization: Bearer {{exchangeCodeForTokens.response.body.access_token}}
+
+### Expected: JWT should contain claims:
+# {
+#   "sub": "user-guid",
+#   "email": "user@example.com",
+#   "mfa_verified": "true",
+#   "mfa_enabled": "true",
+#   "tenant_id": "tenant-guid",
+#   ...
+# }
+
+
+### 20.9 Verify Token Contains MFA Claims
+GET {{baseUrl}}/connect/userinfo
+Authorization: Bearer {{exchangeCodeForTokens.response.body.access_token}}
+
+### Expected: JWT should contain claims:
+# {
+#   "sub": "user-guid",
+#   "email": "user@example.com",
+#   "mfa_verified": "true",
+#   "mfa_enabled": "true",
+#   "tenant_id": "tenant-guid",
+#   ...
+# }
+
+
+###############################################################################
+### PARCOURS 3: LOST DEVICE RECOVERY (3-Step Process)
+###############################################################################
+
+### 20.10 Step 1 - Initiate Lost Device Recovery
+# User clicks "J'ai perdu mon authenticator" on MFA page
+# @name lostDeviceRecovery
+POST {{baseUrl}}/api/auth/mfa/lost-device
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}"
+}
+
+### Expected Response: 200 OK
+# {
+#   "message": "If the email exists, a verification link has been sent. Check your inbox.",
+#   "expiresIn": "1 hour"
+# }
+
+### Expected: Email sent with verification link
+# Subject: Demande de réinitialisation MFA - Johodp
+# Body contains: https://app.johodp.com/verify-identity?token=abc123xyz789
+
+### 20.11 Step 2 - Verify Identity
+# User clicks link in email and submits security questions
+# @name verifyIdentity
+POST {{baseUrl}}/api/auth/mfa/verify-identity
+Content-Type: application/json
+
+{
+  "token": "abc123xyz789",
+  "securityAnswers": {
+    "birthCity": "Paris",
+    "firstPet": "Rex"
+  }
+}
+
+### Expected Response: 200 OK
+# {
+#   "verifiedToken": "def456uvw012",
+#   "expiresIn": "30 minutes",
+#   "message": "Identity verified. You can now reset your MFA enrollment."
+# }
+
+### Capture verifiedToken
+@verifiedToken = {{verifyIdentity.response.body.verifiedToken}}
+
+### 20.12 Step 3 - Reset MFA Enrollment
+# @name resetMfaEnrollment
+POST {{baseUrl}}/api/auth/mfa/reset-enrollment
+Content-Type: application/json
+
+{
+  "verifiedToken": "{{verifiedToken}}"
+}
+
+### Expected Response: 200 OK
+# {
+#   "message": "MFA disabled successfully. You must re-enroll on next login.",
+#   "mfaEnabled": false,
+#   "nextStep": "Login and complete MFA enrollment (Parcours 1)"
+# }
+
+### Expected: Email confirmation sent
+# Subject: Votre MFA a été réinitialisée - Johodp
+# Body contains: Date/heure, IP address, warning to contact support if not initiated by user
+
+### 20.13 Verify MFA is Disabled
+GET {{baseUrl}}/api/auth/mfa/status
+Authorization: Bearer {{mfaAccessToken}}
+
+### Expected Response: 200 OK
+# {
+#   "mfaEnabled": false,
+#   "isMfaRequired": true,
+#   "clientRequiresMfa": true
+# }
+
+### 20.14 User Must Re-enroll on Next Login
+# User logs in again → System forces re-enrollment (back to Parcours 1)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "tenantname": "{{TenantNameResult}}"
+}
+### Expected: Redirect to /mfa/enroll (Parcours 1)
+
+
+###############################################################################
+### PARCOURS COMPLÉMENTAIRE: DISABLE MFA (Optional)
+###############################################################################
+
+### 20.15 Disable MFA (Only if Client.RequireMfa = false)
+# User voluntarily disables MFA
+POST {{baseUrl}}/api/auth/mfa/disable
+Authorization: Bearer {{mfaAccessToken}}
+Content-Type: application/json
+
+{
+  "password": "{{userPassword}}"
+}
+
+### Expected Response: 200 OK (if MFA is optional)
+# {
+#   "mfaEnabled": false,
+#   "message": "MFA disabled successfully"
+# }
+
+### Expected Response: 409 Conflict (if MFA is required)
+# {
+#   "error": {
+#     "code": "MFA_REQUIRED",
+#     "message": "Cannot disable MFA (required by organization policy)",
+#     "type": "Conflict"
+#   },
+#   "isSuccess": false
+# }
+
+
+###############################################################################
+### MFA TESTING SCENARIOS
+###############################################################################
+
+### SCENARIO 1: Invalid TOTP Code
+POST {{baseUrl}}/api/auth/mfa-verify
+Cookie: {{pendingMfaCookie}}
+Content-Type: application/json
+
+{
+  "totpCode": "000000"
+}
+### Expected: 400 Bad Request "Invalid TOTP code, please try again"
+
+### SCENARIO 2: Expired Pending MFA Cookie
+# Wait 5+ minutes after login, then try to verify TOTP
+POST {{baseUrl}}/api/auth/mfa-verify
+Cookie: pending_mfa=expired-cookie
+Content-Type: application/json
+
+{
+  "totpCode": "{{totpCode}}"
+}
+### Expected: 401 Unauthorized "Session expired, please log in again"
+
+### SCENARIO 3: Expired Identity Verification Token
+POST {{baseUrl}}/api/auth/mfa/verify-identity
+Content-Type: application/json
+
+{
+  "token": "expired-token-abc123",
+  "securityAnswers": {
+    "birthCity": "Paris"
+  }
+}
+### Expected: 401 Unauthorized "Token expired, request a new one"
+
+### SCENARIO 4: Wrong Security Questions
+POST {{baseUrl}}/api/auth/mfa/verify-identity
+Content-Type: application/json
+
+{
+  "token": "valid-token-abc123",
+  "securityAnswers": {
+    "birthCity": "Wrong City",
+    "firstPet": "Wrong Pet"
+  }
+}
+### Expected: 401 Unauthorized "Wrong answers"
+
+
+###############################################################################
+### MFA WORKFLOW SUMMARY & NOTES
+###############################################################################
+
+# Parcours 1 - Onboarding MFA (First-time Setup):
+# 1. User logs in with Client.RequireMfa=true && User.MFAEnabled=false
+# 2. System redirects to POST /mfa/enroll (returns QR code)
+# 3. User scans QR code with authenticator app
+# 4. User submits TOTP code → POST /mfa/verify-enrollment
+# 5. System activates MFA, generates 10 recovery codes, returns JWT
+# 6. User is logged in with mfa_verified claim
+
+# Parcours 2 - Login with TOTP (Existing Users):
+# 1. User logs in → POST /login (email + password)
+# 2. System creates cookie "pending_mfa" (5 min expiration)
+# 3. User redirected to /mfa-verification page
+# 4. User enters TOTP code from authenticator → POST /mfa-verify
+# 5. System validates TOTP, generates JWT with mfa_verified claim
+# 6. Cookie "pending_mfa" deleted
+# 7. User is logged in
+
+# Parcours 3 - Lost Device Recovery (3 Steps):
+# 1. User clicks "Lost Device" → POST /mfa/lost-device (sends email)
+# 2. User clicks email link → POST /mfa/verify-identity (validates identity)
+# 3. System generates "verified_identity" token (30 min)
+# 4. User submits → POST /mfa/reset-enrollment (disables MFA)
+# 5. Next login → System forces re-enrollment (back to Parcours 1)
+
+# Key Security Features:
+# - Cookie "pending_mfa": HttpOnly + Secure + SameSite=Strict (5 min expiration)
+# - Identity verification token: 1 hour expiration
+# - Verified identity token: 30 minutes expiration
+# - TOTP validation: ±30 seconds window
+# - Rate limiting: max 5 attempts per session (recommended)
+# - Audit logging: all MFA events logged (enrollment, login, reset)
+# - Email notifications: MFA enabled, disabled, recovery initiated
+
+# Expected HTTP Status Codes (MFA):
+# - 200 OK: Successful MFA operations
+# - 302 Redirect: MFA enrollment required or verification page
+# - 400 Bad Request: Invalid TOTP code
+# - 401 Unauthorized: Expired token, wrong credentials, invalid session
+# - 409 Conflict: Cannot disable MFA (required by policy)
+
+# Implementation Status (as of December 2025):
+# ✅ Parcours 1 - Onboarding: Partial (/mfa/enroll, /mfa/verify-enrollment)
+# ❌ Parcours 2 - Login TOTP: Strategy Pattern + Cookie not implemented
+# ❌ Parcours 3 - Lost Device: Complete flow to implement
+# ❌ MFA Status: /mfa/status endpoint to implement
+# ❌ MFA Disable: /mfa/disable endpoint to implement
 
 ###############################################################################

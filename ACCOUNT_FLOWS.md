@@ -82,17 +82,169 @@ Toute création d'utilisateur déclenche automatiquement l'envoi d'un email d'ac
       "tenantName": "acme-corp"  // Requis : identifiant du tenant
     }
     ```
-  - Vérifie le hash du mot de passe via `UserManager.CheckPasswordAsync`
-  - Applique le MFA si le client le requiert (via `IMfaAuthenticationService`)
-  - Définit un cookie de session sécurisé (`.AspNetCore.Identity.Application`)
-  - Paramètres du cookie : HttpOnly, Secure (production), SameSite=Lax, expiration glissante de 7 jours
-  - Retourne 200 OK avec message de succès lors de l'authentification
+  - **Flux sans MFA :**
+    - Vérifie le hash du mot de passe via `UserManager.CheckPasswordAsync`
+    - Définit un cookie de session sécurisé (`.AspNetCore.Identity.Application`)
+    - Retourne 200 OK avec message de succès
+  
+  - **Flux avec MFA requis (si `Client.RequireMfa = true`) :**
+    - Vérifie credentials (email + password + tenant)
+    - Détecte si MFA est requis via `IMfaService.IsMfaRequiredForUserAsync()`
+    - **Si MFA pas encore enrollé** :
+      - Retourne 200 OK avec `mfaEnrollmentRequired: true` et `redirectUrl: /mfa/enroll`
+      - Utilisateur doit compléter enrollment (Parcours 1)
+    - **Si MFA déjà enrollé** :
+      - Crée cookie temporaire `pending_mfa` (userId|clientId|timestamp, 5 min)
+      - Retourne 200 OK avec `mfaVerificationRequired: true` et `redirectUrl: /mfa-verification`
+      - Utilisateur doit entrer code TOTP (Parcours 2)
+  
+  - Paramètres du cookie session : HttpOnly, Secure (production), SameSite=Lax, expiration glissante de 7 jours
   - Retourne 401 Unauthorized si les identifiants sont invalides
 
 #### Déconnexion (`/api/auth/logout`)
 - **POST** — Déconnecter et effacer la session
 - Efface les cookies d'authentification
 - Retourne 200 OK
+
+### Endpoints MFA/TOTP
+
+#### Enrollment TOTP (Parcours 1)
+
+##### Initier l'enrollment (`/api/auth/mfa/enroll`)
+- **POST** — Génère une clé TOTP et QR code pour enrollment
+- **Authentification requise** : Cookie session
+- Vérifie que MFA est requis pour le client de l'utilisateur
+- Génère nouvelle clé authenticator via `UserManager.ResetAuthenticatorKeyAsync()`
+- Retourne :
+  ```json
+  {
+    "sharedKey": "JBSWY3DPEHPK3PXP",
+    "qrCodeUri": "otpauth://totp/Johodp:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Johodp",
+    "manualEntryKey": "JBSW Y3DP EHPK 3PXP"
+  }
+  ```
+- L'utilisateur scanne le QR code avec Microsoft Authenticator
+
+##### Vérifier l'enrollment (`/api/auth/mfa/verify-enrollment`)
+- **POST** — Vérifie le code TOTP et active MFA
+- **Authentification requise** : Cookie session
+- Corps de la requête :
+  ```json
+  {
+    "code": "123456"
+  }
+  ```
+- Vérifie le code via `UserManager.VerifyTwoFactorTokenAsync()`
+- Active 2FA : `UserManager.SetTwoFactorEnabledAsync(user, true)`
+- Active MFA dans le domaine : `domainUser.EnableMFA()`
+- Génère 10 recovery codes
+- Retourne :
+  ```json
+  {
+    "message": "Two-factor authentication enabled successfully",
+    "recoveryCodes": ["12345678", "87654321", ...]
+  }
+  ```
+
+#### Login avec TOTP (Parcours 2)
+
+##### Vérifier code TOTP (`/api/auth/mfa-verify`)
+- **POST** — Vérifie le code TOTP après login initial
+- **Authentification requise** : Cookie temporaire `pending_mfa`
+- Corps de la requête :
+  ```json
+  {
+    "totpCode": "123456"
+  }
+  ```
+- Lit cookie `pending_mfa` (userId|clientId|timestamp)
+- Vérifie expiration (< 5 minutes)
+- Valide TOTP via `UserManager.VerifyTwoFactorTokenAsync()`
+- Crée session authentifiée : `SignInWithClaimsAsync(user, [mfa_verified=true])`
+- Supprime cookie `pending_mfa`
+- Retourne URL de redirection vers `/connect/authorize` pour OAuth2 flow
+- **Flux complet** : Cookie session → IdentityServer génère JWT avec claims MFA
+
+##### Statut MFA (`/api/auth/mfa/status`)
+- **GET** — Obtenir le statut MFA de l'utilisateur connecté
+- **Authentification requise** : Bearer token ou cookie session
+- Retourne :
+  ```json
+  {
+    "mfaEnabled": true,
+    "enrolledAt": "2024-12-05T10:30:00Z",
+    "recoveryCodesRemaining": 8,
+    "isMfaRequired": true,
+    "clientRequiresMfa": true
+  }
+  ```
+
+#### Lost Device Recovery (Parcours 3)
+
+##### Étape 1 : Initier récupération (`/api/auth/mfa/lost-device`)
+- **POST** — Demande de réinitialisation MFA
+- **Authentification** : Aucune (public)
+- Corps de la requête :
+  ```json
+  {
+    "email": "user@example.com"
+  }
+  ```
+- Génère token de vérification d'identité (1 heure)
+- Envoie email avec lien de vérification
+- Retourne toujours succès (ne révèle pas si email existe)
+
+##### Étape 2 : Vérifier identité (`/api/auth/mfa/verify-identity`)
+- **POST** — Valide le token et questions de sécurité
+- Corps de la requête :
+  ```json
+  {
+    "token": "abc123xyz789",
+    "securityAnswers": {
+      "birthCity": "Paris",
+      "firstPet": "Rex"
+    }
+  }
+  ```
+- Valide token (1h expiration)
+- Vérifie réponses aux questions de sécurité
+- Génère `verified_identity` token (30 min)
+- Retourne :
+  ```json
+  {
+    "verifiedToken": "def456uvw012",
+    "expiresIn": "30 minutes",
+    "message": "Identity verified. You can now reset your MFA enrollment."
+  }
+  ```
+
+##### Étape 3 : Réinitialiser enrollment (`/api/auth/mfa/reset-enrollment`)
+- **POST** — Désactive MFA et force re-enrollment
+- Corps de la requête :
+  ```json
+  {
+    "verifiedToken": "def456uvw012"
+  }
+  ```
+- Valide `verified_identity` token (30 min expiration)
+- Désactive MFA : `SetTwoFactorEnabledAsync(user, false)`
+- Désactive dans domaine : `domainUser.DisableMFA()`
+- Envoie email de confirmation
+- Au prochain login, utilisateur sera forcé à re-enroll (Parcours 1)
+
+##### Désactiver MFA volontairement (`/api/auth/mfa/disable`)
+- **POST** — Désactive MFA (seulement si non requis par client)
+- **Authentification requise** : Bearer token
+- Corps de la requête :
+  ```json
+  {
+    "password": "MotDePasse123!"
+  }
+  ```
+- Vérifie password
+- Vérifie que `Client.RequireMfa = false`
+- Désactive MFA si autorisé
+- Retourne 409 Conflict si MFA est requis par policy
 
 ### Configuration IdentityServer
 
@@ -521,21 +673,76 @@ public class CustomSignInManager : SignInManager<User>
 
 ### Intégration MFA
 
-Le MFA est appliqué **par client**, pas par rôle utilisateur. Le flux :
+Le MFA est appliqué **par client**, pas par rôle utilisateur. 
 
-1. L'utilisateur se connecte via `/api/auth/login` avec `tenantName` obligatoire
-2. `AccountController` vérifie si le client requiert le MFA :
-   ```csharp
-   var client = await _clientRepository.GetByNameAsync(clientId);
-   if (client?.RequireMfa == true)
-   {
-       var mfaResult = await _mfaService.AuthenticateAsync(user, client, tenantId);
-       if (!mfaResult.Success)
-           return Unauthorized("MFA required");
-   }
-   ```
-3. Si le MFA est requis, le client doit implémenter le défi 2FA
-4. Implémentation actuelle : placeholder MFA (retourne succès)
+#### Architecture MFA/TOTP
+
+**3 Parcours implémentés :**
+
+1. **Parcours 1 - Onboarding (Enrollment)** :
+   - Utilisateur login → MFA requis mais pas enrollé
+   - `/mfa/enroll` → génère QR code
+   - Utilisateur scanne avec Microsoft Authenticator
+   - `/mfa/verify-enrollment` → valide premier code TOTP
+   - MFA activé + 10 recovery codes générés
+
+2. **Parcours 2 - Login avec TOTP** :
+   - Utilisateur login → MFA requis et enrollé
+   - Cookie `pending_mfa` créé (5 min, contient userId|clientId|timestamp)
+   - Redirection vers `/mfa-verification`
+   - `/mfa-verify` → valide code TOTP
+   - Session authentifiée créée avec claim `mfa_verified=true`
+   - Redirection vers OAuth2 `/connect/authorize` → génération JWT
+
+3. **Parcours 3 - Lost Device Recovery** :
+   - Utilisateur clique "J'ai perdu mon authenticator"
+   - `/mfa/lost-device` → envoie email avec token (1h)
+   - `/mfa/verify-identity` → valide token + questions sécurité → génère `verified_identity` (30 min)
+   - `/mfa/reset-enrollment` → désactive MFA
+   - Prochain login force re-enrollment (retour Parcours 1)
+
+#### Flux MFA avec OAuth2
+
+Voir le diagramme complet dans `ARCHITECTURE.md` section "🔐 Flux MFA/TOTP avec OAuth2".
+
+**Points clés** :
+- Cookie `pending_mfa` : temporaire (5 min), preuve que password est validé
+- Cookie session `.AspNetCore.Identity.Application` : contient claim `mfa_verified=true`
+- `IdentityServerProfileService` : injecte claims `mfa_verified` et `mfa_enabled` dans JWT
+- JWT final contient : `sub`, `email`, `tenant_id`, `role`, `scope`, `mfa_verified`, `mfa_enabled`
+
+#### Configuration
+
+```csharp
+// IMfaService - Logique métier MFA
+services.AddScoped<IMfaService, MfaService>();
+
+// Détecte si MFA est requis pour un utilisateur
+bool mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(user);
+
+// Vérifie Client.RequireMfa flag
+var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);
+var client = await _clientRepository.GetByIdAsync(tenant.ClientId);
+if (client?.RequireMfa == true)
+{
+    // MFA requis → vérifier si enrollé → créer pending_mfa cookie
+}
+```
+
+#### Endpoints implémentés
+
+- ✅ `POST /mfa/enroll` - Génère QR code TOTP
+- ✅ `POST /mfa/verify-enrollment` - Valide enrollment + génère recovery codes
+- ✅ `POST /mfa-verify` - Vérifie TOTP pendant login (cookie-based)
+- ✅ `GET /mfa/status` - Statut MFA utilisateur
+- ✅ `POST /mfa/lost-device` - Initie récupération (envoie email)
+- ✅ `POST /mfa/verify-identity` - Valide identité (token + questions)
+- ✅ `POST /mfa/reset-enrollment` - Réinitialise MFA
+- ✅ `POST /mfa/disable` - Désactive MFA volontairement (si autorisé)
+
+#### Tests
+
+Voir `src/Johodp.Api/httpTest/complete-workflow.http` STEP 20 pour tests complets des 3 parcours.
 
 ## Tests des Flux de Compte
 
@@ -1035,25 +1242,30 @@ services.AddScoped<IProfileService, IdentityServerProfileService>();
 - Architecture pilotée par événements pour l'envoi d'emails
 - Activation de compte avec token et configuration de mot de passe
 - Connexion avec authentification tenant-aware
+- **MFA/TOTP complet avec 3 parcours** :
+  - Parcours 1 : Onboarding (enrollment avec QR code + recovery codes)
+  - Parcours 2 : Login avec TOTP (cookie-based flow → OAuth2 JWT)
+  - Parcours 3 : Lost Device Recovery (email verification + identity questions)
 - Flux authorization code OAuth2/OIDC + PKCE
 - Chargement dynamique de clients depuis la base de données
 - Support multi-tenant avec URIs de redirection spécifiques au tenant
-- Application de MFA spécifique au client (placeholder)
 - Gestion de session avec cookies sécurisés
+- Claims MFA dans JWT (`mfa_verified`, `mfa_enabled`)
 - Domain-driven design avec frontières d'agrégats appropriées
 - Séparation architecture propre (Domain → Application → Infrastructure → API)
 
 ⏳ **En Développement :**
-- Livraison réelle d'emails 
-- Implémentation du flux de défi MFA
-- Réinitialisation de mot de passe par email
-- Emails de bienvenue après activation
+- Livraison réelle d'emails (SMTP/SendGrid/AWS SES)
+- Chiffrement cookie `pending_mfa` avec Data Protection API
+- Token storage pour identity verification (UserTokens vs Redis)
+- Questions de sécurité pour lost device recovery
+- Emails de sécurité (MFA disabled, reset confirmation)
 
 📋 **Planifié :**
 - Formulaires d'inscription web (faire l'intégration avec cette api)
 - Portail admin pour la gestion des utilisateurs 
 - Journalisation d'audit pour les événements d'authentification
-- Rate Limiting (?) sur les endpoints d'auth
+- Rate Limiting sur les endpoints MFA (max 5 tentatives TOTP)
 - Verrouillage de compte après échecs de tentatives
 - Liens de vérification d'email
 
@@ -1064,8 +1276,11 @@ services.AddScoped<IProfileService, IdentityServerProfileService>();
 - [Documentation Duende IdentityServer](https://docs.duendesoftware.com/identityserver/v7/)
 - [RFC 7636 OAuth 2.0 PKCE](https://datatracker.ietf.org/doc/html/rfc7636)
 - [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
+- [RFC 6238 TOTP: Time-Based One-Time Password](https://datatracker.ietf.org/doc/html/rfc6238)
 - [Hachage de Mot de Passe dans ASP.NET Core Identity](https://learn.microsoft.com/fr-fr/aspnet/core/security/authentication/identity-configuration/)
 - [Authentification par Cookie dans ASP.NET Core](https://learn.microsoft.com/fr-fr/aspnet/core/security/authentication/cookie/)
+- [Two-Factor Authentication dans ASP.NET Core](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/identity-enable-qrcodes)
 - [OWASP Bonnes Pratiques d'Authentification](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- [OWASP Multi-Factor Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)
 - [Référence Domain-Driven Design](https://www.domainlanguage.com/ddd/reference/)
 - [Clean Architecture par Robert C. Martin](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
