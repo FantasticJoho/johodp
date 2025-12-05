@@ -144,6 +144,13 @@ public static class ServiceCollectionExtensions
             options.UserInteraction.LogoutUrl = "/api/auth/logout";
             options.UserInteraction.DeviceVerificationUrl = "/api/auth/device";
             options.UserInteraction.ErrorUrl = "/error";
+
+            // Configure event raising based on environment
+            var eventsConfig = configuration.GetSection("IdentityServer:Events");
+            options.Events.RaiseSuccessEvents = eventsConfig.GetValue("RaiseSuccessEvents", false);
+            options.Events.RaiseFailureEvents = eventsConfig.GetValue("RaiseFailureEvents", true);
+            options.Events.RaiseInformationEvents = eventsConfig.GetValue("RaiseInformationEvents", false);
+            options.Events.RaiseErrorEvents = eventsConfig.GetValue("RaiseErrorEvents", true);
         })
         .AddInMemoryApiScopes(IdentityServerConfig.GetApiScopes())
         .AddInMemoryApiResources(IdentityServerConfig.GetApiResources())
@@ -180,6 +187,7 @@ public static class ServiceCollectionExtensions
         ConfigureSigningCredential(idServerBuilder, configuration, environment);
 
         services.AddScoped<IProfileService, IdentityServerProfileService>();
+        services.AddSingleton<Duende.IdentityServer.Services.IEventSink, IdentityServerEventSink>();
     }
 
     /// <summary>
