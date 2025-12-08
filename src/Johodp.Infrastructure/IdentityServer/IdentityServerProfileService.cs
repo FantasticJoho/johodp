@@ -69,18 +69,26 @@ public class IdentityServerProfileService : IProfileService
         // Check MFA status once
         var mfaWasVerified = context.Subject.FindFirst("mfa_verified")?.Value == "true";
         
-        // Build claims list with known capacity
+        // Read tenant claims directly from the principal if present (no DB access)
+        var claimTenantId = context.Subject.FindFirst("tenant_id")?.Value;
+        var claimTenantRole = context.Subject.FindFirst("tenant_role")?.Value;
+        var claimTenantScope = context.Subject.FindFirst("tenant_scope")?.Value;
+
         var claims = new List<Claim>(12)
         {
             new Claim(JwtClaimTypes.Subject, userIdString),
             new Claim(JwtClaimTypes.Email, user.Email.Value),
             new Claim(JwtClaimTypes.GivenName, user.FirstName),
             new Claim(JwtClaimTypes.FamilyName, user.LastName),
-            new Claim(JwtClaimTypes.EmailVerified, emailVerified),
-            new Claim("tenant_id", tenantIdString),
-            new Claim("tenant_role", user.Role),
-            new Claim("tenant_scope", user.Scope)
+            new Claim(JwtClaimTypes.EmailVerified, emailVerified)
         };
+
+        if (!string.IsNullOrEmpty(claimTenantId))
+            claims.Add(new Claim("tenant_id", claimTenantId));
+        if (!string.IsNullOrEmpty(claimTenantRole))
+            claims.Add(new Claim("tenant_role", claimTenantRole));
+        if (!string.IsNullOrEmpty(claimTenantScope))
+            claims.Add(new Claim("tenant_scope", claimTenantScope));
 
         // Add audience claim (clientId+tenantId) if client exists
         var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);

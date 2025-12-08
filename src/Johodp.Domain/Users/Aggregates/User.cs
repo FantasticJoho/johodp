@@ -74,8 +74,11 @@ public class User : AggregateRoot
     public Email Email { get; private set; } = null!;
     public string FirstName { get; private set; } = null!;
     public string LastName { get; private set; } = null!;
+    /// <summary>
+    /// Gets a value indicating whether the user's email address has been confirmed.
+    /// This property is used by ASP.NET Identity for authentication and account verification workflows.
+    /// </summary>
     public bool EmailConfirmed { get; private set; }
-    public bool IsActive => Status == UserStatus.Active;
     public bool MFAEnabled { get; private set; }
     public UserStatus Status { get; private set; } = UserStatus.PendingActivation;
     public DateTime? ActivatedAt { get; private set; }
@@ -85,8 +88,12 @@ public class User : AggregateRoot
 
     // Single tenant per user with role and scope
     public TenantId TenantId { get; private set; } = null!;
-    public string Role { get; private set; } = null!;
-    public string Scope { get; private set; } = null!;
+    public ICollection<Entities.UserTenant> UserTenants { get; set; } = new List<Entities.UserTenant>();
+
+    /// <summary>
+    /// Indique si l'utilisateur est actif (statut Active)
+    /// </summary>
+    public bool IsActive => Status == UserStatus.Active;
 
     private User() { }
 
@@ -133,8 +140,6 @@ public class User : AggregateRoot
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
             TenantId = tenantId,
-            Role = role,
-            Scope = scope,
             EmailConfirmed = createAsPending ? false : false,
             Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow
@@ -188,11 +193,7 @@ public class User : AggregateRoot
         if (string.IsNullOrWhiteSpace(role))
             throw new ArgumentException("Role cannot be empty", nameof(role));
 
-        if (string.IsNullOrWhiteSpace(scope))
-            throw new ArgumentException("Scope cannot be empty", nameof(scope));
-
-        Role = role;
-        Scope = scope;
+        // Role and scope are now managed in UserTenant entity, no longer here
         UpdatedAt = DateTime.UtcNow;
     }
 

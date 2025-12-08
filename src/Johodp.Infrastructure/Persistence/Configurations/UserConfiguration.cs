@@ -57,35 +57,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
-        // Single tenant with role and scope
-        builder.Property(x => x.TenantId)
-            .HasConversion(
-                v => v.Value,
-                v => TenantId.From(v))
-            .IsRequired();
 
-        builder.Property(x => x.Role)
-            .HasMaxLength(100)
-            .IsRequired();
+        // Multi-tenant: Role, Scope, and TenantId are now managed in UserTenant entity.
 
-        builder.Property(x => x.Scope)
-            .HasMaxLength(200)
-            .IsRequired();
 
-        // Foreign key to Tenant
-        builder.HasOne<Tenant>()
-            .WithMany()
-            .HasForeignKey(x => x.TenantId)
-            .OnDelete(DeleteBehavior.Restrict);
-
-        // Composite unique index on (Email, TenantId)
-        builder.HasIndex(x => new { x.Email, x.TenantId })
-            .IsUnique()
-            .HasDatabaseName("IX_users_Email_TenantId");
-
-        // Index on TenantId for queries
-        builder.HasIndex(x => x.TenantId)
-            .HasDatabaseName("IX_users_TenantId");
+        // Unique index on Email (if required, otherwise handle uniqueness in UserTenant)
 
         // Ignore computed property and domain events
         builder.Ignore(x => x.IsActive);

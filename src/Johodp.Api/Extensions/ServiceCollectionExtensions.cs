@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions
         var connectionString = configuration.GetConnectionString("DefaultConnection")!;
 
         services.AddDatabase(connectionString);
-        services.AddRepositories();
+        services.AddRepositories(configuration);
         services.AddMediator();
         services.AddValidatorsFromAssemblyContaining<RegisterUserCommand>();
         services.AddDomainEvents();
@@ -74,13 +74,65 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers all domain repositories and Unit of Work pattern.
     /// Repositories provide data access abstraction following DDD principles.
+    /// Uses Decorator pattern for caching stable entities (Tenant, Client) if enabled.
+    /// Feature Flag: RepositoryCache:Enabled (default: true)
     /// </summary>
-    private static void AddRepositories(this IServiceCollection services)
+    private static void AddRepositories(this IServiceCollection services, IConfiguration configuration)
     {
+        // Feature Flag : Activer/désactiver le cache des repositories
+        var cacheConfig = configuration.GetSection("RepositoryCache");
+        var enableCache = cacheConfig.GetValue("Enabled", true); // Par défaut : activé
+        var cacheDurationHours = cacheConfig.GetValue("DurationHours", 24);
+
+        if (enableCache)
+        {
+            // Memory Cache pour les repository decorators
+            services.AddMemoryCache(options =>
+            {
+                options.SizeLimit = 1000; // Limite optionnelle (1000 entrées max)
+            });
+        }
+
+        // User Repository (jamais de cache, données volatiles)
         services.AddScoped<IUserRepository, Johodp.Infrastructure.Persistence.Repositories.UserRepository>();
-        services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
-        services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+        
+        // Client Repository (avec ou sans cache selon feature flag)
+        services.AddScoped<Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
+        if (enableCache)
+        {
+            services.AddScoped<IClientRepository>(sp =>
+            {
+                var inner = sp.GetRequiredService<Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
+                var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                var logger = sp.GetRequiredService<ILogger<Johodp.Infrastructure.Persistence.Repositories.CachedClientRepository>>();
+                return new Johodp.Infrastructure.Persistence.Repositories.CachedClientRepository(inner, cache, logger);
+            });
+        }
+        else
+        {
+            services.AddScoped<IClientRepository, Johodp.Infrastructure.Persistence.Repositories.ClientRepository>();
+        }
+        
+        // Tenant Repository (avec ou sans cache selon feature flag)
+        services.AddScoped<Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+        if (enableCache)
+        {
+            services.AddScoped<ITenantRepository>(sp =>
+            {
+                var inner = sp.GetRequiredService<Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+                var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+                var logger = sp.GetRequiredService<ILogger<Johodp.Infrastructure.Persistence.Repositories.CachedTenantRepository>>();
+                return new Johodp.Infrastructure.Persistence.Repositories.CachedTenantRepository(inner, cache, logger);
+            });
+        }
+        else
+        {
+            services.AddScoped<ITenantRepository, Johodp.Infrastructure.Persistence.Repositories.TenantRepository>();
+        }
+        
+        // CustomConfiguration Repository (pas de cache pour le moment)
         services.AddScoped<ICustomConfigurationRepository, Johodp.Infrastructure.Persistence.Repositories.CustomConfigurationRepository>();
+        
         services.AddScoped<IUnitOfWork, UnitOfWork>();
     }
 
@@ -247,11 +299,14 @@ public static class ServiceCollectionExtensions
     {
         services.AddIdentityCore<User>(options =>
         {
-            // Relaxed password policy for development
-            options.Password.RequireNonAlphanumeric = false;
-            options.Password.RequireUppercase = false;
-            options.Password.RequireDigit = false;
+         
             options.SignIn.RequireConfirmedEmail = false;
+            options.User.RequireUniqueEmail = true;
+            options.Password.RequiredLength = 15;
+            options.Password.RequireDigit = true;
+            options.Password.RequireLowercase = true;
+            options.Password.RequireUppercase = true;
+            options.Password.RequireNonAlphanumeric = true;
         })
         .AddSignInManager<CustomSignInManager>()
         .AddUserStore<UserStore>()

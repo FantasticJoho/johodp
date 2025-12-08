@@ -72,15 +72,26 @@ public class AccountController : ControllerBase
 
     /// <summary>
     /// Login with email and password
+    /// <para>
+    /// <b>Security principle:</b> This method <b>never emits a token for a tenant the user is not authorized for</b>.
+    /// All tenant access checks are enforced here, before any authentication cookie or token is issued.
+    /// If the user does not belong to the requested tenant (from acr_values or request), login is refused and no session/token is created.
+    /// </para>
+    /// <para>
+    /// <b>Best practice:</b> Always enforce tenant isolation at the IdP (IdentityServer) level, and also check in the application for defense in depth.
+    /// </para>
     /// </summary>
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, [FromQuery] string? acr_values = null)
+        // Ajout de claims persistés à la connexion (tenant, acr_values).
+        // Ces claims sont stockés dans le cookie d'authentification et ne changent pas tant que l'utilisateur ne se reconnecte pas.
+        // Ils servent à transmettre le contexte de connexion (ex : tenant sélectionné, contexte OAuth, etc.).
     {
         if (!ModelState.IsValid)
             return BadRequest(new { error = "Invalid request" });
 
-        var tenantName = ExtractTenantName(acr_values, request.TenantName);
+        var tenantName = Johodp.Infrastructure.Identity.TenantClaimHelper.ExtractTenantName(acr_values, request.TenantName);
         _logger.LogInformation("API login attempt for email: {Email}, tenant: {TenantName}", request.Email, tenantName);
 
         if (string.IsNullOrEmpty(tenantName))
@@ -167,12 +178,31 @@ public class AccountController : ControllerBase
         }
 
         // Success - sign in with tenant claims (no MFA required)
+
         _logger.LogInformation("Login successful: {Email}, tenant: {TenantName}", request.Email, tenantName);
-        await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, new[]
+
+        // Récupère l'association UserTenant pour ce tenant
+        var userTenant = user.UserTenants?.FirstOrDefault(ut => ut.TenantId.Value == tenant.Id.Value);
+        if (userTenant == null)
+        {
+            _logger.LogWarning("Login failed: user {Email} has no UserTenant for tenant {TenantName}", request.Email, tenantName);
+            return Unauthorized(new { error = "User is not authorized for this tenant" });
+        }
+
+        var claims = new List<Claim>
         {
             new Claim("tenant_id", tenant.Id.Value.ToString()),
-            new Claim("tenant_name", tenant.Name)
-        });
+            new Claim("tenant_name", tenant.Name),
+            new Claim("tenant_role", userTenant.Role),
+            new Claim("tenant_scope", string.Join(",", userTenant.SubScopes ?? new List<string>()))
+        };
+        // Ajoute acr_values comme claim si présent
+        var acrClaimValue = Johodp.Infrastructure.Identity.TenantClaimHelper.ExtractTenantName(acr_values, null);
+        if (!string.IsNullOrEmpty(acrClaimValue))
+        {
+            claims.Add(new Claim("acr_values", acrClaimValue));
+        }
+        await _signInManager.SignInWithClaimsAsync(user, isPersistent: false, claims);
 
         return Ok(new { message = "Login successful", email = request.Email });
     }
@@ -937,15 +967,7 @@ public class AccountController : ControllerBase
 
     // ========== PRIVATE HELPERS ==========
 
-    /// <summary>
-    /// Extract tenant name from acr_values or request body
-    /// </summary>
-    private static string? ExtractTenantName(string? acrValues, string? requestTenantName)
-    {
-        if (!string.IsNullOrEmpty(acrValues) && acrValues.StartsWith("tenant:", StringComparison.OrdinalIgnoreCase))
-            return acrValues.Substring(7);
-        return requestTenantName;
-    }
+// ExtractTenantName moved to TenantClaimHelper for reuse
 
     /// <summary>
     /// Validate tenant exists and is active (reusable helper)

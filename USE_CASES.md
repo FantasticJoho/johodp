@@ -158,25 +158,60 @@ L'URL complète `https://acme-corp.example.com` est nettoyée en `acme-corp-exam
 
 ---
 
+
 ### Qu'est-ce qu'un **Utilisateur** (User) ?
 
-Un **Utilisateur** représente une **personne physique** qui peut s'authentifier sur un ou plusieurs Tenants. C'est l'entité centrale de l'authentification.
+Un **Utilisateur** représente une **personne physique** qui peut être rattachée à un ou plusieurs Tenants, avec un rôle et des permissions spécifiques pour chaque tenant. L'association est gérée par l'entité `UserTenant` : un utilisateur possède une collection de rattachements, chacun définissant le tenant, le rôle et la date d’assignation.
 
 **Caractéristiques techniques :**
-- Identifié par un `UserId` (GUID) et un `Email` (unique par Tenant : composite avec TenantId)
-- **Appartient à UN SEUL Tenant** : relation many-to-1 via `TenantId` (obligatoire)
+- Identifié par un `UserId` (GUID) et un `Email` (unique globalement)
+- Peut être rattaché à **plusieurs Tenants** via des entités d'association `UserTenant` (relation many-to-many)
+- Chaque rattachement (`UserTenant`) définit le `TenantId`, le `Role` (ex: "admin", "user", "manager") et la date d’assignation
 - Possède des données d'identité : `FirstName`, `LastName`, `PhoneNumber`
 - A un statut : `PendingActivation` (en attente) ou `Active` (activé)
-- Possède directement :
-  - `TenantId` : le Tenant auquel l'utilisateur appartient (obligatoire)
-  - `Role` : le rôle fourni par l'application tierce (ex: "admin", "user", "manager")
-  - `Scope` : le périmètre fourni par l'application tierce (ex: "full_access", "read_only", "department_sales")
 - Stocke le `PasswordHash` (jamais en clair)
 - Peut avoir une authentification multi-facteurs (MFA, à venir)
-- **Isolation par Tenant** : Le même email peut exister sur plusieurs Tenants (comptes distincts avec mots de passe différents)
+- **Isolation par Tenant** : Les droits et rôles sont portés par chaque rattachement, pas par l'utilisateur global
 
 **Métaphore :**
-> Un Utilisateur est comme un **employé** qui travaille dans un magasin spécifique (Tenant). Son badge indique son magasin d'appartenance, son rôle (Role) et ses permissions (Scope). Le même email peut créer des comptes employés dans différents magasins, mais ce sont des identités distinctes.
+> Un Utilisateur est comme un **consultant** qui travaille dans plusieurs magasins (Tenants). Son badge indique, pour chaque magasin, son rôle et ses permissions. Il n’a qu’une seule identité (email), mais plusieurs rattachements, chacun avec un rôle différent.
+
+**Exemples concrets :**
+- **Utilisateur Multi-Tenants :**
+   - Email : `john@consultant.com`
+   - UserTenants :
+      - TenantId : `acme-corp`, Role : `admin`
+      - TenantId : `globex-inc`, Role : `user`
+      - TenantId : `contoso`, Role : `manager`
+   - **1 seul compte**, plusieurs rattachements, rôles différents
+
+- **Employé classique :**
+   - Email : `employee@company.com`
+   - UserTenants :
+      - TenantId : `company-main`, Role : `user`
+   - **1 seul rattachement**
+
+**Cycle de vie :**
+1. **Inscription (Onboarding) :**
+    - L'utilisateur remplit le formulaire sur `/account/onboarding?acr_values=tenant:xxx`
+    - Johodp envoie une notification webhook à l'application tierce
+    - L'application valide selon ses règles métier
+    - Si valide, elle crée l'utilisateur via `POST /api/users/register` puis crée un ou plusieurs rattachements `UserTenant` (tenant, rôle)
+    - L'utilisateur reçoit un email d'activation
+2. **Activation :**
+    - L'utilisateur clique sur le lien d'activation, définit son mot de passe, son statut passe à `Active`
+3. **Authentification :**
+    - L'utilisateur se connecte via `/connect/authorize?acr_values=tenant:xxx`
+    - Johodp vérifie que l'utilisateur possède un rattachement `UserTenant` pour ce tenant
+    - Le JWT contient les claims du rattachement (tenant_id, tenant_role)
+
+**Règles importantes :**
+- ✅ Un Utilisateur peut être rattaché à **plusieurs Tenants** (relation many-to-many via UserTenant)
+- ✅ Le **Role** est stocké dans chaque entité `UserTenant` (pas sur User)
+- ✅ L'email est **unique globalement** (un seul compte, plusieurs rattachements)
+- ✅ Un Utilisateur **ne peut se connecter qu'aux Tenants auxquels il est rattaché**
+- ✅ Les droits et rôles sont portés par chaque rattachement
+
 
 **Exemples concrets :**
 - **Utilisateur Simple :**

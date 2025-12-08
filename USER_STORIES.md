@@ -640,10 +640,11 @@ GET /api/tenant/acme-corp/language
 
 ## 👤 Epic 4: Gestion des Utilisateurs
 
-### US-4.1: Créer un Utilisateur en Attente d'Activation (DOIT AVOIR)
+
+### US-4.1: Créer un Utilisateur Multi-Tenants en Attente d'Activation (DOIT AVOIR)
 **En tant qu'** application tierce  
-**Je veux** créer un utilisateur en statut PendingActivation  
-**Afin que** l'utilisateur puisse activer son compte plus tard
+**Je veux** créer un utilisateur pouvant être rattaché à un ou plusieurs tenants, en statut PendingActivation  
+**Afin que** l'utilisateur puisse activer son compte et accéder à plusieurs organisations
 
 **Critères d'acceptation:**
 - [ ] Je peux envoyer POST `/api/users/register` avec RegisterUserCommand
@@ -652,8 +653,9 @@ GET /api/tenant/acme-corp/language
 - [ ] Le système génère un token d'activation via UserManager
 - [ ] Le système retourne userId, email, status et message
 - [ ] Le système refuse si l'email existe déjà (409 Conflict)
-- [ ] Le tenantId est obligatoire
-- [ ] L'utilisateur est ajouté au tenant spécifié
+- [ ] Je peux fournir une ou plusieurs associations tenant/role à la création (UserTenants)
+- [ ] Pour chaque association, le système crée un UserTenant (tenantId, role)
+- [ ] L'utilisateur peut être ajouté à d'autres tenants plus tard (voir US-4.3)
 - [ ] Requiert access_token avec scope administratif (Ref UC-04 RG-ONBOARD-08)
 
 **Tests d'acceptation:**
@@ -663,7 +665,10 @@ POST /api/users/register
   "email": "john.doe@acme.com",
   "firstName": "John",
   "lastName": "Doe",
-  "tenantId": "acme-corp",
+  "userTenants": [
+    { "tenantId": "acme-corp-example-com", "role": "user" },
+    { "tenantId": "globex-inc", "role": "manager" }
+  ],
   "createAsPending": true
 }
 → 201 Created avec { userId, email, status: "PendingActivation" }
@@ -673,10 +678,9 @@ POST /api/users/register
 - Code implémenté dans UsersController.Register()
 - Tests unitaires pour RegisterUserCommand
 - Génération du token d'activation
-- Tests d'intégration avec tenant existant
+- Tests d'intégration avec tenants existants
 - Log du token en mode développement
 - Documentation API mise à jour
-
 ---
 
 ### US-4.2: Consulter un Utilisateur par ID (DOIT AVOIR)
@@ -699,24 +703,28 @@ GET /api/users/550e8400-e29b-41d4-a716-446655440000
 
 ---
 
+
 ### US-4.3: Ajouter un Utilisateur à un Tenant (DEVRAIT AVOIR)
 **En tant qu'** administrateur système  
-**Je veux** ajouter un utilisateur existant à un tenant  
-**Afin de** lui donner accès à une nouvelle organisation
+**Je veux** ajouter un utilisateur existant à un tenant (ou modifier son rôle)  
+**Afin de** lui donner accès à une nouvelle organisation ou changer ses permissions
 
 **Critères d'acceptation:**
-- [ ] Je peux envoyer POST `/api/users/{userId}/tenants/{tenantId}`
+- [ ] Je peux envoyer POST `/api/users/{userId}/tenants/{tenantId}` avec un rôle
 - [ ] Le système vérifie que l'utilisateur existe
 - [ ] Le système vérifie que le tenant existe
-- [ ] Le système appelle user.AddTenantId(tenantId)
+- [ ] Le système crée ou met à jour l'entité UserTenant (userId, tenantId, role)
 - [ ] Le système retourne 200 OK avec message de succès
 - [ ] Le système retourne 404 si utilisateur ou tenant inexistant
-- [ ] Le système refuse si l'utilisateur a déjà accès au tenant
+- [ ] Le système refuse si l'utilisateur a déjà accès au tenant avec le même rôle
 - [ ] Supporte valeur spéciale `"*"` pour accès global (Ref UC-09 RG-MULTITENANT-02)
 
 **Tests d'acceptation:**
 ```http
 POST /api/users/550e8400-e29b-41d4-a716-446655440000/tenants/acme-corp-example-com
+{
+  "role": "manager"
+}
 → 200 OK avec { message: "User added to tenant successfully" }
 # Note: acme-corp-example-com est l'URL nettoyée de https://acme-corp.example.com
 ```
