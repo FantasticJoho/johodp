@@ -13,6 +13,8 @@ sequenceDiagram
         Email->>User: Lien d'activation
         User->>IdP: POST /api/auth/activate (token, mot de passe)
         IdP->>User: Compte activé
+        IdP->>Email: Envoie email de confirmation d'activation
+        Email->>User: Confirmation : votre compte est activé
         IdP->>User: Invite à configurer MFA
         User->>IdP: Enrôle Microsoft Authenticator
         IdP->>User: MFA configuré
@@ -31,6 +33,8 @@ flowchart TD
     D --> E[Lien d'activation envoyé]
     E --> F[Activation par l'utilisateur]
     F --> G[Compte activé]
+    G --> K[IdP envoie email de confirmation d'activation]
+    K --> L[Email: Confirmation : votre compte est activé]
     G --> H[Invite à configurer MFA]
     H --> I[Enrôlement Microsoft Authenticator]
     I --> J[MFA configuré]
@@ -58,8 +62,10 @@ sequenceDiagram
         IdP->>Email: Génère token et envoie email d'activation
         Email->>User: Lien d'activation
         User->>IdP: POST /api/auth/activate (token, mot de passe)
-        IdP->>User: Compte activé
-        IdP->>User: Invite à configurer MFA
+            IdP->>User: Compte activé
+            IdP->>Email: Envoie email de confirmation d'activation
+            Email->>User: Confirmation : votre compte est activé
+            IdP->>User: Invite à configurer MFA
         User->>IdP: Enrôle Microsoft Authenticator
         IdP->>User: MFA configuré
     else Validation KO
@@ -86,6 +92,8 @@ sequenceDiagram
             Email->>User: Lien d'activation
             User->>IdP: POST /api/auth/activate (token, mot de passe)
             IdP->>User: Compte activé
+            IdP->>Email: Envoie email de confirmation d'activation
+            Email->>User: Confirmation : votre compte est activé
             IdP->>User: Invite à configurer MFA
             User->>IdP: Enrôle Microsoft Authenticator
             IdP->>User: MFA configuré
@@ -114,6 +122,26 @@ sequenceDiagram
     User->>IdP: Code Microsoft Authenticator
     IdP->>App: JWT (tenant_id: "machin", claims, mfa: true)
     App->>App: Session créée
+    alt Nouvel appareil / risque détecté
+        IdP->>Email: Envoie email d'alerte de connexion (nouvel appareil / activité suspecte)
+        Email->>User: Alerte connexion — vérifiez si c'était vous
+    end
+```
+
+### Diagramme de flux - Connexion sur un tenant (MFA)
+```mermaid
+flowchart TD
+    A[User accède à l'app] --> B[Redirect vers IdP avec acr_values]
+    B --> C[Formulaire d'auth]
+    C --> D[Envoi des credentials]
+    D --> E[Demande second facteur (MFA)]
+    E --> F[User fournit code MFA]
+    F --> G[JWT avec tenant et claims, mfa=true]
+    G --> H{Nouvel appareil / risque détecté ?}
+    H -->|Oui| I[IdP envoie email d'alerte de connexion]
+    I --> J[Email: Alerte connexion — vérifiez si c'était vous]
+    J --> K[Session créée]
+    H -->|Non| K[Session créée]
 ```
 
 ## 4. Connexion ensuite sur un autre tenant avec MFA
@@ -122,10 +150,14 @@ sequenceDiagram
     participant User
     participant App as Application
     participant IdP as Identity Provider
-
     User->>App: Accès à l'application (tenant truc.com)
     App->>IdP: Redirect (acr_values=truc.com)
-    IdP->>User: Déconnexion forcée
+    IdP->>IdP: Vérifie les persisted grants (refresh tokens) pour l'utilisateur
+    alt Des refresh tokens existent
+        IdP->>PersistedGrantStore: Supprime / révoque les refresh tokens existants
+        IdP->>Email: (optionnel) Envoie email notification révocation tokens
+        Email->>User: Notification : vos anciens tokens ont été révoqués
+    end
     User->>IdP: Reconnexion avec tenant truc.com
     IdP->>App: Auth form
     App->>IdP: Credentials
@@ -133,6 +165,23 @@ sequenceDiagram
     User->>IdP: Code Microsoft Authenticator
     IdP->>App: JWT (tenant_id: "truc", claims, mfa: true)
     App->>App: Session mise à jour
+```
+
+### Diagramme de flux - Connexion sur un autre tenant (MFA)
+```mermaid
+flowchart TD
+    A[User accède à l'app truc.com] --> B[Redirect vers IdP avec acr_values]
+    B --> C{Des refresh tokens existent ?}
+    C -->|Oui| X[IdP supprime / révoque les refresh tokens existants]
+    X --> Y[IdP (optionnel) envoie email de notification de révocation]
+    Y --> D[Reconnexion avec tenant truc.com]
+    C -->|Non| D[Reconnexion avec tenant truc.com]
+    D --> E[Formulaire d'auth]
+    E --> F[Envoi des credentials]
+    F --> G[Demande second facteur (MFA)]
+    G --> H[User fournit code MFA]
+    H --> I[JWT avec tenant et claims, mfa=true]
+    I --> J[Session mise à jour]
 ```
 
 ## 5. Déconnexion
@@ -146,6 +195,18 @@ sequenceDiagram
     App->>IdP: /connect/logout
     IdP->>App: Session terminée
     App->>User: Redirection page d'accueil
+```
+
+### Diagramme de flux - Déconnexion (MFA)
+```mermaid
+flowchart TD
+    A[User clique sur Déconnexion] --> B[App appelle /connect/logout]
+    B --> C[Session terminée par IdP]
+    C --> E{Déconnexion forcée globale ?}
+    E -->|Oui| F[IdP envoie email notification déconnexion forcée]
+    F --> G[Email: Notification : vos sessions ont été terminées]
+    F --> D[Redirection page d'accueil]
+    E -->|Non| D[Redirection page d'accueil]
 ```
 
 ## 6. Mot de passe oublié avec MFA
@@ -164,6 +225,20 @@ sequenceDiagram
     IdP->>User: Demande second facteur (MFA)
     User->>IdP: Code Microsoft Authenticator
     IdP->>User: Mot de passe réinitialisé
+    IdP->>Email: Envoie email de confirmation de changement de mot de passe
+    Email->>User: Confirmation : votre mot de passe a été modifié
+```
+
+### Diagramme de flux - Mot de passe oublié (MFA)
+```mermaid
+flowchart TD
+    A[User clique sur Mot de passe oublié] --> B[App envoie la demande à IdP]
+    B --> C[IdP envoie email de réinitialisation]
+    C --> D[Lien de réinitialisation reçu]
+    D --> E[User réinitialise le mot de passe]
+    E --> F[Mot de passe réinitialisé]
+    F --> G[IdP envoie email de confirmation de changement de mot de passe]
+    G --> H[Email: Confirmation — votre mot de passe a été modifié]
 ```
 
 > Note : Tous les flux incluent une étape MFA (Microsoft Authenticator) lors de l'authentification ou de la réinitialisation du mot de passe.

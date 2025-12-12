@@ -18,6 +18,8 @@ sequenceDiagram
         Email->>User: Lien d'activation
         User->>IdP: POST /api/auth/activate (token, mot de passe)
         IdP->>User: Compte activé
+        IdP->>Email: Envoie email de confirmation d'activation
+        Email->>User: Confirmation : votre compte est activé
     else Validation KO
         ApiTierce->>ApiTierce: Fin du process (aucune info à l'utilisateur)
     end
@@ -35,6 +37,8 @@ flowchart TD
     G --> H[Lien d'activation envoyé]
     H --> I[Activation par l'utilisateur]
     I --> J[Compte activé]
+    J --> L[IdP envoie email de confirmation d'activation]
+    L --> M[Email: Confirmation : votre compte est activé]
     D -->|Validation KO| K[Fin du process]
 ```
 
@@ -87,6 +91,8 @@ sequenceDiagram
         Email->>User: Lien d'activation
         User->>IdP: POST /api/auth/activate (token, mot de passe)
         IdP->>User: Compte activé
+        IdP->>Email: Envoie email de confirmation d'activation
+        Email->>User: Confirmation : votre compte est activé
     else Compte existe déjà
         IdP->>Email: Envoie email "Vous pouvez maintenant accéder au tenant supplémentaire"
         Email->>User: Notification accès tenant supplémentaire
@@ -102,6 +108,8 @@ flowchart TD
     D --> E[Lien d'activation envoyé]
     E --> F[Activation par l'utilisateur]
     F --> G[Compte activé]
+    G --> H[IdP envoie email de confirmation d'activation]
+    H --> I[Email: Confirmation : votre compte est activé]
     C -->|Oui| H[Email accès tenant supplémentaire]
     H --> I[Notification à l'utilisateur]
 ```
@@ -124,6 +132,8 @@ sequenceDiagram
             Email->>User: Lien d'activation
             User->>IdP: POST /api/auth/activate (token, mot de passe)
             IdP->>User: Compte activé
+            IdP->>Email: Envoie email de confirmation d'activation
+            Email->>User: Confirmation : votre compte est activé
         else Compte existe déjà
             ApiTierce->>IdP: POST /api/users/modify (demande de modification ajout d'un tenant)
             IdP->>Email: Envoie email "Vous pouvez maintenant accéder au tenant supplémentaire"
@@ -147,6 +157,8 @@ flowchart TD
     H --> I[Lien d'activation envoyé]
     I --> J[Activation par l'utilisateur]
     J --> K[Compte activé]
+    K --> L[IdP envoie email de confirmation d'activation]
+    L --> M[Email: Confirmation : votre compte est activé]
     F -->|Oui| L[Demande de modification]
     L --> M[Email accès tenant supplémentaire]
     M --> N[Notification à l'utilisateur]
@@ -166,6 +178,10 @@ sequenceDiagram
     IdP->>App: Auth form
     App->>IdP: Credentials
     IdP->>App: JWT (tenant_id: "machin", claims)
+    alt Nouvel appareil / risque détecté
+        IdP->>Email: Envoie email d'alerte de connexion
+        Email->>User: Alerte connexion — vérifiez si c'était vous
+    end
     App->>App: Session créée
 ```
 
@@ -175,8 +191,14 @@ flowchart TD
     A[User accède à l'app] --> B[Redirect vers IdP avec acr_values]
     B --> C[Formulaire d'auth]
     C --> D[Envoi des credentials]
-    D --> E[JWT avec tenant et claims]
+    D --> E[Traitement et génération du JWT]
+    %%E --> G{Nouvel appareil / risque détecté ?}
+    %%G -->|Oui| H[IdP envoie email d'alerte de connexion]
+    %%H --> I[Email: Alerte connexion — vérifiez si c'était vous]
+    %%I --> F[Session créée]
     E --> F[Session créée]
+    F --> I[Email: Alerte connexion — vérifiez si c'était vous]
+    %%G -->|Non| F[Session créée]
 ```
 
 ## 4. Connexion ensuite sur un autre tenant
@@ -185,10 +207,14 @@ sequenceDiagram
     participant User
     participant App as Application
     participant IdP as Identity Provider
-
     User->>App: Accès à l'application (tenant truc.com)
     App->>IdP: Redirect (acr_values=truc.com)
-    IdP->>User: Déconnexion forcée
+    IdP->>IdP: Vérifie les persisted grants (refresh tokens) pour l'utilisateur
+    alt Des refresh tokens existent
+        IdP->>PersistedGrantStore: Supprime / révoque les refresh tokens existants
+        IdP->>Email: (optionnel) Envoie email notification révocation tokens
+        Email->>User: Notification : Déconnexion du tenant précédent
+    end
     User->>IdP: Reconnexion avec tenant truc.com
     IdP->>App: Auth form
     App->>IdP: Credentials
@@ -200,8 +226,11 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A[User accède à l'app truc.com] --> B[Redirect vers IdP avec acr_values]
-    B --> C[Déconnexion forcée]
-    C --> D[Reconnexion avec tenant truc.com]
+    B --> C{Des refresh tokens existent ?}
+    C -->|Oui| X[IdP supprime / révoque les refresh tokens existants]
+    X --> Y[IdP (optionnel) envoie email de notification de révocation]
+    Y --> D[Reconnexion avec tenant truc.com]
+    C -->|Non| D[Reconnexion avec tenant truc.com]
     D --> E[Formulaire d'auth]
     E --> F[Envoi des credentials]
     F --> G[JWT avec tenant et claims]
@@ -218,6 +247,10 @@ sequenceDiagram
     User->>App: Clique sur "Déconnexion"
     App->>IdP: /connect/logout
     IdP->>App: Session terminée
+    alt Déconnexion forcée globale
+        IdP->>Email: Envoie email notification déconnexion forcée
+        Email->>User: Notification : vos sessions ont été terminées
+    end
     App->>User: Redirection page d'accueil
 ```
 
@@ -226,7 +259,11 @@ sequenceDiagram
 flowchart TD
     A[User clique sur Déconnexion] --> B[App appelle /connect/logout]
     B --> C[Session terminée par IdP]
-    C --> D[Redirection page d'accueil]
+    C --> E{Déconnexion forcée globale ?}
+    E -->|Oui| F[IdP envoie email notification déconnexion forcée]
+    F --> G[Email: Notification : vos sessions ont été terminées]
+    F --> D[Redirection page d'accueil]
+    E -->|Non| D[Redirection page d'accueil]
 ```
 
 > Note : acr_values doit contenir la baseurl encodée en Punycode pour le domaine, et percent-encoding pour le chemin/query si nécessaire. Ici, les exemples utilisent machin.com et truc.com pour illustrer deux tenants.
@@ -246,6 +283,8 @@ sequenceDiagram
     Email->>User: Lien de réinitialisation
     User->>IdP: POST /api/auth/reset-password (token, nouveau mot de passe)
     IdP->>User: Mot de passe réinitialisé
+    IdP->>Email: Envoie email de confirmation de changement de mot de passe
+    Email->>User: Confirmation : votre mot de passe a été modifié
 ```
 
 ### Diagramme de flux - Mot de passe oublié
@@ -256,4 +295,6 @@ flowchart TD
     C --> D[Lien de réinitialisation reçu]
     D --> E[User réinitialise le mot de passe]
     E --> F[Mot de passe réinitialisé]
+    F --> G[IdP envoie email de confirmation de changement de mot de passe]
+    G --> H[Email: Confirmation — votre mot de passe a été modifié]
 ```
