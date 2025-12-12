@@ -1,3 +1,17 @@
+# Lecture des diagrammes de séquence
+
+Avant d'explorer les diagrammes suivants, voici un court guide pour lire un diagramme de séquence Mermaid :
+
+- **Participants** : en haut du diagramme, chaque acteur (`participant`) représente une entité (User, App, IdP, Email, etc.).
+- **Flux temporel** : le temps s'écoule de haut en bas — les messages sont listés dans l'ordre où ils se produisent.
+- **Messages** : une flèche `->>` indique l'envoi d'un message/requête entre participants. Le texte à droite décrit l'action (ex : `POST /api/auth/register`).
+- **Blocs conditionnels** : `alt`, `else`, `end` représentent des branches conditionnelles (ex : `alt Validation OK / else Validation KO`).
+- **Boucles / options** : `loop`, `opt` permettent d'exprimer des répétitions ou des blocs optionnels.
+- **Notes et commentaires** : on peut ajouter des notes ou des commentaires pour clarifier un point métier.
+- **Diagrammes de flux** : les `flowchart` après chaque séquence montrent la version simplifiée et conditionnelle du même scénario (décisions, actions principales, envois d'e-mails).
+
+Conseils pratiques : lisez d'abord la séquence pour comprendre la chronologie détaillée, puis consulte le flowchart pour une vue synthétique et les décisions clés (ex : envoi d'e-mail, révocation de tokens).
+
 # 🛠️ Identity Flows - Mermaid Diagrams
 
 ## 1. Onboarding (création de compte - compte n'existe pas)
