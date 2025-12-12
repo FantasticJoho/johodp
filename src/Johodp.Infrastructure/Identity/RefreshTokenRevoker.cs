@@ -18,7 +18,7 @@ namespace Johodp.Infrastructure.Identity
         }
 
         /// <inheritdoc />
-        public async Task RevokeRefreshTokensAsync(string subjectId, string clientId = null)
+        public async Task RevokeRefreshTokensAsync(string subjectId, string? clientId = null)
         {
             if (string.IsNullOrWhiteSpace(subjectId))
             {
