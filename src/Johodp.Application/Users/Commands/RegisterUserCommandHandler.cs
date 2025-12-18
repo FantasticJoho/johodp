@@ -31,14 +31,18 @@ public class RegisterUserCommandHandler : BaseHandler<RegisterUserCommand, Resul
             return Result<RegisterUserResponse>.Failure(UserErrors.AlreadyExistsForTenant(request.Email));
         }
 
-        // Create user aggregate with single tenant, role, and scope
+        // Prepare initial tenant associations for User.Create()
+        var userTenants = new List<(Johodp.Domain.Tenants.ValueObjects.TenantId, string)>
+        {
+            (request.TenantId, string.IsNullOrWhiteSpace(request.Role) ? "User" : request.Role)
+        };
+
+        // Create user aggregate with initial tenant associations
         var user = User.Create(
             request.Email, 
             request.FirstName, 
-            request.LastName, 
-            request.TenantId,
-            request.Role,
-            request.Scope,
+            request.LastName,
+            userTenants,
             request.CreateAsPending);
 
         // If not pending and password provided, set it (for direct registration)

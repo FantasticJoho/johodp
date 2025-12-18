@@ -57,8 +57,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.MFAEnabled)
             .HasDefaultValue(false);
 
+        // Multi-tenant: tenant membership is represented by the UserTenant association.
+        // Do not store TenantId directly on the User entity.
 
-        // Multi-tenant: Role, Scope, and TenantId are now managed in UserTenant entity.
+        // Role and scope are now managed in UserTenant entity.
 
 
         // Unique index on Email (if required, otherwise handle uniqueness in UserTenant)

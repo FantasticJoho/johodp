@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Johodp.Domain.Users.Entities;
+using Johodp.Domain.Users.ValueObjects;
+using Johodp.Domain.Tenants.ValueObjects;
 
 namespace Johodp.Infrastructure.Persistence.Configurations;
 
@@ -8,7 +10,21 @@ public class UserTenantConfiguration : IEntityTypeConfiguration<UserTenant>
 {
     public void Configure(EntityTypeBuilder<UserTenant> builder)
     {
-        builder.ToTable("UserTenants", "dbo");
+        builder.ToTable("users_tenants", "dbo");
+
+        // Map value-object keys to primitive columns using conversions
+        builder.Property(ut => ut.UserId)
+            .HasConversion(
+                v => v.Value,
+                v => UserId.From(v))
+            .ValueGeneratedNever();
+
+        builder.Property(ut => ut.TenantId)
+            .HasConversion(
+                v => v.Value,
+                v => TenantId.From(v))
+            .ValueGeneratedNever();
+
         builder.HasKey(ut => new { ut.UserId, ut.TenantId });
 
         builder.Property(ut => ut.Role)
@@ -18,8 +34,9 @@ public class UserTenantConfiguration : IEntityTypeConfiguration<UserTenant>
         builder.Property(ut => ut.AssignedAt)
             .IsRequired();
 
+        // Link navigation to User.UserTenants so EF uses the existing collection navigation
         builder.HasOne(ut => ut.User)
-            .WithMany()
+            .WithMany(u => u.UserTenants)
             .HasForeignKey(ut => ut.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 

@@ -16,7 +16,7 @@ public interface IMfaService
     /// <param name="user">The domain user</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>True if the user's tenant's client requires MFA, false otherwise</returns>
-    Task<bool> IsMfaRequiredForUserAsync(User user, CancellationToken cancellationToken = default);
+    Task<bool> IsMfaRequiredForUserAsync(User user, Johodp.Domain.Tenants.ValueObjects.TenantId? tenantId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a QR code URI for TOTP enrollment.

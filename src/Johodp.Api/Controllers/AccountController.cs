@@ -133,7 +133,7 @@ public class AccountController : ControllerBase
         }
 
         // Check if MFA is required (Strategy Pattern - Parcours 2)
-        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(user);
+        var mfaRequired = await _mfaService.IsMfaRequiredForUserAsync(user, tenant.Id);
         
         if (mfaRequired)
         {
@@ -337,9 +337,10 @@ public class AccountController : ControllerBase
         _logger.LogInformation("Activation successful: {UserId}", user.Id);
 
         // Send welcome email (fire-and-forget)
-        var tenantName = domainUser.TenantId != null
-            ? (await _tenantRepository.GetByIdAsync(domainUser.TenantId))?.Name
-            : null;
+            var tenantIdForWelcome = domainUser.UserTenants?.FirstOrDefault()?.TenantId;
+            var tenantName = tenantIdForWelcome != null
+                ? (await _tenantRepository.GetByIdAsync(tenantIdForWelcome))?.Name
+                : null;
         _ = _emailService.SendWelcomeEmailAsync(user.Email.Value, domainUser.FirstName, domainUser.LastName, tenantName);
 
         // Check if MFA is required for this tenant's client
@@ -549,7 +550,8 @@ public class AccountController : ControllerBase
         var recoveryCodesCount = await _userManager.CountRecoveryCodesAsync(user);
 
         // Get client requirement
-        var tenant = await _tenantRepository.GetByIdAsync(domainUser.TenantId);
+        var tenantForMfaId = domainUser.UserTenants?.FirstOrDefault()?.TenantId;
+        var tenant = tenantForMfaId != null ? await _tenantRepository.GetByIdAsync(tenantForMfaId) : null;
         var clientRequiresMfa = false;
         if (tenant?.ClientId != null)
         {
@@ -647,8 +649,8 @@ public class AccountController : ControllerBase
 
         // Load domain user and tenant for redirect URL construction
         var domainUser = await _userRepository.GetByIdAsync(user.Id);
-        var tenant = domainUser != null 
-            ? await _tenantRepository.GetByIdAsync(domainUser.TenantId)
+        var tenant = domainUser != null
+            ? await _tenantRepository.GetByIdAsync(domainUser.UserTenants?.FirstOrDefault()?.TenantId)
             : null;
 
         // Redirect to IdentityServer OAuth2 flow to generate real JWT with all claims
@@ -805,7 +807,7 @@ public class AccountController : ControllerBase
         if (domainUser == null)
             return NotFound(new { error = "User not found" });
 
-        var tenant = await _tenantRepository.GetByIdAsync(domainUser.TenantId);
+            var tenant = await _tenantRepository.GetByIdAsync(domainUser.UserTenants?.FirstOrDefault()?.TenantId);
         if (tenant?.ClientId != null)
         {
             var client = await _unitOfWork.Clients.GetByIdAsync(tenant.ClientId);

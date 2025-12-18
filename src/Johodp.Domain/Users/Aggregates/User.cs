@@ -4,6 +4,7 @@ using Common;
 using Events;
 using ValueObjects;
 using Johodp.Domain.Tenants.ValueObjects;
+using System.Linq;
 
 /// <summary>
 /// Represents the lifecycle status of a user account.
@@ -86,9 +87,15 @@ public class User : AggregateRoot
     public DateTime CreatedAt { get; private set; }
     public DateTime? UpdatedAt { get; private set; }
 
-    // Single tenant per user with role and scope
-    public TenantId TenantId { get; private set; } = null!;
+    // Tenant membership is represented by the UserTenants association (many-to-many via join entity)
     public ICollection<Entities.UserTenant> UserTenants { get; set; } = new List<Entities.UserTenant>();
+
+    /// <summary>
+    /// Returns the primary TenantId for this user based on the UserTenants association.
+    /// This should be used as the source of truth for tenant membership.
+    /// </summary>
+    // NOTE: Tenant membership is represented by the UserTenants association.
+    // Do not expose a single "PrimaryTenantId" — a user can belong to multiple tenants.
 
     /// <summary>
     /// Indique si l'utilisateur est actif (statut Active)
@@ -103,14 +110,11 @@ public class User : AggregateRoot
     /// <param name="email">User's email address (will be normalized to lowercase)</param>
     /// <param name="firstName">User's first name (max 50 characters)</param>
     /// <param name="lastName">User's last name (max 50 characters)</param>
-    /// <param name="tenantId">Tenant the user belongs to (required)</param>
-    /// <param name="role">User's role in the system (default: "user")</param>
-    /// <param name="scope">User's authorization scope (default: "default")</param>
+    /// <param name="userTenants">Initial tenant associations as (tenantId, role) tuples. Can be empty or null.</param>
     /// <param name="createAsPending">If true, user starts in PendingActivation status and triggers activation email</param>
     /// <returns>New User instance</returns>
     /// <exception cref="ArgumentException">Thrown when validation fails</exception>
-    /// <exception cref="ArgumentNullException">Thrown when tenantId is null</exception>
-    public static User Create(string email, string firstName, string lastName, TenantId tenantId, string role = "user", string scope = "default", bool createAsPending = false)
+    public static User Create(string email, string firstName, string lastName, IEnumerable<(TenantId tenantId, string role)>? userTenants = null, bool createAsPending = false)
     {
         if (string.IsNullOrWhiteSpace(firstName))
             throw new ArgumentException("First name cannot be empty", nameof(firstName));
@@ -124,27 +128,40 @@ public class User : AggregateRoot
         if (lastName.Length > 50)
             throw new ArgumentException("Last name cannot exceed 50 characters", nameof(lastName));
 
-        if (tenantId == null)
-            throw new ArgumentNullException(nameof(tenantId), "TenantId is required");
-
-        if (string.IsNullOrWhiteSpace(role))
-            throw new ArgumentException("Role cannot be empty", nameof(role));
-
-        if (string.IsNullOrWhiteSpace(scope))
-            throw new ArgumentException("Scope cannot be empty", nameof(scope));
-
         var user = new User
         {
             Id = UserId.Create(),
             Email = Email.Create(email),
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
-            TenantId = tenantId,
-            EmailConfirmed = createAsPending ? false : false,
+            EmailConfirmed = false,
             Status = createAsPending ? UserStatus.PendingActivation : UserStatus.Active,
             CreatedAt = DateTime.UtcNow
         };
 
+        // Add initial tenant associations if provided
+        if (userTenants != null)
+        {
+            foreach (var (tenantId, role) in userTenants)
+            {
+                if (tenantId == null)
+                    throw new ArgumentException("Tenant ID cannot be null", nameof(userTenants));
+                
+                if (string.IsNullOrWhiteSpace(role))
+                    throw new ArgumentException("Role cannot be empty", nameof(userTenants));
+                
+                user.UserTenants.Add(new Entities.UserTenant
+                {
+                    UserId = user.Id,
+                    TenantId = tenantId,
+                    Role = role,
+                    AssignedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // Fire domain event - use first tenant for event context if available
+        var firstTenant = userTenants?.FirstOrDefault().tenantId;
         if (createAsPending)
         {
             user.AddDomainEvent(new UserPendingActivationEvent(
@@ -152,7 +169,7 @@ public class User : AggregateRoot
                 user.Email.Value,
                 user.FirstName,
                 user.LastName,
-                tenantId.Value
+                firstTenant?.Value
             ));
         }
         else
@@ -179,7 +196,12 @@ public class User : AggregateRoot
         if (tenantId == null)
             return false;
 
-        return TenantId.Value == tenantId.Value;
+        // The tenant association is stored in the UserTenant association table.
+        // Check the in-memory collection for an association to the requested tenant.
+        if (UserTenants == null || !UserTenants.Any())
+            return false;
+
+        return UserTenants.Any(ut => ut.TenantId != null && ut.TenantId.Value == tenantId.Value);
     }
 
     /// <summary>
@@ -188,6 +210,12 @@ public class User : AggregateRoot
     /// <param name="role">New role (cannot be empty)</param>
     /// <param name="scope">New scope (cannot be empty)</param>
     /// <exception cref="ArgumentException">Thrown when role or scope is empty</exception>
+    /// <summary>
+    /// DEPRECATED: Roles are now managed per-tenant via UserTenant entity.
+    /// Use AddTenantId()/RemoveTenantId() to manage tenant membership instead.
+    /// This method is kept for backward compatibility but does nothing.
+    /// </summary>
+    [Obsolete("Roles are managed per-tenant via UserTenant entity. Use AddTenantId()/RemoveTenantId() instead.", false)]
     public void UpdateRoleAndScope(string role, string scope)
     {
         if (string.IsNullOrWhiteSpace(role))
@@ -290,4 +318,61 @@ public class User : AggregateRoot
         PasswordHash = hash;
         UpdatedAt = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Adds the user to a new tenant with the specified role.
+    /// Used for multi-tenant scenarios where a user is added to additional tenants after creation.
+    /// </summary>
+    /// <param name="tenantId">The tenant to add the user to</param>
+    /// <param name="role">The user's role in this tenant (default: "User")</param>
+    /// <exception cref="ArgumentNullException">Thrown if tenantId is null</exception>
+    /// <exception cref="InvalidOperationException">Thrown if user is already in this tenant</exception>
+    public void AddTenantId(TenantId tenantId, string role = "User")
+    {
+        if (tenantId == null)
+            throw new ArgumentNullException(nameof(tenantId), "Tenant ID cannot be null");
+        
+        if (string.IsNullOrWhiteSpace(role))
+            throw new ArgumentException("Role cannot be empty", nameof(role));
+        
+        // Check if user already belongs to this tenant
+        if (UserTenants.Any(ut => ut.TenantId != null && ut.TenantId.Value == tenantId.Value))
+            throw new InvalidOperationException($"User {Email.Value} is already associated with tenant {tenantId.Value}");
+        
+        var userTenant = new Entities.UserTenant
+        {
+            UserId = Id,
+            TenantId = tenantId,
+            Role = role,
+            AssignedAt = DateTime.UtcNow
+        };
+        
+        UserTenants.Add(userTenant);
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Removes the user from a tenant.
+    /// Used to revoke access to a tenant.
+    /// </summary>
+    /// <param name="tenantId">The tenant to remove the user from</param>
+    public void RemoveTenantId(TenantId tenantId)
+    {
+        if (tenantId == null)
+            return;
+        
+        var userTenant = UserTenants.FirstOrDefault(ut => ut.TenantId != null && ut.TenantId.Value == tenantId.Value);
+        if (userTenant != null)
+        {
+            UserTenants.Remove(userTenant);
+            UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// Determines if this user requires multi-factor authentication.
+    /// Used during login to determine if MFA verification is needed.
+    /// </summary>
+    /// <returns>True if MFA is enabled for this user, false otherwise</returns>
+    public bool RequiresMFA() => MFAEnabled;
 }

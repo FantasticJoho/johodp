@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Encodings.Web;
+using System.Linq;
 using Johodp.Application.Common.Interfaces;
 using Johodp.Domain.Clients;
 using Johodp.Domain.Tenants;
@@ -30,11 +31,13 @@ public class MfaService : IMfaService
     }
 
     /// <inheritdoc />
-    public async Task<bool> IsMfaRequiredForUserAsync(User user, CancellationToken cancellationToken = default)
+    public async Task<bool> IsMfaRequiredForUserAsync(User user, Johodp.Domain.Tenants.ValueObjects.TenantId? tenantId = null, CancellationToken cancellationToken = default)
     {
-        if (user.TenantId == null) return false;
+        // Use provided tenantId context if available; otherwise fall back to the first associated tenant.
+        var tenantToCheck = tenantId ?? user.UserTenants?.FirstOrDefault()?.TenantId;
+        if (tenantToCheck == null) return false;
 
-        var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);
+        var tenant = await _tenantRepository.GetByIdAsync(tenantToCheck);
         if (tenant?.ClientId == null) return false;
 
         var client = await _clientRepository.GetByIdAsync(tenant.ClientId);

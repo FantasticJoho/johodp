@@ -18,6 +18,7 @@ public class JohodpDbContext : DbContext
     public DbSet<Client> Clients { get; set; } = null!;
     public DbSet<Tenant> Tenants { get; set; } = null!;
     public DbSet<CustomConfiguration> CustomConfigurations { get; set; } = null!;
+    public DbSet<Johodp.Domain.Users.Entities.UserTenant> UserTenants { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -29,15 +30,13 @@ public class JohodpDbContext : DbContext
         // Ignore abstract base classes
         modelBuilder.Ignore<Johodp.Messaging.Events.DomainEvent>();
 
-        // Ignore Value Objects (they are not entities)
-        modelBuilder.Ignore<Johodp.Domain.Users.ValueObjects.UserId>();
-        modelBuilder.Ignore<Johodp.Domain.Clients.ValueObjects.ClientId>();
-        modelBuilder.Ignore<Johodp.Domain.Tenants.ValueObjects.TenantId>();
-        modelBuilder.Ignore<Johodp.Domain.CustomConfigurations.ValueObjects.CustomConfigurationId>();
+        // Value Objects are mapped via conversions in individual entity configurations
+        // (Do NOT ignore the value object types globally; they are used by entity properties)
 
         modelBuilder.ApplyConfiguration(new UserConfiguration());
         modelBuilder.ApplyConfiguration(new ClientConfiguration());
         modelBuilder.ApplyConfiguration(new TenantConfiguration());
         modelBuilder.ApplyConfiguration(new CustomConfigurationConfiguration());
+        modelBuilder.ApplyConfiguration(new UserTenantConfiguration());
     }
 }

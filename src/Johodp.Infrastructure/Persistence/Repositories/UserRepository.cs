@@ -32,7 +32,7 @@ public class UserRepository : IUserRepository
     {
         var emailVo = Johodp.Domain.Users.ValueObjects.Email.Create(email);
         return await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == emailVo && u.TenantId == tenantId);
+            .FirstOrDefaultAsync(u => u.Email == emailVo && u.UserTenants.Any(ut => ut.TenantId == tenantId));
     }
 
     public async Task<User> AddAsync(User user)

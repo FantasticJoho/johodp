@@ -25,7 +25,7 @@
 @customConfigName = workflow-branding3
 
 # User credentials
-@userEmail = workflow.test9@example.com
+@userEmail = workflow.test12@example.com
 @userFirstName = Workflow
 @userLastName = TestUser
 @userPassword = SecureP@ssw0rd123!
@@ -36,7 +36,7 @@
 @customConfigId = {{createCustomConfig.response.body.id}}
 @tenantId = {{createTenant.response.body.id}}
 @userId = {{registerUser.response.body.id}}
-@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQEnZmvcspNAH3FRkzEkJjW0xr0lH1vgtw8TSYbr5eoZkU+O4TR5EthL5GBz+shiOLpqhS8+ok9fSJw2CYH2YhMWESmPgUB+UrGC8NnwP95uiLTFOovjxmvwK3lfCtSt71mv+Lx9DjnSO4bneKANwPDirW8RedEsnhkUI2rH42oDAWuSxQ2lJev6h0WgJqzbAXg=
+@activationToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQFpDnstu17RG/1I/A3qwd7t2bbvIyomEtHoeEEDsvaljXlirwyxDT32e2na5HZv1pm7FPvomENq+MjkMQpJXemIgAgDkiV5EVQEcftFu4JjTSLyctciDcvS+eE8Hz5L+HKT58Znw8jxUG5BTCikAirDtSnU8eXCzpqgHOdoRpxg6IqsaYI8Oz1ls3sF46QKkh8=
 @authCode = 95101CB108A5C535A56396301EBE3821E45EF7775DADB5D96E849AE54233D87E-1
 @accessToken = CfDJ8IISH9pSP0dDqu2Sb7sBxQH0JLRdRWVOFgENT7JqqiajawnTlX94jedTFKmOuzZx2FZo9EVe6TFymM47rmbL38AJyp7j6bhaBK/aThYr8wTsQ4CKUX73kOB1ugUv5GFo70gmxZBsDip5A2TBUO0LxfCNs93M+FXcEMIwuYrpkf/gNbO/4PjjbOs6HwRyPl4Ma/RvaClvW27QXLOUTaePZGE=
 @refreshToken = 
@@ -314,7 +314,7 @@ Content-Type: application/json
 
 {
   "token": "{{activationToken}}",
-  "userId": "e1826f1b-1278-4a41-883a-a8efd4d38aa3",
+  "userId": "00980a2e-e820-4596-9546-96706dd94c59",
   "newPassword": "{{userPassword}}",
   "confirmPassword": "{{userPassword}}"
 }

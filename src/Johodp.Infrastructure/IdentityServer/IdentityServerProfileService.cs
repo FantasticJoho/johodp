@@ -59,18 +59,22 @@ public class IdentityServerProfileService : IProfileService
             return;
         }
         
-        _logger.LogInformation("Building claims for user: {Email}, tenant: {TenantId}", user.Email.Value, user.TenantId.Value);
+        // Determine tenant context: prefer tenant_id claim if present, otherwise use first associated UserTenant
+        var claimTenantId = context.Subject.FindFirst("tenant_id")?.Value;
+
+        var associatedTenantId = user.UserTenants?.FirstOrDefault()?.TenantId?.Value.ToString();
+
+        _logger.LogInformation("Building claims for user: {Email}, tenantClaim: {ClaimTenantId}, associatedTenant: {AssociatedTenantId}", user.Email.Value, claimTenantId ?? "(none)", associatedTenantId ?? "(none)");
 
         // Pre-calculate string conversions
         var userIdString = user.Id.Value.ToString();
-        var tenantIdString = user.TenantId.Value.ToString();
+        var tenantIdString = claimTenantId ?? associatedTenantId ?? string.Empty;
         var emailVerified = user.EmailConfirmed ? "true" : "false";
         
         // Check MFA status once
         var mfaWasVerified = context.Subject.FindFirst("mfa_verified")?.Value == "true";
         
         // Read tenant claims directly from the principal if present (no DB access)
-        var claimTenantId = context.Subject.FindFirst("tenant_id")?.Value;
         var claimTenantRole = context.Subject.FindFirst("tenant_role")?.Value;
         var claimTenantScope = context.Subject.FindFirst("tenant_scope")?.Value;
 
@@ -91,7 +95,11 @@ public class IdentityServerProfileService : IProfileService
             claims.Add(new Claim("tenant_scope", claimTenantScope));
 
         // Add audience claim (clientId+tenantId) if client exists
-        var tenant = await _tenantRepository.GetByIdAsync(user.TenantId);
+        var tenantIdVo = !string.IsNullOrEmpty(claimTenantId)
+            ? Johodp.Domain.Tenants.ValueObjects.TenantId.From(Guid.Parse(claimTenantId))
+            : user.UserTenants?.FirstOrDefault()?.TenantId;
+
+        var tenant = tenantIdVo != null ? await _tenantRepository.GetByIdAsync(tenantIdVo) : null;
         if (tenant?.ClientId != null)
         {
             var audience = $"{tenant.ClientId.Value}+{tenantIdString}";
